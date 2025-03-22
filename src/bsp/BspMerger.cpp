@@ -216,7 +216,7 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 
 	int idealMapsPerAxis = floor(pow(maps.size(), 1 / 3.0f));
 
-	if (idealMapsPerAxis * idealMapsPerAxis * idealMapsPerAxis < maps.size()) {
+	while (idealMapsPerAxis * idealMapsPerAxis * idealMapsPerAxis < maps.size()) {
 		idealMapsPerAxis++;
 	}
 
@@ -235,9 +235,9 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 	logf("Max map size:      width=%.0f length=%.0f height=%.0f\n", maxDims.x, maxDims.y, maxDims.z);
 	logf("Max maps per axis: x=%d y=%d z=%d  (total=%d)\n", maxMapsPerRow, maxMapsPerCol, maxMapsPerLayer, maxMapsPerRow * maxMapsPerCol * maxMapsPerLayer);
 
-	int actualWidth = min(idealMapsPerAxis, (int)maps.size());
-	int actualLength = min(idealMapsPerAxis, (int)ceil(maps.size() / (float)(idealMapsPerAxis)));
-	int actualHeight = min(idealMapsPerAxis, (int)ceil(maps.size() / (float)(idealMapsPerAxis * idealMapsPerAxis)));
+	int actualWidth = min(min(idealMapsPerAxis, maxMapsPerRow), (int)maps.size());
+	int actualLength = min(min(maxMapsPerCol, idealMapsPerAxis), (int)ceil(maps.size() / (float)(idealMapsPerAxis)));
+	int actualHeight = min(min(idealMapsPerAxis, maxMapsPerLayer), (int)ceil(maps.size() / (float)(idealMapsPerAxis * idealMapsPerAxis)));
 	logf("Merged map size:   %dx%dx%d maps\n", actualWidth, actualLength, actualHeight);
 
 	logf("Merged map bounds: min=(%.0f, %.0f, %.0f)\n"
@@ -247,13 +247,13 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 
 	vec3 targetMins = mergedMapMin;
 	int blockIdx = 0;
-	for (int z = 0; z < idealMapsPerAxis && blockIdx < blocks.size(); z++) {
+	for (int z = 0; z < idealMapsPerAxis && z < maxMapsPerLayer && blockIdx < blocks.size(); z++) {
 		targetMins.y = mergedMapMin.y;
 		vector<vector<MAPBLOCK>> col;
-			for (int y = 0; y < idealMapsPerAxis && blockIdx < blocks.size(); y++) {
+			for (int y = 0; y < idealMapsPerAxis && y < maxMapsPerCol && blockIdx < blocks.size(); y++) {
 				targetMins.x = mergedMapMin.x;
 				vector<MAPBLOCK> row;
-				for (int x = 0; x < idealMapsPerAxis && blockIdx < blocks.size(); x++) {
+				for (int x = 0; x < idealMapsPerAxis && x < maxMapsPerRow && blockIdx < blocks.size(); x++) {
 					MAPBLOCK& block = blocks[blockIdx];
 
 					block.offset = targetMins - block.mins;
