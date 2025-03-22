@@ -147,6 +147,8 @@ void VertexBuffer::bindAttributes(bool hideErrors) {
 	if (attributesBound)
 		return;
 
+	shaderProgram->bind();
+
 	for (int i = 0; i < attribs.size(); i++)
 	{
 		if (attribs[i].handle != -1)
@@ -167,60 +169,61 @@ void VertexBuffer::setData(const void* data, int numVerts)
 	this->numVerts = numVerts;
 }
 
+
 void VertexBuffer::upload() {
-	shaderProgram->bind();
+	if (vboId != -1) {
+		// already uploaded, just replace the data
+		shaderProgram->bind();
+		glBindBuffer(GL_ARRAY_BUFFER, vboId);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, elementSize * numVerts, data);
+		return;
+	}
+
 	bindAttributes();
+
+	glGenVertexArrays(1, &vaoId);
+	glBindVertexArray(vaoId);
 
 	glGenBuffers(1, &vboId);
 	glBindBuffer(GL_ARRAY_BUFFER, vboId);
-	glBufferData(GL_ARRAY_BUFFER, elementSize * numVerts, data, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, elementSize * numVerts, data, GL_STATIC_DRAW);	
 
 	int offset = 0;
 	for (int i = 0; i < attribs.size(); i++)
 	{
 		VertexAttr& a = attribs[i];
-		void* ptr = ((char*)0) + offset;
+		void* ptr = (char*)NULL + offset;
 		offset += a.size;
 		if (a.handle == -1) {
 			continue;
 		}
-		glBindBuffer(GL_ARRAY_BUFFER, vboId);
 		glEnableVertexAttribArray(a.handle);
 		glVertexAttribPointer(a.handle, a.numValues, a.valueType, a.normalized != 0, elementSize, ptr);
 	}
 
+	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void VertexBuffer::deleteBuffer() {
 	if (vboId != -1)
 		glDeleteBuffers(1, &vboId);
+	if (vaoId != -1)
+		glDeleteBuffers(1, &vaoId);
 	vboId = -1;
 }
 
 void VertexBuffer::drawRange(int primitive, int start, int end)
 {
+	if (vboId == -1) {
+		logf("Attempted to draw VBO before upload\n");
+		return;
+	}
+
 	shaderProgram->bind();
 	bindAttributes();
 
-	char* offsetPtr = (char*)data;
-	if (vboId != -1) {
-		glBindBuffer(GL_ARRAY_BUFFER, vboId);
-		offsetPtr = NULL;
-	}
-	{
-		int offset = 0;
-		for (int i = 0; i < attribs.size(); i++)
-		{
-			VertexAttr& a = attribs[i];
-			void* ptr = offsetPtr + offset;
-			offset += a.size;
-			if (a.handle == -1)
-				continue;
-			glEnableVertexAttribArray(a.handle);
-			glVertexAttribPointer(a.handle, a.numValues, a.valueType, a.normalized != 0, elementSize, ptr);
-		}
-	}
+	glBindVertexArray(vaoId);
 
 	if (start < 0 || start > numVerts)
 		logf("Invalid start index: %d\n", start);
@@ -230,18 +233,6 @@ void VertexBuffer::drawRange(int primitive, int start, int end)
 		logf("Invalid draw range: %d -> %d\n", start, end);
 	else
 		glDrawArrays(primitive, start, end - start);
-
-	if (vboId != -1) {
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-	}
-
-	for (int i = 0; i < attribs.size(); i++)
-	{
-		VertexAttr& a = attribs[i];
-		if (a.handle == -1)
-			continue;
-		glDisableVertexAttribArray(a.handle);
-	}
 }
 
 void VertexBuffer::draw(int primitive)

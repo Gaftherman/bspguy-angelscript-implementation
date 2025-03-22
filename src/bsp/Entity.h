@@ -108,10 +108,13 @@ private:
 	bool hasCachedOrigin = false;
 	bool hasCachedAngles = false;
 	bool hasCachedRenderOpts = false;
+	bool hasCachedRotMatrixes = false;
 	string cachedTargetname;
 	string cachedClassname;
 	vec3 cachedOrigin;
 	vec3 cachedAngles;
+	mat4x4 cachedRotationMatrix;
+	mat4x4 cachedRotationMatrixFlipped;
 	EntRenderOpts cachedRenderOpts;
 };
 

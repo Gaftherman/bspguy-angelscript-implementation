@@ -60,3 +60,4 @@ extern std::set<std::string> g_parsed_fgds;
 extern std::thread::id g_main_thread_id;
 
 extern int g_render_flags;
+extern uint32_t g_max_texture_size;

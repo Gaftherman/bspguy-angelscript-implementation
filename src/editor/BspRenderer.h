@@ -18,8 +18,6 @@ class Entity;
 struct LeafNode;
 struct WADTEX;
 
-#define LIGHTMAP_ATLAS_SIZE 512
-
 enum RenderFlags {
 	RENDER_TEXTURES = 1,
 	RENDER_LIGHTMAPS = 2,
@@ -215,6 +213,8 @@ private:
 	int numFaceMaths;
 	int numPointEnts;
 	int numLoadedTextures = 0;
+	int lightmapAtlasSz;
+	int lightmapAtlasZoneSz;
 
 	vector<Polygon3D> debugFaces;
 	NavMesh* debugNavMesh;

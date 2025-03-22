@@ -200,6 +200,10 @@ Renderer::Renderer() {
 	glfwSetWindowIconifyCallback(window, window_iconify_callback);
 	glfwSetDropCallback(window, file_drop_callback);
 
+	GLint maxTextureSize;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+	g_max_texture_size = maxTextureSize;
+
 	glewInit();
 
 	// init to black screen instead of white
@@ -823,9 +827,14 @@ void Renderer::renderLoop() {
 			reloading = reloadingGameDir = false;
 		}
 
+		static int lastError = 0;
 		int glerror = glGetError();
 		if (glerror != GL_NO_ERROR) {
-			logf("Got OpenGL Error: %d\n", glerror);
+			if (lastError != glerror)
+				logf("Got OpenGL Error: %d\n", glerror);
+			else
+				debugf("Got OpenGL Error: %d\n", glerror);
+			lastError = glerror;
 		}
 
 		if (!isFocused && !isHovered) {
@@ -858,6 +867,7 @@ void Renderer::postLoadFgds()
 	if (reloadingGameDir) {
 		mapRenderer->reloadTextures();
 	}
+	mapRenderer->pointEntRenderer->uploadCubeBuffers();
 
 	for (int i = 0; i < mapRenderer->map->ents.size(); i++) {
 		Entity* ent = mapRenderer->map->ents[i];
@@ -1308,6 +1318,7 @@ void Renderer::updateEntDirectionVectors() {
 
 	entDirectionVectors = new VertexBuffer(colorShader, COLOR_4B | POS_3F, arrows, numPointers * arrowVerts);
 	entDirectionVectors->ownData = true;
+	entDirectionVectors->upload();
 }
 
 void Renderer::drawEntDirectionVectors() {
@@ -1361,6 +1372,7 @@ void Renderer::updateTextureAxes() {
 	}
 
 	allTextureAxes = new VertexBuffer(colorShader, COLOR_4B | POS_3F, verts, numVerts);
+	allTextureAxes->upload();
 	allTextureAxes->ownData = true;
 }
 
@@ -2289,6 +2301,7 @@ void Renderer::drawLine(vec3 start, vec3 end, COLOR4 color) {
 	verts[1].c = color;
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &verts[0], 2);
+	buffer.upload();
 	buffer.draw(GL_LINES);
 }
 
@@ -2316,6 +2329,7 @@ void Renderer::drawBox(vec3 center, float width, COLOR4 color) {
 	cCube cube(pos - sz, pos + sz, color);
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &cube, 6 * 6);
+	buffer.upload();
 	buffer.draw(GL_TRIANGLES);
 }
 
@@ -2326,6 +2340,7 @@ void Renderer::drawBox(vec3 mins, vec3 maxs, COLOR4 color) {
 	cCube cube(mins, maxs, color);
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &cube, 6 * 6);
+	buffer.upload();
 	buffer.draw(GL_TRIANGLES);
 }
 
@@ -2346,6 +2361,7 @@ void Renderer::drawPolygon3D(Polygon3D& poly, COLOR4 color) {
 	}
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, verts, poly.verts.size());
+	buffer.upload();
 	buffer.draw(GL_TRIANGLE_FAN);
 }
 
@@ -2401,6 +2417,7 @@ void Renderer::drawPlane(BSPPLANE& plane, COLOR4 color, float sz) {
 	cQuad quad(bottomRightVert, bottomLeftVert, topLeftVert, topRightVert);
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &quad, 6);
+	buffer.upload();
 	buffer.draw(GL_TRIANGLES);
 }
 
@@ -3170,6 +3187,8 @@ void Renderer::updateEntConnections() {
 		entConnectionPoints = new VertexBuffer(colorShader, COLOR_4B | POS_3F, points, numPoints * 6 * 6);
 		entConnections->ownData = true;
 		entConnectionPoints->ownData = true;
+		entConnections->upload();
+		entConnectionPoints->upload();
 	}
 }
 
@@ -3205,6 +3224,8 @@ void Renderer::updateEntConnectionPositions() {
 		vec3 extent = vec3(s, s, s);
 		points[k] = cCube(dstPos - extent, dstPos + extent, link.color);
 	}
+
+	entConnections->upload();
 }
 
 void Renderer::updateCullBox() {

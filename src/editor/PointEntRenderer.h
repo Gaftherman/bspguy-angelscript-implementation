@@ -29,6 +29,7 @@ public:
 
 	EntCube* getEntCube(Entity* ent);
 	EntCube* getEntCube(string cname);
+	void uploadCubeBuffers();
 
 private:
 	ShaderProgram* colorShader;

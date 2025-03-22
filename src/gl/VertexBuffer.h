@@ -77,6 +77,7 @@ public:
 private:
 	ShaderProgram * shaderProgram = NULL; // for getting handles to vertex attributes
 	uint32_t vboId = -1;
+	uint32_t vaoId = -1; // vertex array object (binds attributes to the buffer)
 	bool attributesBound = false;
 
 	// add attributes according to the attribute flags

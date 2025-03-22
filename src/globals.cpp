@@ -18,3 +18,4 @@ std::set<std::string> g_parsed_fgds;
 
 MapLimits g_limits;
 MapLimits g_engine_limits[ENGINE_TYPES];
+uint32_t g_max_texture_size = 512;

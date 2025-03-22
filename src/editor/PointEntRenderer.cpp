@@ -150,3 +150,11 @@ void PointEntRenderer::genCubeBuffers(EntCube* entCube) {
 	entCube->selectBuffer->ownData = true;
 	entCube->wireframeBuffer->ownData = true;
 }
+
+void PointEntRenderer::uploadCubeBuffers() {
+	for (EntCube* cube : entCubes) {
+		cube->buffer->upload();
+		cube->selectBuffer->upload();
+		cube->wireframeBuffer->upload();
+	}
+}

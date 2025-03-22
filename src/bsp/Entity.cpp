@@ -277,8 +277,12 @@ EntRenderOpts Entity::getRenderOpts() {
 }
 
 mat4x4 Entity::getRotationMatrix(bool flipped) {
-	mat4x4 angleTransform;
-	angleTransform.loadIdentity();
+	if (hasCachedRotMatrixes) {
+		return flipped ? cachedRotationMatrixFlipped : cachedRotationMatrix;
+	}
+
+	cachedRotationMatrix.loadIdentity();
+	cachedRotationMatrixFlipped.loadIdentity();
 
 	if (canRotate()) {
 		vec3 angles = getAngles() * (PI / 180.0f);
@@ -287,19 +291,20 @@ mat4x4 Entity::getRotationMatrix(bool flipped) {
 			if (flipped) {
 				// well this makes no sense but it's required for object picking
 				// but not for rendering. I guess it's a combination of flips or undoing them, idk
-				angleTransform.rotateY(angles.x);
-				angleTransform.rotateZ(-angles.y);
-				angleTransform.rotateX(-angles.z);
+				cachedRotationMatrixFlipped.rotateY(angles.x);
+				cachedRotationMatrixFlipped.rotateZ(-angles.y);
+				cachedRotationMatrixFlipped.rotateX(-angles.z);
 			}
 			else {
-				angleTransform.rotateX(angles.z);
-				angleTransform.rotateY(angles.y);
-				angleTransform.rotateZ(angles.x);
+				cachedRotationMatrix.rotateX(angles.z);
+				cachedRotationMatrix.rotateY(angles.y);
+				cachedRotationMatrix.rotateZ(angles.x);
 			}
 		}
 	}
 
-	return angleTransform;
+	hasCachedRotMatrixes = true;
+	return flipped ? cachedRotationMatrixFlipped : cachedRotationMatrix;
 }
 
 bool Entity::canRotate() {
@@ -729,6 +734,7 @@ void Entity::clearCache() {
 	hasCachedOrigin = false;
 	hasCachedAngles = false;
 	hasCachedRenderOpts = false;
+	hasCachedRotMatrixes = false;
 	cachedMdl = NULL;
 	cachedTargets.clear();
 }
