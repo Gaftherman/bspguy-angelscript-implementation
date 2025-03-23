@@ -4,6 +4,10 @@
 #include <string.h>
 #include "ShaderProgram.h"
 
+// Vertex Array Objects should in theory be faster due to fewer opengl call per draw
+// but I see a slowdown and they crash my win7 opengl 3.2 netbook, so don't use them.
+bool g_use_vao = false;
+
 VertexAttr commonAttr[VBUF_FLAGBITS] =
 {
 	VertexAttr(2, GL_BYTE,          -1, GL_FALSE, "TEX_2B"), // TEX_2B
@@ -169,7 +173,6 @@ void VertexBuffer::setData(const void* data, int numVerts)
 	this->numVerts = numVerts;
 }
 
-
 void VertexBuffer::upload() {
 	if (vboId != -1) {
 		// already uploaded, just replace the data
@@ -181,28 +184,32 @@ void VertexBuffer::upload() {
 
 	bindAttributes();
 
-	glGenVertexArrays(1, &vaoId);
-	glBindVertexArray(vaoId);
+	if (g_use_vao) {
+		glGenVertexArrays(1, &vaoId);
+		glBindVertexArray(vaoId);
+	}
 
 	glGenBuffers(1, &vboId);
 	glBindBuffer(GL_ARRAY_BUFFER, vboId);
 	glBufferData(GL_ARRAY_BUFFER, elementSize * numVerts, data, GL_STATIC_DRAW);	
 
-	int offset = 0;
-	for (int i = 0; i < attribs.size(); i++)
-	{
-		VertexAttr& a = attribs[i];
-		void* ptr = (char*)NULL + offset;
-		offset += a.size;
-		if (a.handle == -1) {
-			continue;
+	if (g_use_vao) {
+		int offset = 0;
+		for (int i = 0; i < attribs.size(); i++)
+		{
+			VertexAttr& a = attribs[i];
+			void* ptr = (char*)NULL + offset;
+			offset += a.size;
+			if (a.handle == -1) {
+				continue;
+			}
+			glEnableVertexAttribArray(a.handle);
+			glVertexAttribPointer(a.handle, a.numValues, a.valueType, a.normalized != 0, elementSize, ptr);
 		}
-		glEnableVertexAttribArray(a.handle);
-		glVertexAttribPointer(a.handle, a.numValues, a.valueType, a.normalized != 0, elementSize, ptr);
 	}
 
-	glBindVertexArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	if (g_use_vao)
+		glBindVertexArray(0);
 }
 
 void VertexBuffer::deleteBuffer() {
@@ -211,6 +218,7 @@ void VertexBuffer::deleteBuffer() {
 	if (vaoId != -1)
 		glDeleteBuffers(1, &vaoId);
 	vboId = -1;
+	vaoId = -1;
 }
 
 void VertexBuffer::drawRange(int primitive, int start, int end)
@@ -223,7 +231,24 @@ void VertexBuffer::drawRange(int primitive, int start, int end)
 	shaderProgram->bind();
 	bindAttributes();
 
-	glBindVertexArray(vaoId);
+	if (vaoId != -1)
+		glBindVertexArray(vaoId);
+	else {
+		glBindBuffer(GL_ARRAY_BUFFER, vboId);
+
+		int offset = 0;
+		for (int i = 0; i < attribs.size(); i++)
+		{
+			VertexAttr& a = attribs[i];
+			void* ptr = (char*)NULL + offset;
+			offset += a.size;
+			if (a.handle == -1) {
+				continue;
+			}
+			glEnableVertexAttribArray(a.handle);
+			glVertexAttribPointer(a.handle, a.numValues, a.valueType, a.normalized != 0, elementSize, ptr);
+		}
+	}
 
 	if (start < 0 || start > numVerts)
 		logf("Invalid start index: %d\n", start);
@@ -233,6 +258,18 @@ void VertexBuffer::drawRange(int primitive, int start, int end)
 		logf("Invalid draw range: %d -> %d\n", start, end);
 	else
 		glDrawArrays(primitive, start, end - start);
+
+	if (vaoId == -1) {
+		// my windows 7 opengl 3.2 netbook needs this or else it crashes
+		for (int i = 0; i < attribs.size(); i++)
+		{
+			VertexAttr& a = attribs[i];
+			if (a.handle == -1) {
+				continue;
+			}
+			glDisableVertexAttribArray(a.handle);
+		}
+	}
 }
 
 void VertexBuffer::draw(int primitive)
