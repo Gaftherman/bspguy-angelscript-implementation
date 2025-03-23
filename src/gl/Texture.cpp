@@ -9,6 +9,8 @@ Texture::Texture(int width, int height) {
 	this->nearFilter = GL_LINEAR;
 	this->farFilter = GL_LINEAR_MIPMAP_LINEAR;
 	this->data = new uint8_t[width*height*sizeof(COLOR3)];
+	arrayId = -1;
+	layer = 0;
 }
 
 Texture::Texture( int width, int height, void * data )
@@ -18,17 +20,23 @@ Texture::Texture( int width, int height, void * data )
 	this->nearFilter = GL_LINEAR;
 	this->farFilter = GL_LINEAR_MIPMAP_LINEAR;
 	this->data = (uint8_t*)data;
+	arrayId = -1;
+	layer = 0;
 }
 
 Texture::~Texture()
 {
 	if (uploaded)
 		glDeleteTextures(1, &id);
-	delete[] data;
+	if (data)
+		delete[] data;
 }
 
 void Texture::upload(int format, bool lightmap)
 {
+	if (!data) {
+		return;
+	}
 	this->isLightmap = lightmap;
 	if (uploaded) {
 		glDeleteTextures(1, &id);
@@ -67,18 +75,22 @@ void Texture::upload(int format, bool lightmap)
 
 void Texture::bind()
 {
-	glBindTexture(GL_TEXTURE_2D, id);
+	int paramTarget = arrayId != -1 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D;
+	if (arrayId != -1)
+		glBindTexture(GL_TEXTURE_2D_ARRAY, arrayId);
+	else
+		glBindTexture(GL_TEXTURE_2D, id);
 
 	if (isLightmap) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
 	else if (g_settings.texture_filtering) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
 	else {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	}
 }

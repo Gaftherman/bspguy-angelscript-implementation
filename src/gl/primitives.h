@@ -21,7 +21,7 @@ struct tVert
 struct lightmapVert
 {
 	// texture coordinates
-	float u, v;
+	float u, v, w; // w = texture layer in array texture
 
 	// lightmap texture coordinates
 	// last value scales the lightmap brightness
@@ -29,6 +29,8 @@ struct lightmapVert
 
 	float r, g, b, a;
 	float x, y, z;
+
+	vec3 pos() { return vec3(x, y, z); }
 };
 
 struct cVert

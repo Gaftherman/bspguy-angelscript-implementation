@@ -135,14 +135,15 @@ public:
 private:
 	GLFWwindow* window;
 	ShaderProgram* bspShader;
-	ShaderProgram* fullBrightBspShader;
 	ShaderProgram* colorShader;
 	ShaderProgram* mdlShader;
 	ShaderProgram* sprShader;
 	ShaderProgram* vec3Shader;
+	ShaderProgram* sprOutlineShader;
 	
 	// opengl uniforms
 	uint u_colorMultId;
+	uint u_vec3color;
 
 	PointEntRenderer* pointEntRenderer;
 	PointEntRenderer* swapPointEntRenderer = NULL;

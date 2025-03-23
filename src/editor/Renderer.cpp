@@ -28,6 +28,10 @@
 
 future<void> Renderer::fgdFuture;
 
+int glGetErrorDebug() {
+	return glGetError();
+}
+
 void error_callback(int error, const char* description)
 {
 	logf("GLFW Error: %s\n", description);
@@ -217,10 +221,6 @@ Renderer::Renderer() {
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
 
-	fullBrightBspShader = new ShaderProgram(g_shader_fullbright_vertex, g_shader_fullbright_fragment);
-	fullBrightBspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
-	fullBrightBspShader->setMatrixNames(NULL, "modelViewProjection");
-
 	colorShader = new ShaderProgram(g_shader_cVert_vertex, g_shader_cVert_fragment);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	colorShader->setMatrixNames(NULL, "modelViewProjection");
@@ -235,15 +235,24 @@ Renderer::Renderer() {
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprShader->setMatrixNames(NULL, "modelViewProjection");
 	sprShader->setVertexAttributeNames("vPosition", NULL, "vTex", NULL);
-
+	
 	vec3Shader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3_fragment);
 	vec3Shader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	vec3Shader->setMatrixNames(NULL, "modelViewProjection");
 	vec3Shader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
 
+	sprOutlineShader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3depth_fragment);
+	sprOutlineShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
+	sprOutlineShader->setMatrixNames(NULL, "modelViewProjection");
+	sprOutlineShader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
+
 	colorShader->bind();
 	u_colorMultId = glGetUniformLocation(colorShader->ID, "colorMult");
 	glUniform4f(u_colorMultId, 1, 1, 1, 1);
+
+	vec3Shader->bind();
+	u_vec3color = glGetUniformLocation(vec3Shader->ID, "color");
+	glUniform4f(u_vec3color, 1, 1, 1, 1);
 
 	oldLeftMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 	oldRightMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
@@ -349,13 +358,18 @@ void Renderer::renderLoop() {
 		isLoading = reloading;
 		
 		// draw opaque world/entity faces
-		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false);
+		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, false);
+		
+		// wireframe pass
+		if (g_render_flags & RENDER_WIREFRAME)
+			mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);
+		
 		// studio models have transparent boxes that need to draw over the world but behind transparent
 		// brushes like a trigger_once which is rendered using the clipnode model
 		drawModelsAndSprites();
 		
 		// draw transparent entity faces
-		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true);
+		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
 
 		if (!mapRenderer->isFinishedLoading()) {
 			isLoading = true;
@@ -1228,10 +1242,6 @@ void Renderer::drawTransformAxes() {
 		colorShader->updateMatrixes();
 		moveAxes.buffer->draw(GL_TRIANGLES);
 	}
-}
-
-int glGetErrorDebug() {
-	return glGetError();
 }
 
 void Renderer::drawEntConnections() {
@@ -2256,7 +2266,7 @@ void Renderer::addMap(Bsp* map) {
 		debugLeafNavMesh = NULL;
 	}
 
-	mapRenderer = new BspRenderer(map, bspShader, fullBrightBspShader, colorShader, pointEntRenderer);
+	mapRenderer = new BspRenderer(map, bspShader, colorShader, pointEntRenderer);
 
 	gui->checkValidHulls();
 
@@ -2534,7 +2544,7 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 			newModel = new MdlRenderer(g_app->mdlShader, modelPath);
 		}
 		else {
-			newModel = new SprRenderer(g_app->sprShader, g_app->vec3Shader, modelPath);
+			newModel = new SprRenderer(g_app->sprShader, g_app->sprOutlineShader, modelPath);
 		}
 		
 		studioModels[modelPath] = newModel;

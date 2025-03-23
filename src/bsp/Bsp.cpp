@@ -4107,6 +4107,8 @@ bool Bsp::shift_lightstyles(uint32_t shift) {
 			}
 		}
 	}
+
+	return true;
 }
 
 void Bsp::write(string path) {

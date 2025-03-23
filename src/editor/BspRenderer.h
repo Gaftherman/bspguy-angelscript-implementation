@@ -11,6 +11,8 @@ struct EntCube;
 class VertexBuffer;
 class ShaderProgram;
 class Texture;
+class TextureArray;
+struct TexArrayOffset;
 struct lightmapVert;
 struct cCube;
 class Bsp;
@@ -67,14 +69,12 @@ struct RenderEnt {
 };
 
 struct RenderGroup {
-	lightmapVert* wireframeVerts; // verts for rendering wireframe
 	lightmapVert* verts;
 	int vertCount;
-	int wireframeVertCount;
+	int arrayTextureIdx;
 	Texture* texture;
 	Texture* lightmapAtlas[MAXLIGHTMAPS];
 	VertexBuffer* buffer;
-	VertexBuffer* wireframeBuffer;
 	bool transparent;
 };
 
@@ -89,6 +89,10 @@ struct RenderModel {
 	int groupCount;
 	RenderFace* renderFaces;
 	int renderFaceCount;
+
+	VertexBuffer* wireframeBuffer;
+	vec3* wireframeVerts; // verts for rendering wireframe
+	int wireframeVertCount;
 };
 
 struct RenderClipnodes {
@@ -143,12 +147,14 @@ public:
 	int showLightFlag = -1;
 	vector<Wad*> wads;
 
-	BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* fullBrightBspShader, ShaderProgram* colorShader, PointEntRenderer* fgd);
+	BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colorShader, PointEntRenderer* fgd);
 	~BspRenderer();
 
-	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop, int clipnodeHull, bool transparencyPass);
+	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
+		int clipnodeHull, bool transparencyPass, bool wireframePass);
 
-	void drawModel(int modelIdx, bool transparent, bool highlight, bool edgesOnly);
+	void drawModel(int modelIdx, bool transparent, bool highlight);
+	void drawModelWireframe(int modelIdx, bool highlight);
 	void drawModelClipnodes(int modelIdx, bool highlight, int hullIdx);
 	void drawPointEntities(const vector<int>& highlightedEnts);
 
@@ -176,6 +182,7 @@ public:
 	void preRenderEnts();
 	void calcFaceMaths();
 
+	void preloadTextures(); // sets texture array positions for textures so geometry loader can set uvs
 	void loadTextures(); // will reload them if already loaded
 	void updateLightmapInfos();
 	bool isFinishedLoading();
@@ -192,8 +199,9 @@ public:
 
 private:
 	ShaderProgram* bspShader;
-	ShaderProgram* fullBrightBspShader;
 	ShaderProgram* colorShader;
+
+	// opengl uinifors
 	uint colorShaderMultId;
 
 	LightmapInfo* lightmaps = NULL;
@@ -205,6 +213,8 @@ private:
 
 	// textures loaded in a separate thread
 	Texture** glTexturesSwap;
+	TextureArray* glTextureArray;
+	TexArrayOffset* miptexToTexArray; // maps iMiptex to a texture layer in an unknown texturearray
 
 	int numLightmapAtlases;
 	int numRenderModels;
@@ -243,7 +253,6 @@ private:
 	future<void> clipnodesFuture;
 
 	void loadLightmaps();
-	void genRenderFaces(int& renderModelCount);
 	void loadClipnodes();
 	void generateClipnodeBuffer(int modelIdx);
 	void generateNavMeshBuffer();
