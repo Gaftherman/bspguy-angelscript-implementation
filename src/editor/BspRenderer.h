@@ -133,6 +133,7 @@ public:
 	bool isEntSelected(int entIdx);
 	vector<Entity*> getEnts();
 	vector<BSPFACE*> getFaces();
+	vector<int> getModelIndexes();
 	bool shouldHideSelection();
 };
 
@@ -170,7 +171,7 @@ public:
 	void updateClipnodeOpacity(byte newValue);
 
 	void reload(); // reloads all geometry, textures, and lightmaps
-	void reloadTextures();
+	void reloadTextures(bool reloadNow=false);
 	void reloadLightmaps();
 	void reloadClipnodes();
 	void addClipnodeModel(int modelIdx);
@@ -190,7 +191,7 @@ public:
 	void highlightFace(int faceIdx, bool highlight);
 	void updateFaceUVs(int faceIdx);
 	uint getFaceTextureId(int faceIdx);
-	void loadTexture(WADTEX* tex);
+	int addTextureToMap(string textureName); // adds a texture reference if found in a loaded WAD
 	Texture* uploadTexture(WADTEX* tex);
 
 	void write_obj_file();

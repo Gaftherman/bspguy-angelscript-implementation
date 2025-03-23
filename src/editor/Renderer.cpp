@@ -1175,6 +1175,8 @@ void Renderer::drawModelVerts() {
 		modelVertCubes[cubeIdx++] = cCube(min, max, color);
 	}
 
+	modelVertBuff->upload();
+
 	model.loadIdentity();
 	model.translate(renderOffset.x, renderOffset.y, renderOffset.z);
 	colorShader->updateMatrixes();
@@ -1214,6 +1216,7 @@ void Renderer::drawModelOrigin() {
 		color = originHovered ? vertHoverColor : vertDimColor;
 	}
 	modelOriginCube = cCube(min, max, color);
+	modelOriginBuff->upload();
 
 	model.loadIdentity();
 	colorShader->updateMatrixes();
@@ -1235,6 +1238,7 @@ void Renderer::drawTransformAxes() {
 		vec3 ori = scaleAxes.origin;
 		model.translate(ori.x, ori.z, -ori.y);
 		colorShader->updateMatrixes();
+		scaleAxes.buffer->upload();
 		scaleAxes.buffer->draw(GL_TRIANGLES);
 	}
 	if (transformMode == TRANSFORM_MOVE) {
@@ -1242,6 +1246,7 @@ void Renderer::drawTransformAxes() {
 		float offset = (g_render_flags & RENDER_ENT_DIRECTIONS) ? 64 : 0;
 		model.translate(ori.x, ori.z + offset, -ori.y);
 		colorShader->updateMatrixes();
+		moveAxes.buffer->upload();
 		moveAxes.buffer->draw(GL_TRIANGLES);
 	}
 }
@@ -1808,7 +1813,7 @@ void Renderer::cameraObjectHovering() {
 		getPickRay(pickStart, pickDir);
 		float bestDist = FLT_MAX;
 
-		vec3 offset = (g_render_flags & RENDER_ENT_DIRECTIONS) ? vec3(0, 0, 64) : vec3();
+		vec3 offset = (g_render_flags & RENDER_ENT_DIRECTIONS) && transformMode == TRANSFORM_MOVE ? vec3(0, 0, 64) : vec3();
 		pickStart -= offset;
 
 		Bsp* map = mapRenderer->map;
@@ -3053,6 +3058,7 @@ void Renderer::updateModelVerts() {
 	}
 	
 	modelOriginBuff = new VertexBuffer(colorShader, COLOR_4B | POS_3F, &modelOriginCube, 6 * 6);
+	modelOriginBuff->upload();
 
 	updateSelectionSize();
 
@@ -3078,6 +3084,7 @@ void Renderer::updateModelVerts() {
 	int numCubes = modelVerts.size() + modelEdges.size();
 	modelVertCubes = new cCube[numCubes];
 	modelVertBuff = new VertexBuffer(colorShader, COLOR_4B | POS_3F, modelVertCubes, 6 * 6 * numCubes);
+	modelVertBuff->upload();
 	//logf("%d intersection points\n", modelVerts.size());
 }
 
@@ -4144,7 +4151,8 @@ void Renderer::ungrabEnts() {
 
 	movingEnt = false;
 
-	pushEntityUndoState("Move Entity");
+	int plural = pickInfo.ents.size() > 1;
+	pushEntityUndoState(plural ? "Move Entities" : "Move Entity");
 	pickCount++; // force transform window to recalc offsets
 }
 
@@ -4362,6 +4370,14 @@ void Renderer::calcUndoMemoryUsage() {
 }
 
 void Renderer::merge(string fpath) {
+	// don't save world offset from GUI in the undo state
+	vec3 worldOrigin = mapRenderer->map->ents[0]->getOrigin();
+	mapRenderer->map->ents[0]->setOrAddKeyvalue("origin", "0 0 0");
+
+	LumpReplaceCommand* command = new LumpReplaceCommand("Merge Map");
+
+	mapRenderer->map->ents[0]->setOrAddKeyvalue("origin", worldOrigin.toKeyvalueString());
+
 	Bsp* thismap = g_app->mapRenderer->map;
 	thismap->update_ent_lump();
 
@@ -4394,23 +4410,24 @@ void Renderer::merge(string fpath) {
 			delete mergeResult.map;
 
 		mergeResult.map = NULL;
+		delete command;
 		return;
 	}
 
 	if (mergeResult.overflow) {
+		delete command;
 		return; // map deleted later in gui modal, after displaying limit overflows
 	}
+	
+	LumpState mergedLumps = mergeResult.map->duplicate_lumps(0xffffffff);
+	mapRenderer->map->replace_lumps(mergedLumps);
 
-	delete mapRenderer;
-	mapRenderer = NULL;
-	addMap(mergeResult.map);
-
-	clearUndoCommands();
-	clearRedoCommands();
-	gui->refresh();
-	updateCullBox();
-
+	for (int i = 0; i < HEADER_LUMPS; i++) {
+		delete[] mergedLumps.lumps[i];
+	}
 	logf("Merged maps!\n");
+
+	command->pushUndoState();
 }
 
 void Renderer::getWindowSize(int& width, int& height) {

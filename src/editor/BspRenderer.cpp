@@ -242,11 +242,27 @@ void BspRenderer::reload() {
 	reloadClipnodes();
 }
 
-void BspRenderer::reloadTextures() {
-	texturesLoaded = false;
+void BspRenderer::reloadTextures(bool reloadNow) {
 	preloadTextures();
 
-	texturesFuture = async(launch::async, &BspRenderer::loadTextures, this);
+	if (reloadNow) {
+		preloadTextures();
+		loadTextures();
+
+		deleteTextures();
+		glTextures = glTexturesSwap;
+		for (int i = 0; i < map->textureCount; i++) {
+			if (!glTextures[i]->uploaded)
+				glTextures[i]->upload(GL_RGB);
+		}
+		glTextureArray->upload();
+		numLoadedTextures = map->textureCount;
+		preRenderFaces();
+	}
+	else {
+		texturesLoaded = false;
+		texturesFuture = async(launch::async, &BspRenderer::loadTextures, this);
+	}	
 }
 
 void BspRenderer::reloadLightmaps() {
@@ -825,6 +841,16 @@ bool BspRenderer::refreshModelClipnodes(int modelIdx) {
 
 	deleteRenderModelClipnodes(&renderClipnodes[modelIdx]);
 	generateClipnodeBuffer(modelIdx);
+
+	RenderClipnodes& renderClip = renderClipnodes[modelIdx];
+
+	for (int i = 0; i < MAX_MAP_HULLS; i++) {
+		if (renderClip.clipnodeBuffer[i])
+			renderClip.clipnodeBuffer[i]->upload();
+		if (renderClip.wireframeClipnodeBuffer[i])
+			renderClip.wireframeClipnodeBuffer[i]->upload();
+	}
+
 	return true;
 }
 
@@ -1587,14 +1613,27 @@ Texture* BspRenderer::uploadTexture(WADTEX* tex) {
 	return newTex;
 }
 
-void BspRenderer::loadTexture(WADTEX* tex) {
-	Texture** newTextures = new Texture*[numLoadedTextures + 1];
-	memcpy(newTextures, glTextures, sizeof(Texture*) * numLoadedTextures);
+int BspRenderer::addTextureToMap(string textureName) {
+	WADTEX* tex = NULL;
+	for (int i = 0; i < wads.size(); i++) {
+		if (wads[i]->hasTexture(textureName)) {
+			tex = wads[i]->readTexture(textureName);
+			break;
+		}
+	}
 
-	newTextures[numLoadedTextures++] = uploadTexture(tex);
+	if (!tex) {
+		return -1;
+	}
 
-	delete[] glTextures;
-	glTextures = newTextures;
+	int newMiptex = map->add_texture_from_wad(tex);
+
+	reloadTextures(true);
+	
+	logf("Added new texture reference for %s\n", tex->szName);
+
+	delete tex;
+	return newMiptex;
 }
 
 void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
@@ -2251,6 +2290,17 @@ vector<BSPFACE*> PickInfo::getFaces() {
 	}
 
 	return outFaces;
+}
+
+vector<int> PickInfo::getModelIndexes() {
+	vector<int> outIdx;
+	Bsp* map = getMap();
+
+	for (int i = 0; i < faces.size(); i++) {
+		outIdx.push_back(map->get_model_from_face(faces[i]));
+	}
+
+	return outIdx;
 }
 
 bool PickInfo::shouldHideSelection() {

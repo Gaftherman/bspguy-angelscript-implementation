@@ -29,10 +29,11 @@ TextureArray::~TextureArray() {
 
 void TextureArray::clear() {
 	for (int i = 0; i < TEXARRAY_BUCKET_COUNT; i++) {
-		if (buckets[i].count) {
+		if (buckets[i].textures) {
 			delete[] buckets[i].textures;
-			buckets[i].count = 0;
+			buckets[i].textures = NULL;
 		}
+		buckets[i].count = 0;
 	}
 	numResize = 0;
 }

@@ -60,16 +60,9 @@ class Renderer {
 	friend class DeleteEntitiesCommand;
 	friend class CreateEntitiesCommand;
 	friend class CreateEntityFromTextCommand;
-	friend class DuplicateBspModelCommand;
-	friend class CreateBspModelCommand;
 	friend class EditBspModelCommand;
-	friend class CleanMapCommand;
-	friend class OptimizeMapCommand;
-	friend class DeleteBoxedDataCommand;
-	friend class DeleteOobDataCommand;
-	friend class FixSurfaceExtentsCommand;
-	friend class DeduplicateModelsCommand;
-	friend class MoveMapCommand;
+	friend class LumpReplaceCommand;
+	friend class FacesEditCommand;
 	friend class LeafNavMesh;
 	friend class BspRenderer;
 	friend class MdlRenderer;
@@ -303,6 +296,7 @@ private:
 	vec3 getEntOffset(Bsp* map, Entity* ent);
 
 	vec3 getAxisDragPoint(vec3 origin);
+	int getDefaultTextureIdx();
 
 	void updateDragAxes();
 	void updateModelVerts();

@@ -359,215 +359,6 @@ int CreateEntityFromTextCommand::memoryUsage() {
 	return sizeof(CreateEntityFromTextCommand) + textData.size();
 }
 
-//
-// Duplicate BSP Model command
-//
-DuplicateBspModelCommand::DuplicateBspModelCommand(string desc, PickInfo& pickInfo) 
-		: Command(desc) {
-	this->oldModelIdx = pickInfo.getModelIndex();
-	this->newModelIdx = -1;
-	this->entIdx = pickInfo.getEntIndex();
-	this->initialized = false;
-	this->allowedDuringLoad = false;
-	memset(&oldLumps, 0, sizeof(LumpState));
-}
-
-DuplicateBspModelCommand::~DuplicateBspModelCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void DuplicateBspModelCommand::execute() {
-	Bsp* map = getBsp();
-	Entity* ent = map->ents[entIdx];
-	BspRenderer* renderer = getBspRenderer();
-
-	if (!initialized) {
-		int dupLumps = CLIPNODES | EDGES | FACES | NODES | PLANES | SURFEDGES | TEXINFO | VERTICES | LIGHTING | MODELS;
-		oldLumps = map->duplicate_lumps(dupLumps);
-		initialized = true;
-	}
-
-	newModelIdx = map->duplicate_model(oldModelIdx);
-	ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));	
-
-	renderer->updateLightmapInfos();
-	renderer->calcFaceMaths();
-	renderer->preRenderFaces();
-	renderer->preRenderEnts();
-	renderer->reloadLightmaps();
-	renderer->addClipnodeModel(newModelIdx);
-	g_app->gui->refresh();
-
-	g_app->deselectObject();
-	/*
-	if (g_app->pickInfo.entIdx == entIdx) {
-		g_app->pickInfo.modelIdx = newModelIdx;
-		g_app->updateModelVerts();
-	}
-	*/
-}
-
-void DuplicateBspModelCommand::undo() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	Entity* ent = map->ents[entIdx];
-	map->replace_lumps(oldLumps);
-	ent->setOrAddKeyvalue("model", "*" + to_string(oldModelIdx));
-	
-	g_app->pickInfo.deselect();
-	/*
-	if (g_app->pickInfo.getModelIndex() == newModelIdx) {
-		//g_app->pickInfo.modelIdx = oldModelIdx;
-		
-	}
-	else if (g_app->pickInfo.getModelIndex() > newModelIdx) {
-		//g_app->pickInfo.modelIdx -= 1;
-	}
-	*/
-
-	renderer->reload();
-	g_app->gui->refresh();
-
-	g_app->deselectObject();
-	/*
-	if (g_app->pickInfo.entIdx == entIdx) {
-		g_app->pickInfo.modelIdx = oldModelIdx;
-		g_app->updateModelVerts();
-	}
-	*/
-}
-
-int DuplicateBspModelCommand::memoryUsage() {
-	int size = sizeof(DuplicateBspModelCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-
-//
-// Create BSP model
-//
-CreateBspModelCommand::CreateBspModelCommand(string desc, Entity* entData, float size) : Command(desc) {
-	this->entData = new Entity();
-	*this->entData = *entData;
-	this->size = size;
-	this->initialized = false;
-	memset(&oldLumps, 0, sizeof(LumpState));
-}
-
-CreateBspModelCommand::~CreateBspModelCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-	if (entData != nullptr)
-	{
-		delete entData;
-		entData = nullptr;
-	}
-}
-
-void CreateBspModelCommand::execute() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	int aaatriggerIdx = getDefaultTextureIdx();
-
-	if (!initialized) {
-		int dupLumps = CLIPNODES | EDGES | FACES | NODES | PLANES | SURFEDGES | TEXINFO | VERTICES | LIGHTING | MODELS;
-		if (aaatriggerIdx == -1) {
-			dupLumps |= TEXTURES;
-		}
-		oldLumps = map->duplicate_lumps(dupLumps);
-	}
-
-	// add the aaatrigger texture if it doesn't already exist
-	if (aaatriggerIdx == -1) {
-		aaatriggerIdx = addDefaultTexture();
-		renderer->reloadTextures();
-	}
-
-	vec3 mins = vec3(-size, -size, -size);
-	vec3 maxs = vec3(size, size, size);
-	int modelIdx = map->create_solid(mins, maxs, aaatriggerIdx);
-
-	if (!initialized) {
-		entData->addKeyvalue("model", "*" + to_string(modelIdx));
-	}
-
-	Entity* newEnt = new Entity();
-	*newEnt = *entData;
-	map->ents.push_back(newEnt);
-
-	g_app->deselectObject();
-	renderer->reload();
-	g_app->gui->refresh();
-
-	initialized = true;
-}
-
-void CreateBspModelCommand::undo() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	map->replace_lumps(oldLumps);
-
-	delete map->ents[map->ents.size() - 1];
-	map->ents.pop_back();
-
-	renderer->reload();
-	g_app->gui->refresh();
-	g_app->deselectObject();
-}
-
-int CreateBspModelCommand::memoryUsage() {
-	int size = sizeof(DuplicateBspModelCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-int CreateBspModelCommand::getDefaultTextureIdx() {
-	Bsp* map = getBsp();
-
-	int32_t totalTextures = ((int32_t*)map->textures)[0];
-	for (uint i = 0; i < totalTextures; i++) {
-		int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-		if (strcmp(tex.szName, "aaatrigger") == 0) {
-			return i;
-		}
-	}
-
-	return -1;
-}
-
-int CreateBspModelCommand::addDefaultTexture() {
-	Bsp* map = getBsp();
-	byte* tex_dat = NULL;
-	uint w, h;
-
-	lodepng_decode24(&tex_dat, &w, &h, aaatrigger_dat, sizeof(aaatrigger_dat));
-	int aaatriggerIdx = map->add_texture("aaatrigger", tex_dat, w, h);
-	//renderer->reloadTextures();
-
-	lodepng_encode24_file("test.png", (byte*)tex_dat, w, h);
-	delete[] tex_dat;
-
-	return aaatriggerIdx;
-}
-
 
 //
 // Edit BSP model
@@ -632,7 +423,7 @@ void EditBspModelCommand::refresh() {
 }
 
 int EditBspModelCommand::memoryUsage() {
-	int size = sizeof(DuplicateBspModelCommand);
+	int size = sizeof(EditBspModelCommand);
 
 	for (int i = 0; i < HEADER_LUMPS; i++) {
 		size += oldLumps.lumpLen[i] + newLumps.lumpLen[i];
@@ -642,43 +433,79 @@ int EditBspModelCommand::memoryUsage() {
 }
 
 
-
 //
-// Clean Map
+// A command that makes heavy modifations to the BSP and will need a full reload
 //
-CleanMapCommand::CleanMapCommand(string desc, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
+LumpReplaceCommand::LumpReplaceCommand(string desc, bool norefresh) : Command(desc) {
 	this->allowedDuringLoad = false;
+	this->norefresh = norefresh;
+
+	Bsp* map = g_app->mapRenderer->map;
+	g_app->saveLumpState(map, 0xffffffff, true);
+	this->oldLumps = g_app->undoLumpState;
+	g_app->saveLumpState(map, 0xffffffff, false);
 }
 
-CleanMapCommand::~CleanMapCommand() {
+LumpReplaceCommand::~LumpReplaceCommand() {
 	for (int i = 0; i < HEADER_LUMPS; i++) {
 		if (oldLumps.lumps[i])
 			delete[] oldLumps.lumps[i];
+		if (newLumps.lumps[i])
+			delete[] newLumps.lumps[i];
 	}
 }
 
-void CleanMapCommand::execute() {
+void LumpReplaceCommand::execute() {
 	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	logf("Cleaning %s\n", map->name.c_str());
-	map->remove_unused_model_structures().print_delete_stats(1);
-
+	map->replace_lumps(newLumps);
 	refresh();
 }
 
-void CleanMapCommand::undo() {
-	Bsp* map = getBsp();
+void LumpReplaceCommand::pushUndoState(bool norefresh) {
+	Bsp* map = g_app->mapRenderer->map;
 
+	this->newLumps = map->duplicate_lumps(0xffffffff);
+	memset(differences, 0, sizeof(bool) * HEADER_LUMPS);
+
+	bool anyDifference = false;
+	for (int i = 0; i < HEADER_LUMPS; i++) {
+		if (newLumps.lumps[i] && oldLumps.lumps[i]) {
+			if (newLumps.lumpLen[i] != oldLumps.lumpLen[i] || memcmp(newLumps.lumps[i], oldLumps.lumps[i], newLumps.lumpLen[i]) != 0) {
+				anyDifference = true;
+				differences[i] = true;
+			}
+		}
+	}
+
+	// delete lumps that have no differences to save space
+	for (int i = 0; i < HEADER_LUMPS; i++) {
+		if (!differences[i]) {
+			delete[] oldLumps.lumps[i];
+			delete[] newLumps.lumps[i];
+			oldLumps.lumps[i] = newLumps.lumps[i] = NULL;
+			oldLumps.lumpLen[i] = newLumps.lumpLen[i] = 0;
+		}
+	}
+
+	if (!norefresh)
+		refresh();
+
+	g_app->pushUndoCommand(this);
+}
+
+void LumpReplaceCommand::undo() {
+	Bsp* map = getBsp();
 	map->replace_lumps(oldLumps);
-
 	refresh();
 }
 
-void CleanMapCommand::refresh() {
+void LumpReplaceCommand::refresh() {
 	Bsp* map = getBsp();
 	BspRenderer* renderer = getBspRenderer();
+
+	if (norefresh) {
+		return;
+	}
 
 	renderer->reload();
 	g_app->deselectObject();
@@ -686,11 +513,12 @@ void CleanMapCommand::refresh() {
 	g_app->saveLumpState(map, 0xffffffff, true);
 }
 
-int CleanMapCommand::memoryUsage() {
-	int size = sizeof(CleanMapCommand);
+int LumpReplaceCommand::memoryUsage() {
+	int size = sizeof(LumpReplaceCommand);
 
 	for (int i = 0; i < HEADER_LUMPS; i++) {
 		size += oldLumps.lumpLen[i];
+		size += newLumps.lumpLen[i];
 	}
 
 	return size;
@@ -698,343 +526,65 @@ int CleanMapCommand::memoryUsage() {
 
 
 
-//
-// Optimize Map
-//
-OptimizeMapCommand::OptimizeMapCommand(string desc, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
+
+ModelEditCommand::ModelEditCommand(string desc, int modelIdx) : LumpReplaceCommand(desc) {
+	this->modelIdx = modelIdx;
 }
 
-OptimizeMapCommand::~OptimizeMapCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
+void ModelEditCommand::refresh() {
+	g_app->mapRenderer->refreshModel(modelIdx);
+	g_app->mapRenderer->refreshModelClipnodes(modelIdx);
+}
+
+int ModelEditCommand::memoryUsage() {
+	return LumpReplaceCommand::memoryUsage() + sizeof(ModelEditCommand) - sizeof(LumpReplaceCommand);
+}
+
+
+FacesEditCommand::FacesEditCommand(string desc) : LumpReplaceCommand(desc) {
+	this->modelRefreshes = g_app->pickInfo.getModelIndexes();
+	this->faces = g_app->pickInfo.faces;
+	textureDataReloadNeeded = false;
+}
+
+
+void FacesEditCommand::refresh() {
+	if (textureDataReloadNeeded) {
+		g_app->mapRenderer->reloadTextures(true);
 	}
-}
 
-void OptimizeMapCommand::execute() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
+	for (int i = 0; i < g_app->pickInfo.faces.size(); i++) {
+		g_app->mapRenderer->highlightFace(g_app->pickInfo.faces[i], false);
+	}
+	g_app->pickInfo.deselect();
 
-	logf("Optimizing %s\n", map->name.c_str());
-	if (!map->has_hull2_ents()) {
-		logf("    Redirecting hull 2 to hull 1 because there are no large monsters/pushables\n");
-		map->delete_hull(2, 1);
+	for (int i = 0; i < modelRefreshes.size(); i++)
+		g_app->mapRenderer->refreshModel(modelRefreshes[i], false);
+
+	if (g_app->pickMode == PICK_FACE) {
+		for (int i = 0; i < faces.size(); i++) {
+			g_app->mapRenderer->highlightFace(faces[i], true);
+			g_app->pickInfo.selectFace(faces[i]);
+		}
 	}
 
-	bool oldVerbose = g_verbose;
-	g_verbose = true;
-	map->delete_unused_hulls(true).print_delete_stats(1);
-	g_verbose = oldVerbose;
-
-	refresh();
-}
-
-void OptimizeMapCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-
-	refresh();
-}
-
-void OptimizeMapCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
+	g_app->pickCount++;
 	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
 }
 
-int OptimizeMapCommand::memoryUsage() {
-	int size = sizeof(OptimizeMapCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
+int FacesEditCommand::memoryUsage() {
+	return LumpReplaceCommand::memoryUsage() + sizeof(FacesEditCommand) - sizeof(LumpReplaceCommand)
+		+ modelRefreshes.size()*sizeof(int);
 }
 
 
 
-//
-// Delete boxed data
-//
-DeleteBoxedDataCommand::DeleteBoxedDataCommand(string desc, vec3 mins, vec3 maxs, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
-	this->mins = mins;
-	this->maxs = maxs;
+LightmapsEditCommand::LightmapsEditCommand(string desc) : LumpReplaceCommand(desc) {}
+
+void LightmapsEditCommand::refresh() {
+	g_app->mapRenderer->reloadLightmaps();
 }
 
-DeleteBoxedDataCommand::~DeleteBoxedDataCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void DeleteBoxedDataCommand::execute() {
-	Bsp* map = getBsp();
-
-	map->delete_box_data(mins, maxs);
-
-	refresh();
-}
-
-void DeleteBoxedDataCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-	map->load_ents();
-
-	refresh();
-}
-
-void DeleteBoxedDataCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
-	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
-}
-
-int DeleteBoxedDataCommand::memoryUsage() {
-	int size = sizeof(DeleteBoxedDataCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-
-
-//
-// Delete OOB data
-//
-DeleteOobDataCommand::DeleteOobDataCommand(string desc, int clipFlags, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
-	this->clipFlags = clipFlags;
-}
-
-DeleteOobDataCommand::~DeleteOobDataCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void DeleteOobDataCommand::execute() {
-	Bsp* map = getBsp();
-
-	map->delete_oob_data(clipFlags);
-
-	refresh();
-}
-
-void DeleteOobDataCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-	map->load_ents();
-
-	refresh();
-}
-
-void DeleteOobDataCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
-	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
-}
-
-int DeleteOobDataCommand::memoryUsage() {
-	int size = sizeof(DeleteOobDataCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-
-//
-// Fix bad surface extents
-//
-FixSurfaceExtentsCommand::FixSurfaceExtentsCommand(string desc, bool scaleNotSubdivide,
-		bool downscaleOnly, int maxTextureDim, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
-	this->scaleNotSubdivide = scaleNotSubdivide;
-	this->downscaleOnly = downscaleOnly;
-	this->maxTextureDim = maxTextureDim;
-}
-
-FixSurfaceExtentsCommand::~FixSurfaceExtentsCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void FixSurfaceExtentsCommand::execute() {
-	Bsp* map = getBsp();
-
-	map->fix_bad_surface_extents(scaleNotSubdivide, downscaleOnly, maxTextureDim);
-
-	refresh();
-}
-
-void FixSurfaceExtentsCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-
-	refresh();
-}
-
-void FixSurfaceExtentsCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
-	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
-}
-
-int FixSurfaceExtentsCommand::memoryUsage() {
-	int size = sizeof(FixSurfaceExtentsCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-
-
-//
-// Deduplicate models
-//
-DeduplicateModelsCommand::DeduplicateModelsCommand(string desc, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
-}
-
-DeduplicateModelsCommand::~DeduplicateModelsCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void DeduplicateModelsCommand::execute() {
-	Bsp* map = getBsp();
-
-	map->deduplicate_models();
-
-	refresh();
-}
-
-void DeduplicateModelsCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-	map->load_ents();
-
-	refresh();
-}
-
-void DeduplicateModelsCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
-	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
-}
-
-int DeduplicateModelsCommand::memoryUsage() {
-	int size = sizeof(DeduplicateModelsCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
-}
-
-
-//
-// Move the entire map
-//
-MoveMapCommand::MoveMapCommand(string desc, vec3 offset, LumpState oldLumps) : Command(desc) {
-	this->oldLumps = oldLumps;
-	this->allowedDuringLoad = false;
-	this->offset = offset;
-}
-
-MoveMapCommand::~MoveMapCommand() {
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		if (oldLumps.lumps[i])
-			delete[] oldLumps.lumps[i];
-	}
-}
-
-void MoveMapCommand::execute() {
-	Bsp* map = getBsp();
-
-	map->ents[0]->removeKeyvalue("origin");
-	map->move(offset);
-
-	map->zero_entity_origins("func_ladder");
-	map->zero_entity_origins("func_water"); // water is sometimes invisible after moving in sven
-	map->zero_entity_origins("func_mortar_field"); // mortars don't appear in sven
-
-	refresh();
-}
-
-void MoveMapCommand::undo() {
-	Bsp* map = getBsp();
-
-	map->replace_lumps(oldLumps);
-	map->ents[0]->setOrAddKeyvalue("origin", offset.toKeyvalueString());
-
-	refresh();
-}
-
-void MoveMapCommand::refresh() {
-	Bsp* map = getBsp();
-	BspRenderer* renderer = getBspRenderer();
-
-	renderer->reload();
-	g_app->deselectObject();
-	g_app->gui->refresh();
-	g_app->saveLumpState(map, 0xffffffff, true);
-}
-
-int MoveMapCommand::memoryUsage() {
-	int size = sizeof(MoveMapCommand);
-
-	for (int i = 0; i < HEADER_LUMPS; i++) {
-		size += oldLumps.lumpLen[i];
-	}
-
-	return size;
+int LightmapsEditCommand::memoryUsage() {
+	return LumpReplaceCommand::memoryUsage() + sizeof(LightmapsEditCommand) - sizeof(LumpReplaceCommand);
 }

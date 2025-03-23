@@ -226,34 +226,39 @@ void Gui::copyLightmap() {
 }
 
 void Gui::pasteLightmap() {
-	if (!app->pickInfo.getFace()) {
+	if (app->pickInfo.faces.empty()) {
 		return;
 	}
 
 	Bsp* map = app->pickInfo.getMap();
 
-	int size[2];
-	GetFaceLightmapSize(map, app->pickInfo.getFaceIndex(), size);
-	LIGHTMAP dstLightmap;
-	dstLightmap.width = size[0];
-	dstLightmap.height = size[1];
-	dstLightmap.layers = map->lightmap_count(app->pickInfo.getFaceIndex());
+	LightmapsEditCommand* command = new LightmapsEditCommand("Paste Lightmap");
 
-	if (dstLightmap.width != copiedLightmap.width || dstLightmap.height != copiedLightmap.height) {
-		logf("WARNING: lightmap sizes don't match (%dx%d != %d%d)",
-			copiedLightmap.width,
-			copiedLightmap.height,
-			dstLightmap.width,
-			dstLightmap.height);
-		// TODO: resize the lightmap, or maybe just shift if the face is the same size
+	for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+		int faceidx = app->pickInfo.faces[i];
+		int size[2];
+		GetFaceLightmapSize(map, faceidx, size);
+		LIGHTMAP dstLightmap;
+		dstLightmap.width = size[0];
+		dstLightmap.height = size[1];
+		dstLightmap.layers = map->lightmap_count(faceidx);
+
+		if (dstLightmap.width != copiedLightmap.width || dstLightmap.height != copiedLightmap.height) {
+			logf("WARNING: lightmap sizes don't match (%dx%d != %d%d)",
+				copiedLightmap.width,
+				copiedLightmap.height,
+				dstLightmap.width,
+				dstLightmap.height);
+			// TODO: resize the lightmap, or maybe just shift if the face is the same size
+		}
+
+		BSPFACE& src = map->faces[copiedLightmapFace];
+		BSPFACE& dst = map->faces[faceidx];
+		dst.nLightmapOffset = src.nLightmapOffset;
+		memcpy(dst.nStyles, src.nStyles, 4);
 	}
 
-	BSPFACE& src = map->faces[copiedLightmapFace];
-	BSPFACE& dst = *app->pickInfo.getFace();
-	dst.nLightmapOffset = src.nLightmapOffset;
-	memcpy(dst.nStyles, src.nStyles, 4);
-
-	app->mapRenderer->reloadLightmaps();
+	command->pushUndoState();
 }
 
 void Gui::draw3dContextMenus() {
@@ -331,9 +336,13 @@ void Gui::draw3dContextMenus() {
 
 				if (ImGui::BeginMenu("Create Hull", !app->invalidSolid && app->isTransformableSolid)) {
 					if (ImGui::MenuItem("Clipnodes")) {
+						ModelEditCommand* command = new ModelEditCommand("Create Model Clipnodes", modelIdx);
+
 						map->regenerate_clipnodes(modelIdx, -1);
 						checkValidHulls();
 						logf("Regenerated hulls 1-3 on model %d\n", modelIdx);
+
+						command->pushUndoState();
 					}
 
 					ImGui::Separator();
@@ -342,9 +351,13 @@ void Gui::draw3dContextMenus() {
 						bool isHullValid = model.iHeadnodes[i] >= 0;
 
 						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str())) {
+							ModelEditCommand* command = new ModelEditCommand("Create Model Hull", modelIdx);
+
 							map->regenerate_clipnodes(modelIdx, i);
 							checkValidHulls();
 							logf("Regenerated hull %d on model %d\n", i, modelIdx);
+
+							command->pushUndoState();
 						}
 					}
 					ImGui::EndMenu();
@@ -352,21 +365,27 @@ void Gui::draw3dContextMenus() {
 
 				if (ImGui::BeginMenu("Delete Hull", !app->isLoading)) {
 					if (ImGui::MenuItem("All Hulls")) {
+						ModelEditCommand* command = new ModelEditCommand("Delete Model Hulls", modelIdx);
+
 						map->delete_hull(0, modelIdx, -1);
 						map->delete_hull(1, modelIdx, -1);
 						map->delete_hull(2, modelIdx, -1);
 						map->delete_hull(3, modelIdx, -1);
-						app->mapRenderer->refreshModel(modelIdx);
 						checkValidHulls();
 						logf("Deleted all hulls on model %d\n", modelIdx);
+
+						command->pushUndoState();
 					}
 					if (ImGui::MenuItem("Clipnodes")) {
+						ModelEditCommand* command = new ModelEditCommand("Delete Model Clipnodes", modelIdx);
+
 						map->delete_hull(1, modelIdx, -1);
 						map->delete_hull(2, modelIdx, -1);
 						map->delete_hull(3, modelIdx, -1);
-						app->mapRenderer->refreshModelClipnodes(modelIdx);
 						checkValidHulls();
 						logf("Deleted hulls 1-3 on model %d\n", modelIdx);
+
+						command->pushUndoState();
 					}
 
 					ImGui::Separator();
@@ -375,13 +394,13 @@ void Gui::draw3dContextMenus() {
 						bool isHullValid = model.iHeadnodes[i] >= 0;
 
 						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, isHullValid)) {
+							ModelEditCommand* command = new ModelEditCommand("Delete Model Hull", modelIdx);
+
 							map->delete_hull(i, modelIdx, -1);
 							checkValidHulls();
-							if (i == 0)
-								app->mapRenderer->refreshModel(modelIdx);
-							else
-								app->mapRenderer->refreshModelClipnodes(modelIdx);
 							logf("Deleted hull %d on model %d\n", i, modelIdx);
+
+							command->pushUndoState();
 						}
 					}
 
@@ -390,11 +409,14 @@ void Gui::draw3dContextMenus() {
 
 				if (ImGui::BeginMenu("Simplify Hull", !app->isLoading)) {
 					if (ImGui::MenuItem("Clipnodes")) {
+						ModelEditCommand* command = new ModelEditCommand("Simplify Model Clipnodes", modelIdx);
+
 						map->simplify_model_collision(modelIdx, 1);
 						map->simplify_model_collision(modelIdx, 2);
 						map->simplify_model_collision(modelIdx, 3);
-						app->mapRenderer->refreshModelClipnodes(modelIdx);
 						logf("Replaced hulls 1-3 on model %d with a box-shaped hull\n", modelIdx);
+
+						command->pushUndoState();
 					}
 
 					ImGui::Separator();
@@ -403,9 +425,12 @@ void Gui::draw3dContextMenus() {
 						bool isHullValid = model.iHeadnodes[i] >= 0;
 
 						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, isHullValid)) {
+							ModelEditCommand* command = new ModelEditCommand("Simplify Model Hull", modelIdx);
+
 							map->simplify_model_collision(modelIdx, 1);
-							app->mapRenderer->refreshModelClipnodes(modelIdx);
 							logf("Replaced hull %d on model %d with a box-shaped hull\n", i, modelIdx);
+
+							command->pushUndoState();
 						}
 					}
 
@@ -425,10 +450,13 @@ void Gui::draw3dContextMenus() {
 								bool isHullValid = model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i];
 
 								if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), 0, false, isHullValid)) {
+									ModelEditCommand* command = new ModelEditCommand("Redirect Model Hull", modelIdx);
+
 									model.iHeadnodes[i] = model.iHeadnodes[k];
-									app->mapRenderer->refreshModelClipnodes(modelIdx);
 									checkValidHulls();
 									logf("Redirected hull %d to hull %d on model %d\n", i, k, modelIdx);
+
+									command->pushUndoState();
 								}
 							}
 
@@ -441,10 +469,27 @@ void Gui::draw3dContextMenus() {
 
 				ImGui::Separator();
 
-				if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading)) {
-					DuplicateBspModelCommand* command = new DuplicateBspModelCommand("Duplicate BSP Model", app->pickInfo);
-					command->execute();
-					app->pushUndoCommand(command);
+				bool anySolidSelected = false;
+				vector<Entity*> pickEnts = app->pickInfo.getEnts();
+				if (app->pickInfo.getEntIndex() > 0) {
+
+					for (Entity* ent : pickEnts) {
+						if (ent->getBspModelIdx() != -1) {
+							anySolidSelected = app->pickInfo.getEntIndex() != 0;
+							break;
+						}
+					}
+				}
+				if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
+					LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
+
+					for (Entity* ent : pickEnts) {
+						int oldModelIdx = ent->getBspModelIdx();
+						int newModelIdx = map->duplicate_model(oldModelIdx);
+						ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+					}
+
+					command->pushUndoState();
 				}
 				tooltip(g, "Create a copy of this BSP model and assign to this entity.\n\nThis lets you edit the model for this entity without affecting others.");
 			
@@ -605,6 +650,8 @@ void Gui::draw3dContextMenus() {
 			}
 
 			if (ImGui::MenuItem("Downscale texture", 0, false, !app->isLoading && isEmbedded)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textrue");
+
 				Bsp* map = app->pickInfo.getMap();
 
 				set<int> downscaled;
@@ -633,32 +680,46 @@ void Gui::draw3dContextMenus() {
 					map->downscale_texture(info.iMiptex, nextBestDim, true);
 				}
 				
-				app->pickInfo.deselect();
-				app->mapRenderer->reload();
-				reloadLimits();
+				command->pushUndoState();
 			}
-			tooltip(g, "Reduces the dimensions of this texture down to the next power of 2\n\nThis will break lightmaps.");
+			tooltip(g, "Reduces the dimensions of this texture down to the next power of 2.");
 
 			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
+				bool plural = app->pickInfo.faces.size() > 1;
+				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
+				
 				Bsp* map = app->pickInfo.getMap();
+
+				// subdividing changes faces indexes so must be done in the right order
+				sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
+					return a > b;
+				});
 
 				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
 					map->subdivide_face(app->pickInfo.faces[i]);
 				}
-				app->pickInfo.deselect();
-				app->mapRenderer->reload();
+
+				command->pushUndoState();
 			}
 			tooltip(g, "Split this face across the axis with the most texture pixels.");
 
 			if (ImGui::MenuItem("Subdivide until valid", 0, false, !app->isLoading)) {
+				bool plural = app->pickInfo.faces.size() > 1;
+				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
+
 				Bsp* map = app->pickInfo.getMap();
 
+				int totalSub = 0;
 				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
+					totalSub += map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
 				}
-				
-				app->pickInfo.deselect();
-				app->mapRenderer->reload();
+				if (totalSub == 0) {
+					logf("Selected faces already have valid extents");
+					delete command;
+				}
+				else {
+					command->pushUndoState();
+				}
 			} 
 			tooltip(g, "Subdivide this face until it has valid surface extents.");
 
@@ -796,6 +857,7 @@ void Gui::drawMenuBar() {
 		bool canRedo = redoCmd && (!app->isLoading || redoCmd->allowedDuringLoad);
 		bool entSelected = app->pickInfo.getEnt();
 		bool nonWorldspawnEntSelected = entSelected && app->pickInfo.getEntIndex() != 0;
+		Bsp* map = g_app->mapRenderer->map;
 
 		if (ImGui::MenuItem(undoTitle.c_str(), "Ctrl+Z", false, canUndo)) {
 			app->undo();
@@ -834,11 +896,29 @@ void Gui::drawMenuBar() {
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && nonWorldspawnEntSelected)) {
-			DuplicateBspModelCommand* command = new DuplicateBspModelCommand("Duplicate BSP Model", app->pickInfo);
-			command->execute();
-			app->pushUndoCommand(command);
+		bool anySolidSelected = false;
+		vector<Entity*> pickEnts = app->pickInfo.getEnts();
+		if (app->pickInfo.getEntIndex() > 0) {
+
+			for (Entity* ent : pickEnts) {
+				if (ent->getBspModelIdx() != -1) {
+					anySolidSelected = app->pickInfo.getEntIndex() != 0;
+					break;
+				}
+			}
 		}
+		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
+
+			for (Entity* ent : pickEnts) {
+				int oldModelIdx = ent->getBspModelIdx();
+				int newModelIdx = map->duplicate_model(oldModelIdx);
+				ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+			}
+
+			command->pushUndoState();
+		}
+
 		if (ImGui::MenuItem(app->movingEnt ? "Ungrab" : "Grab", "G", false, nonWorldspawnEntSelected)) {
 			if (!app->movingEnt)
 				app->grabEnts();
@@ -1097,6 +1177,8 @@ void Gui::drawMenuBar() {
 		tooltip(g, "Create a point entity. This is a ripent-only operation which does not affect BSP structures.\n");
 
 		if (ImGui::MenuItem("BSP Model", 0, false, !app->isLoading)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Create Model");
+
 			vec3 origin = app->cameraOrigin + app->cameraForward * 100;
 			if (app->gridSnappingEnabled)
 				origin = app->snapToGrid(origin);
@@ -1105,15 +1187,19 @@ void Gui::drawMenuBar() {
 			newEnt->addKeyvalue("origin", origin.toKeyvalueString());
 			newEnt->addKeyvalue("classname", "func_wall");
 
-			float snapSize = pow(2.0, g_app->gridSnapLevel);
-			if (snapSize < 16) {
-				snapSize = 16;
+			float size = pow(2.0, g_app->gridSnapLevel);
+			if (size < 16) {
+				size = 16;
 			}
+			
+			int aaatriggerIdx = map->get_default_texture_idx();
+			vec3 mins = vec3(-size, -size, -size);
+			vec3 maxs = vec3(size, size, size);
+			int modelIdx = map->create_solid(mins, maxs, aaatriggerIdx);
+			newEnt->addKeyvalue("model", "*" + to_string(modelIdx));
+			map->ents.push_back(newEnt);
 
-			CreateBspModelCommand* command = new CreateBspModelCommand("Create Model", newEnt, snapSize);
-			command->execute();
-			delete newEnt;
-			app->pushUndoCommand(command);
+			command->pushUndoState();
 		}
 		tooltip(g, "Create a BSP model and attach it to a new entity. This is not a ripent-only operation and will create new BSP structures.\n");
 
@@ -1137,10 +1223,12 @@ void Gui::drawMenuBar() {
 
 		ImGui::MenuItem("Delete", 0, false, false);
 		if (ImGui::MenuItem("Clean", 0, false, !app->isLoading)) {
-			CleanMapCommand* command = new CleanMapCommand("Clean " + map->name, app->undoLumpState);
-			g_app->saveLumpState(map, 0xffffffff, false);
-			command->execute();
-			app->pushUndoCommand(command);
+			LumpReplaceCommand* command = new LumpReplaceCommand("Clean " + map->name);
+			
+			logf("Cleaning %s\n", map->name.c_str());
+			map->remove_unused_model_structures().print_delete_stats(1);
+
+			command->pushUndoState();
 		}
 		tooltip(g, "Removes unreferenced structures in the BSP data.\n\nWhen you edit BSP models or delete"
 			" references to them, the data is not deleted until you run this command. "
@@ -1148,10 +1236,20 @@ void Gui::drawMenuBar() {
 			"and editing models. Watch the Limits and Messages widgets to see how many structures were removed.");
 
 		if (ImGui::MenuItem("Optimize", 0, false, !app->isLoading)) {
-			OptimizeMapCommand* command = new OptimizeMapCommand("Optimize " + map->name, app->undoLumpState);
-			g_app->saveLumpState(map, 0xffffffff, false);
-			command->execute();
-			app->pushUndoCommand(command);
+			LumpReplaceCommand* command = new LumpReplaceCommand("Optimize " + map->name);
+
+			logf("Optimizing %s\n", map->name.c_str());
+			if (!map->has_hull2_ents()) {
+				logf("    Redirecting hull 2 to hull 1 because there are no large monsters/pushables\n");
+				map->delete_hull(2, 1);
+			}
+
+			bool oldVerbose = g_verbose;
+			g_verbose = true;
+			map->delete_unused_hulls(true).print_delete_stats(1);
+			g_verbose = oldVerbose;
+
+			command->pushUndoState();
 		}
 		tooltip(g, "Removes unnecesary structures in the BSP data. Useful as a pre-processing step for "
 			"merging maps together without exceeding engine limits.\n\n"
@@ -1176,11 +1274,17 @@ void Gui::drawMenuBar() {
 						if (i == k)
 							continue;
 						if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), "", false, anyHullValid[k])) {
+							LumpReplaceCommand* command = new LumpReplaceCommand("Redirect Hull " + to_string(i));
+							
 							Bsp* map = app->mapRenderer->map;
 							map->delete_hull(i, k);
-							app->mapRenderer->reloadClipnodes();
 							logf("Redirected hull %d to hull %d in map %s\n", i, k, map->name.c_str());
 							checkValidHulls();
+
+							logf("Cleaning %s\n", map->name.c_str());
+							map->remove_unused_model_structures().print_delete_stats(1);
+
+							command->pushUndoState();
 						}
 					}
 					ImGui::EndMenu();
@@ -1189,8 +1293,7 @@ void Gui::drawMenuBar() {
 			ImGui::EndMenu();
 		}
 		tooltip(g, "Redirects a BSP hull in all models including worldspawn. This frees up a large "
-			"amount of clipnodes but reduces collision accuracy for entities that use the removed hulls. "
-			"Run the Clean command after redirecting a hull to delete the unreferenced clipnodes.\n\n"
+			"amount of clipnodes but reduces collision accuracy for entities that use the removed hulls.\n\n"
 			"Use this if the Optimize command refused to remove/redirect a hull, and you're ok with the side effects of forcing its removal. "
 			"Some entities may clip into walls, hover above the ground, be able/unable to enter certain areas.\n\n"
 			"A common use case for this is redirecting Hull 2 -> Hull 1 (Large monsters hull -> Normal monsters hull). "
@@ -1219,12 +1322,10 @@ void Gui::drawMenuBar() {
 		*/
 
 		if (ImGui::MenuItem("Deduplicate Models", 0, false, !app->isLoading)) {
-			g_app->updateEntityLumpUndoState(map);
-			DeduplicateModelsCommand* command = new DeduplicateModelsCommand("Deduplicate models",
-				app->undoLumpState);
-			g_app->saveLumpState(map, 0xffffffff, false);
-			command->execute();
-			app->pushUndoCommand(command);
+			LumpReplaceCommand* command = new LumpReplaceCommand("Deduplicate models");
+			map->deduplicate_models();
+
+			command->pushUndoState();
 		}
 		tooltip(g, "Scans for duplicated BSP models and updates entity model keys to reference only one model in set of duplicated models. "
 			"This lowers the model count and allows more game models to be precached.\n\n"
@@ -1268,12 +1369,9 @@ void Gui::drawMenuBar() {
 
 					}
 
-					g_app->updateEntityLumpUndoState(map);
-					DeleteOobDataCommand* command = new DeleteOobDataCommand("Delete OOB Data",
-						clipFlags[i], app->undoLumpState);
-					g_app->saveLumpState(map, 0xffffffff, false);
-					command->execute();
-					app->pushUndoCommand(command);
+					LumpReplaceCommand* command = new LumpReplaceCommand("Delete OOB Data");
+					map->delete_oob_data(clipFlags[i]);
+					command->pushUndoState();
 				}
 				tooltip(g, "Deletes out-of-bounds BSP data and entities.\n\n"
 					"This is useful for splitting maps to run in an engine with stricter map limits.");
@@ -1289,12 +1387,9 @@ void Gui::drawMenuBar() {
 				logf("Create at least 2 entities with \"cull\" as a classname first!\n");
 			}
 			else {
-				g_app->updateEntityLumpUndoState(map);
-				DeleteBoxedDataCommand* command = new DeleteBoxedDataCommand("Delete Boxed Data",
-					g_app->cullMins, g_app->cullMaxs, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Delete Boxed Data");
+				map->delete_box_data(g_app->cullMins, g_app->cullMaxs);
+				command->pushUndoState();
 			}
 		}
 		tooltip(g, "Deletes BSP data and entities inside of a box defined by 2 \"cull\" entities "
@@ -1305,7 +1400,9 @@ void Gui::drawMenuBar() {
 			"A transparent red box will form between them.");
 
 		if (ImGui::MenuItem("Remove unused WADs", 0, false, !app->isLoading)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Remove unused WADs", true);
 			map->remove_unused_wads(wads);
+			command->pushUndoState();
 		}
 		tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue.\n\nIn Half-Life, unused WADs cause crashes if they don't exist.\nIn Sven Co-op, missing WADs are ignored.\n");
 
@@ -1313,68 +1410,59 @@ void Gui::drawMenuBar() {
 
 		ImGui::MenuItem("Porting", 0, false, false);
 		if (ImGui::MenuItem("AllocBlock Reduction", 0, false, !app->isLoading)) {
-			map->allocblock_reduction();
-
-			BspRenderer* renderer = app->mapRenderer;
-			if (renderer) {
-				renderer->preRenderFaces();
-				g_app->gui->refresh();
+			LumpReplaceCommand* command = new LumpReplaceCommand("AllocBlock Reduction");
+			if (map->allocblock_reduction() == 0) {
+				delete command;
+			}
+			else {
+				command->pushUndoState();
 			}
 		}
 		tooltip(g, "Scales up textures on invisible models, if any exist. Manually increase texture scales or downscale large textures to reduce AllocBlocks further.\n");
 
 		if (ImGui::MenuItem("Downscale Invalid Textures", 0, false, !app->isLoading)) {
-			map->downscale_invalid_textures(wads);
-
-			BspRenderer* renderer = app->mapRenderer;
-			if (renderer) {
-				renderer->preRenderFaces();
-				g_app->gui->refresh();
-				reloadLimits();
+			LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Invalid Textures");
+			if (map->downscale_invalid_textures(wads) == 0) {
+				delete command;
+			}
+			else {
+				command->pushUndoState();
 			}
 		}
 		tooltip(g, "Shrinks textures that exceed the max texture size and adjusts texture coordinates accordingly.\n\nIf a texture is stored in a WAD, it is first embedded into the BSP before being downscaled.\n");
 
 		if (ImGui::BeginMenu("Fix Bad Surface Extents", !app->isLoading)) {
 			if (ImGui::MenuItem("Shrink Textures (512)", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Shrink textures (512)",
-					false, true, 512, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (512)");
+				map->fix_bad_surface_extents(false, true, 512);
+				command->pushUndoState();
 			}
 			tooltip(g, "Downscales textures on bad faces to a max resolution of 512x512 pixels. "
 				"This alone will likely not be enough to fix all faces with bad surface extents."
 				"You may also have to apply the Subdivide or Scale methods.");
 
 			if (ImGui::MenuItem("Shrink Textures (256)", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Shrink textures (256)",
-					false, true, 256, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (256)");
+				map->fix_bad_surface_extents(false, true, 256);
+				command->pushUndoState();
 			}
 			tooltip(g, "Downscales textures on bad faces to a max resolution of 256x256 pixels. "
 				"This alone will likely not be enough to fix all faces with bad surface extents."
 				"You may also have to apply the Subdivide or Scale methods.");
 
 			if (ImGui::MenuItem("Shrink Textures (128)", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Shrink textures (128)",
-					false, true, 128, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (128)");
+				map->fix_bad_surface_extents(false, true, 128);
+				command->pushUndoState();
 			}
 			tooltip(g, "Downscales textures on bad faces to a max resolution of 128x128 pixels. "
 				"This alone will likely not be enough to fix all faces with bad surface extents."
 				"You may also have to apply the Subdivide or Scale methods.");
 
 			if (ImGui::MenuItem("Shrink Textures (64)", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Shrink textures (64)",
-					false, true, 64, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (64)");
+				map->fix_bad_surface_extents(false, true, 64);
+				command->pushUndoState();
 			}
 			tooltip(g, "Downscales textures to a max resolution of 64x64 pixels. "
 				"This alone will likely not be enough to fix all faces with bad surface extents."
@@ -1383,20 +1471,16 @@ void Gui::drawMenuBar() {
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Scale", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Scale faces",
-					true, false, 0, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Scale faces");
+				map->fix_bad_surface_extents(true, false, 0);
+				command->pushUndoState();
 			}
 			tooltip(g, "Scales up face textures until they have valid extents. The drawback to this method is shifted texture coordinates and lower apparent texture quality.");
 
 			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
-				FixSurfaceExtentsCommand* command = new FixSurfaceExtentsCommand("Subdivide faces",
-					false, false, 0, app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				LumpReplaceCommand* command = new LumpReplaceCommand("Subdivide faces");
+				map->fix_bad_surface_extents(false, false, 0);
+				command->pushUndoState();
 			}
 			tooltip(g, "Subdivides faces until they have valid extents. The drawback to this method is reduced in-game performace from higher poly counts.");
 
@@ -1409,6 +1493,8 @@ void Gui::drawMenuBar() {
 		}
 
 		if (ImGui::MenuItem("Zero Entity Origins", 0, false, !app->isLoading)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Zero Entity Origins");
+
 			int moveCount = 0;
 			moveCount += map->zero_entity_origins("func_ladder");
 			moveCount += map->zero_entity_origins("func_water"); // water is sometimes invisible after moving in sven
@@ -1417,16 +1503,12 @@ void Gui::drawMenuBar() {
 			BspRenderer* renderer = app->mapRenderer;
 
 			if (moveCount) {
-				if (renderer) {
-					renderer->reload();
-				}
-				refresh();
+				command->pushUndoState();
 			}
 			else {
+				delete command;
 				logf("No entity origins need moving\n");
 			}
-
-			g_app->deselectObject();
 		}
 		tooltip(g, "Some entities break when their origin is non-zero (ladders, water, mortar fields).\nThis will move affected entity origins to (0,0,0), duplicating models if necessary.\n");
 
@@ -1452,6 +1534,13 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Search for entities by name, class, and/or other properties.");
 
+		if (ImGui::MenuItem("Face Properties", "", showTextureWidget)) {
+			showTextureWidget = !showTextureWidget;
+			if (showTextureWidget)
+				ImGui::SetWindowCollapsed("Face Properties", false);
+		}
+		tooltip(g, "Edit faces and textures.");
+
 		if (ImGui::MenuItem("Keyvalue Editor", "Alt+Enter", showKeyvalueWidget)) {
 			showKeyvalueWidget = !showKeyvalueWidget;
 			if (showKeyvalueWidget)
@@ -1466,19 +1555,6 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Shows how close the map is to exceeding engine limits.");
 
-		if (ImGui::MenuItem("Transform", "Ctrl+M", showTransformWidget)) {
-			showTransformWidget = !showTransformWidget;
-			if (showTransformWidget)
-				ImGui::SetWindowCollapsed("Transformation", false);
-		}
-		tooltip(g, "Move, rotate, and scale entities.");
-
-		if (ImGui::MenuItem("Face Properties", "", showTextureWidget)) {
-			showTextureWidget = !showTextureWidget;
-			if (showTextureWidget)
-				ImGui::SetWindowCollapsed("Face Properties", false);
-		}
-		tooltip(g, "Edit faces and textures.");
 		/*
 		if (ImGui::MenuItem("LightMap Editor (WIP)", "", showLightmapEditorWidget)) {
 			showLightmapEditorWidget = !showLightmapEditorWidget;
@@ -1491,6 +1567,13 @@ void Gui::drawMenuBar() {
 				ImGui::SetWindowCollapsed("Messages", false);
 		}
 		tooltip(g, "Show program messages.");
+
+		if (ImGui::MenuItem("Transform", "Ctrl+M", showTransformWidget)) {
+			showTransformWidget = !showTransformWidget;
+			if (showTransformWidget)
+				ImGui::SetWindowCollapsed("Transformation", false);
+		}
+		tooltip(g, "Move, rotate, and scale entities.");
 
 		ImGui::Separator();
 
@@ -3406,7 +3489,8 @@ void Gui::drawTransformWidget() {
 		//ImGui::PopStyleVar();
 
 		if (inputsWereDragged && !inputsAreDragging) {
-			app->pushEntityUndoState("Move Entity");
+			int plural = app->pickInfo.ents.size() > 1;
+			app->pushEntityUndoState(plural ? "Transform Entities" : "Transform Entity");
 
 			if (transformingEnt) {
 				app->applyTransform(true);
@@ -3421,6 +3505,8 @@ void Gui::drawTransformWidget() {
 					y = last_fy = fy;
 					z = last_fz = fz;
 				}
+
+				sx = sy = sz = 1;
 			}
 		}
 
@@ -3525,11 +3611,16 @@ void Gui::drawTransformWidget() {
 			const char* butLabel = "Apply BSP Move";
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() - (ImGui::CalcTextSize(butLabel).x + ImGui::GetStyle().ItemSpacing.x + 30));
 			if (ImGui::Button(butLabel)) {
-				MoveMapCommand* command = new MoveMapCommand("Apply Worldspawn Transform",
-					map->ents[0]->getOrigin(), app->undoLumpState);
-				g_app->saveLumpState(map, 0xffffffff, false);
-				command->execute();
-				app->pushUndoCommand(command);
+				vec3 moveAmount = map->ents[0]->getOrigin();
+				map->ents[0]->removeKeyvalue("origin");
+				LumpReplaceCommand* command = new LumpReplaceCommand("Apply Worldspawn Transform");
+				
+				map->move(moveAmount);
+				map->zero_entity_origins("func_ladder");
+				map->zero_entity_origins("func_water"); // water is sometimes invisible after moving in sven
+				map->zero_entity_origins("func_mortar_field"); // mortars don't appear in sven
+
+				command->pushUndoState();
 			}
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Moves all BSP data by the amount set in the worldspawn origin keyvalue.\n"
@@ -5228,6 +5319,7 @@ void Gui::drawLightMapTool() {
 	}
 	ImGui::End();
 }
+
 void Gui::drawTextureTool() {
 	ImGui::SetNextWindowSize(ImVec2(300, 570), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(200, 420), ImVec2(FLT_MAX, app->windowHeight));
@@ -5248,6 +5340,7 @@ void Gui::drawTextureTool() {
 		BspRenderer* mapRenderer = app->mapRenderer ? app->mapRenderer : NULL;
 		Bsp* map = app->pickInfo.getMap();
 		vector<Wad*> wads = g_app->mapRenderer ? g_app->mapRenderer->wads : vector<Wad*>();
+		static FacesEditCommand* faceUndoCommand = NULL;
 
 		if (mapRenderer == NULL || map == NULL || app->pickMode != PICK_FACE || app->pickInfo.faces.size() == 0)
 		{
@@ -5351,7 +5444,7 @@ void Gui::drawTextureTool() {
 		bool textureChanged = false;
 		bool toggledFlags = false;
 
-		
+		bool userStoppedEditing = false; // user stopped dragging or finished typing an input
 
 		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, 2.0f));
 		if (ImGui::BeginTable("TransformTexTable", 4, ImGuiTableFlags_SizingFixedFit)) {
@@ -5368,10 +5461,14 @@ void Gui::drawTextureTool() {
 
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##shiftx", &shiftX, 0.1f, 0, 0, "X: %.2f")) { shiftedX = true; }
+			if (ImGui::IsItemDeactivatedAfterEdit()) {
+				userStoppedEditing = true;
+			}
 			ImGui::TableNextColumn();
 
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##shifty", &shiftY, 0.1f, 0, 0, "Y: %.2f")) { shiftedY = true; }
+			if (ImGui::IsItemDeactivatedAfterEdit()) { userStoppedEditing = true; }
 			ImGui::TableNextColumn();
 
 			ImGui::TableNextRow();
@@ -5389,8 +5486,8 @@ void Gui::drawTextureTool() {
 				else if (rotate < 0) {
 					rotate = normalizeRangef(rotate, -360, 0);
 				}
-				
 			}
+			if (ImGui::IsItemDeactivatedAfterEdit()) { userStoppedEditing = true; }
 			ImGui::TableNextColumn();
 			ImGui::TableNextColumn();
 
@@ -5401,10 +5498,12 @@ void Gui::drawTextureTool() {
 			ImGui::TableNextColumn();
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##scalex", &scaleX, 0.001f, 0, 0, "X: %.3f") && scaleX != 0) { scaledX = true; }
+			if (ImGui::IsItemDeactivatedAfterEdit()) { userStoppedEditing = true; }
 			ImGui::TableNextColumn();
 
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##scaley", &scaleY, 0.001f, 0, 0, "Y: %.3f") && scaleY != 0) { scaledY = true; }
+			if (ImGui::IsItemDeactivatedAfterEdit()) { userStoppedEditing = true; }
 			ImGui::TableNextColumn();
 
 			ImGui::EndTable();
@@ -5413,6 +5512,7 @@ void Gui::drawTextureTool() {
 
 		if (ImGui::Checkbox("Special", &isSpecial)) {
 			toggledFlags = true;
+			userStoppedEditing = true;
 		}
 		if (ImGui::IsItemHovered())
 		{
@@ -5428,33 +5528,59 @@ void Gui::drawTextureTool() {
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 		}
-		if (ImGui::Checkbox("Embedded", &isEmbedded)) {
-			Bsp* map = app->pickInfo.getMap();
-			bool isActuallyEmbedded = false;
 
-			if (map && app->pickInfo.getFace()) {
-				BSPFACE& face = *app->pickInfo.getFace();
+		
+		if (ImGui::Checkbox("Embedded", &isEmbedded)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand(isEmbedded ? "Unembed texture" : "Embed texture", true);
+
+			unordered_set<int> mipsToEmbed;
+			for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+				BSPFACE& face = map->faces[app->pickInfo.faces[i]];
 				BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-				if (info.iMiptex > 0 && info.iMiptex < map->textureCount) {
-					int32_t texOffset = ((int32_t*)map->textures)[info.iMiptex + 1];
+				mipsToEmbed.insert(info.iMiptex);
+			}
+
+			bool anySuccess = false;
+			for (int mip : mipsToEmbed) {
+				bool isActuallyEmbedded = false;
+
+				if (mip > 0 && mip < map->textureCount) {
+					int32_t texOffset = ((int32_t*)map->textures)[mip + 1];
 					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 					isActuallyEmbedded = tex.nOffsets[0] != 0;
 				}
-			}
 
-			BSPFACE& face = *app->pickInfo.getFace();
-			BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-			if (isActuallyEmbedded) {
-				isEmbedded = !map->unembed_texture(info.iMiptex, wads);
-			}
-			else {
-				isEmbedded = map->embed_texture(info.iMiptex, wads);
+				if (!isEmbedded && isActuallyEmbedded) {
+					if (map->unembed_texture(mip, wads)) {
+						isEmbedded = false;
+						anySuccess = true;
+					}
+					else
+						isEmbedded = true;
+				}
+				else if (isEmbedded && !isActuallyEmbedded) {
+					if (map->embed_texture(mip, wads)) {
+						isEmbedded = true;
+						anySuccess = true;
+					}
+					else {
+						isEmbedded = false;
+					}
+				}
 			}
 
 			// refresh texture source
 			app->pickCount++;
 			last_texture_name = "";
+
+			if (anySuccess) {
+				command->pushUndoState();
+			}
+			else {
+				delete command;
+			}
 		}
+
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::BeginTooltip();
@@ -5475,9 +5601,11 @@ void Gui::drawTextureTool() {
 		if (!validTexture) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, (ImVec4)ImColor::HSV(0, 0.6f, 0.6f));
 		}
+		ImGui::BeginDisabled(g_app->isLoading);
 		if (ImGui::InputText("##texname", textureName, MAXTEXTURENAME)) {
 			textureChanged = true;
 		}
+		ImGui::EndDisabled();
 		if (refreshSelectedFaces) {
 			textureChanged = true;
 			refreshSelectedFaces = false;
@@ -5492,7 +5620,11 @@ void Gui::drawTextureTool() {
 		ImGui::Text("%dx%d", width, height);
 
 		if ((scaledX || scaledY || shiftedX || shiftedY || rotated || textureChanged || refreshSelectedFaces || toggledFlags)) {
+			if (!faceUndoCommand)
+				faceUndoCommand = new FacesEditCommand("Edit Face");
+			
 			uint32_t newMiptex = 0;
+			bool texturesNeedReload = false;
 			if (textureChanged) {
 				validTexture = false;
 
@@ -5512,19 +5644,16 @@ void Gui::drawTextureTool() {
 				}
 
 				if (!validTexture) {
-					for (int i = 0; i < wads.size(); i++) {
-						if (wads[i]->hasTexture(textureName)) {
-							validTexture = true;
-							WADTEX* tex = wads[i]->readTexture(textureName);
-							newMiptex = map->add_texture_from_wad(tex);
-							
-							// Note: texture offset must match lump texture index, it's lucky that this just works
-							mapRenderer->loadTexture(tex);
-
-							delete tex;
-							break;
-						}
+					int addedMip = mapRenderer->addTextureToMap(textureName);
+					if (addedMip != -1) {
+						newMiptex = addedMip;
+						validTexture = true;
+						faceUndoCommand->textureDataReloadNeeded = true;
 					}
+				}
+
+				if (validTexture) {
+					userStoppedEditing = true;
 				}
 			}
 
@@ -5550,7 +5679,7 @@ void Gui::drawTextureTool() {
 				if (toggledFlags) {
 					texinfo.nFlags = isSpecial ? TEX_SPECIAL : 0;
 				}
-				if ((textureChanged || toggledFlags) && validTexture) {
+				if ((textureChanged && validTexture) || toggledFlags) {
 					if (textureChanged)
 						texinfo.iMiptex = newMiptex;
 					modelRefreshes.insert(map->get_model_from_face(faceIdx));
@@ -5586,6 +5715,13 @@ void Gui::drawTextureTool() {
 
 			checkFaceErrors();
 			g_app->updateTextureAxes();
+		}
+
+		if (userStoppedEditing) {
+			if (faceUndoCommand) {
+				faceUndoCommand->pushUndoState(true);
+				faceUndoCommand = NULL;
+			}
 		}
 
 		refreshSelectedFaces = false;

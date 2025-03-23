@@ -222,10 +222,10 @@ public:
 	void fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, int maxTextureDim);
 
 	// subdivide a face until it has valid surface extents
-	void fix_bad_surface_extents_with_subdivide(int faceIdx);
+	int fix_bad_surface_extents_with_subdivide(int faceIdx);
 
 	// reduces size of textures that exceed game limits and adjusts face scales accordingly
-	void downscale_invalid_textures(vector<Wad*>& wads);
+	int downscale_invalid_textures(vector<Wad*>& wads);
 
 	// downscales a texture to the maximum specified width/height
 	// allowWad:true = texture coordinates will be scaled even if the the texture is from a WAD and must be scaled separately
@@ -263,8 +263,10 @@ public:
 	// get reference vectors for texture rotations
 	vec3 get_face_ut_reference(int faceIdx);
 
+	int get_default_texture_idx();
+
 	// scales up texture sizes on models that aren't used by visible entities
-	void allocblock_reduction();
+	int allocblock_reduction();
 
 	// gets estimated number of allocblocks filled
 	// actual amount will vary because there is some wasted space when the engine generates lightmap atlases

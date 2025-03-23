@@ -82,43 +82,6 @@ public:
 };
 
 
-class DuplicateBspModelCommand : public Command {
-public:
-	int oldModelIdx;
-	int newModelIdx; // TODO: could break redos if this is ever not deterministic
-	int entIdx;
-	LumpState oldLumps = LumpState();
-	bool initialized = false;
-
-	DuplicateBspModelCommand(string desc, PickInfo& pickInfo);
-	~DuplicateBspModelCommand();
-
-	void execute();
-	void undo();
-	int memoryUsage();
-};
-
-
-class CreateBspModelCommand : public Command {
-public:
-	Entity* entData;
-	LumpState oldLumps = LumpState();
-	bool initialized = false;
-	float size;
-
-	CreateBspModelCommand(string desc, Entity* entData, float size);
-	~CreateBspModelCommand();
-
-	void execute();
-	void undo();
-	int memoryUsage();
-
-private:
-	int getDefaultTextureIdx();
-	int addDefaultTexture();
-};
-
-
 class EditBspModelCommand : public Command {
 public:
 	int modelIdx;
@@ -138,100 +101,57 @@ public:
 };
 
 
-class CleanMapCommand : public Command {
+// works differently than other commands. Create the command, do your edits, then pushUndoState.
+class LumpReplaceCommand : public Command {
 public:
+	LumpState newLumps = LumpState();
 	LumpState oldLumps = LumpState();
+	bool differences[HEADER_LUMPS];
+	bool norefresh;
+	vector<int> modelRefreshes;
 
-	CleanMapCommand(string desc, LumpState oldLumps);
-	~CleanMapCommand();
+	LumpReplaceCommand(string desc, bool noRefresh = false);
+	~LumpReplaceCommand();
 
 	void execute();
+	void pushUndoState(bool norefresh=false); // call after you've edited lumps. Not called by redo.
 	void undo();
-	void refresh();
+	virtual void refresh();
 	int memoryUsage();
 };
 
-
-class OptimizeMapCommand : public Command {
+// refreshes a single model instead of the entire map
+// TODO: replace the other model edit command with this
+class ModelEditCommand : public LumpReplaceCommand {
 public:
-	LumpState oldLumps = LumpState();
+	int modelIdx;
 
-	OptimizeMapCommand(string desc, LumpState oldLumps);
-	~OptimizeMapCommand();
+	ModelEditCommand(string desc, int modelIdx);
 
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
+	void refresh() override;
+	int memoryUsage() override;
 };
 
-class DeleteBoxedDataCommand : public Command {
+
+// refreshes specific models after face edits
+class FacesEditCommand : public LumpReplaceCommand {
 public:
-	LumpState oldLumps = LumpState();
-	vec3 mins, maxs;
+	vector<int> modelRefreshes;
+	vector<int> faces;
+	bool textureDataReloadNeeded;
 
-	DeleteBoxedDataCommand(string desc, vec3 mins, vec3 maxs, LumpState oldLumps);
-	~DeleteBoxedDataCommand();
+	FacesEditCommand(string desc);
 
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
+	void refresh() override;
+	int memoryUsage() override;
 };
 
-class DeleteOobDataCommand : public Command {
+
+// refreshes lightmaps after edit
+class LightmapsEditCommand : public LumpReplaceCommand {
 public:
-	LumpState oldLumps = LumpState();
-	int clipFlags;
+	LightmapsEditCommand(string desc);
 
-	DeleteOobDataCommand(string desc, int clipFlags, LumpState oldLumps);
-	~DeleteOobDataCommand();
-
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
-};
-
-class FixSurfaceExtentsCommand : public Command {
-public:
-	LumpState oldLumps = LumpState();
-	bool scaleNotSubdivide;
-	bool downscaleOnly;
-	int maxTextureDim;
-
-	FixSurfaceExtentsCommand(string desc, bool scaleNotSubdivide, bool downscaleOnly, int maxTextureDim, LumpState oldLumps);
-	~FixSurfaceExtentsCommand();
-
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
-};
-
-class DeduplicateModelsCommand : public Command {
-public:
-	LumpState oldLumps = LumpState();
-
-	DeduplicateModelsCommand(string desc, LumpState oldLumps);
-	~DeduplicateModelsCommand();
-
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
-};
-
-class MoveMapCommand : public Command {
-public:
-	LumpState oldLumps = LumpState();
-	vec3 offset;
-
-	MoveMapCommand(string desc, vec3 offset, LumpState oldLumps);
-	~MoveMapCommand();
-
-	void execute();
-	void undo();
-	void refresh();
-	int memoryUsage();
+	void refresh() override;
+	int memoryUsage() override;
 };

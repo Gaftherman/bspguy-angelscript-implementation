@@ -15,6 +15,7 @@
 #include "Wad.h"
 #include <unordered_set>
 #include "Renderer.h"
+#include "icons/aaatrigger.h"
 
 typedef map< string, vec3 > mapStringToVector;
 
@@ -2709,7 +2710,7 @@ float Bsp::calc_allocblock_usage() {
 	return total / (float)allocBlockSize;
 }
 
-void Bsp::allocblock_reduction() {
+int Bsp::allocblock_reduction() {
 	int scaleCount = 0;
 
 	for (int i = 1; i < modelCount; i++) {
@@ -2722,7 +2723,7 @@ void Bsp::allocblock_reduction() {
 		string modelKey = "*" + to_string(i);
 
 		for (Entity* ent : ents) {
-			if (ent->hasKey("model") && ent->getKeyvalue("model") == modelKey) {
+			if (ent->getKeyvalue("model") == modelKey) {
 				if (ent->isEverVisible()) {
 					isVisibleModel = true;
 					break;
@@ -2732,18 +2733,31 @@ void Bsp::allocblock_reduction() {
 
 		if (isVisibleModel)
 			continue;
+
+		bool anyScales = false;
 		for (int fa = 0; fa < model.nFaces; fa++) {
 			BSPFACE& face = faces[model.iFirstFace + fa];
 			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
-			info.vS = info.vS.normalize(0.01f);
-			info.vT = info.vT.normalize(0.01f);
+			if (info.vS.length() > 0.01f) {
+				info.vS = info.vS.normalize(0.01f);
+				anyScales = true;
+			}
+			if (info.vT.length() > 0.01f) {
+				info.vT = info.vT.normalize(0.01f);
+				anyScales = true;
+			}
+			
 		}
 
-		scaleCount++;
-		logf("Scale up model %d\n", i);
+		if (anyScales) {
+			scaleCount++;
+			logf("Scale up model %d\n", i);
+		}
 	}
 
 	logf("Scaled up textures on %d invisible models\n", scaleCount);
+
+	return scaleCount;
 }
 
 bool Bsp::subdivide_face(int faceIdx) {
@@ -2928,7 +2942,7 @@ bool Bsp::subdivide_face(int faceIdx) {
 	return true;
 }
 
-void Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
+int Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
 	vector<int> faces;
 	faces.push_back(faceIdx);
 
@@ -2956,6 +2970,7 @@ void Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
 	}
 
 	logf("Subdivided into %d faces\n", totalFaces);
+	return totalFaces - 1;
 }
 
 void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, int maxTextureDim) {
@@ -3113,6 +3128,28 @@ vec3 Bsp::get_face_ut_reference(int faceIdx) {
 	}
 
 	return (a - b).normalize();
+}
+
+int Bsp::get_default_texture_idx() {
+	int32_t totalTextures = ((int32_t*)textures)[0];
+	for (uint i = 0; i < totalTextures; i++) {
+		int32_t texOffset = ((int32_t*)textures)[i + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		if (strcmp(tex.szName, "aaatrigger") == 0) {
+			return i;
+		}
+	}
+
+	// add the aaatrigger texture if it doesn't already exist
+	byte* tex_dat = NULL;
+	uint w, h;
+
+	logf("Added aaatrigger texture\n");
+	lodepng_decode24(&tex_dat, &w, &h, aaatrigger_dat, sizeof(aaatrigger_dat));
+	int aaatriggerIdx = add_texture("aaatrigger", tex_dat, w, h);
+	delete[] tex_dat;
+
+	return aaatriggerIdx;
 }
 
 bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight) {
@@ -3320,7 +3357,7 @@ void Bsp::remove_unused_wads(vector<Wad*>& wads) {
 	int worldspawn_count = 0;
 	for (int i = 0; i < ents.size(); i++) {
 		if (ents[i]->getClassname() == "worldspawn") {
-			ents[i]->getKeyvalue("wad") = newWadList;
+			ents[i]->setOrAddKeyvalue("wad", newWadList);
 			break;
 		}
 	}
@@ -3512,7 +3549,10 @@ int Bsp::add_texture_from_wad(WADTEX* tex) {
 	memset(&newTex, 0, sizeof(BSPMIPTEX));
 	memcpy(newTex.szName, tex->szName, 16);
 	newTex.szName[15] = 0;
-	memcpy(newTex.nOffsets, tex->nOffsets, sizeof(newTex.nOffsets));
+	newTex.nOffsets[0] = 0;
+	newTex.nOffsets[1] = 0;
+	newTex.nOffsets[2] = 0;
+	newTex.nOffsets[3] = 0;
 	newTex.nWidth = tex->nWidth;
 	newTex.nHeight = tex->nHeight;
 
@@ -3591,7 +3631,7 @@ void Bsp::adjust_resized_texture_coordinates(int textureId, int oldWidth, int ol
 	}
 }
 
-void Bsp::downscale_invalid_textures(vector<Wad*>& wads) {
+int Bsp::downscale_invalid_textures(vector<Wad*>& wads) {
 	int count = 0;
 
 	for (int i = 0; i < textureCount; i++) {
@@ -3639,6 +3679,8 @@ void Bsp::downscale_invalid_textures(vector<Wad*>& wads) {
 	}
 
 	logf("Downscaled %d textures\n", count);
+
+	return count;
 }
 
 bool Bsp::rename_texture(const char* oldName, const char* newName) {
