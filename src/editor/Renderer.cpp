@@ -2467,6 +2467,9 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 	if (ent->hasCachedMdl) {
 		return ent->cachedMdl;
 	}
+	if (g_loading_models.getValue() > 0) {
+		return NULL;
+	}
 
 	struct ModelKey {
 		string name;
@@ -2611,21 +2614,28 @@ void Renderer::drawModelsAndSprites() {
 		if (ent->hidden)
 			continue;
 
-		if (sent.mdl && sent.mdl->loadState != MDL_LOAD_INITIAL) {
-			if (!sent.mdl->valid) {
+		if (sent.mdl && sent.mdl->loadState != MODEL_LOAD_INITIAL) {
+			if (sent.mdl->loadState == MODEL_LOAD_WAITING) {
+				if (g_loading_models.getValue() == 0) {
+					g_loading_models.inc();
+					sent.mdl->loadState = MODEL_LOAD_INITIAL;
+					std::thread(&BaseRenderer::loadData, sent.mdl).detach();
+				}
+			}
+			else if (!sent.mdl->valid) {
 				logf("Failed to load model: %s\n", sent.mdl->fpath.c_str());
 				studioModels[ent->cachedMdl->fpath] = NULL;
 				delete sent.mdl;
 				ent->cachedMdl = sent.mdl = NULL;
 			}
-			else if (sent.mdl->loadState == MDL_LOAD_UPLOAD) {
+			else if (sent.mdl->loadState == MODEL_LOAD_UPLOAD) {
 				sent.mdl->upload();
 				const char* typ = sent.mdl->isSprite() ? "SPR" : "MDL";
 				debugf("Loaded %s: %s\n", typ, sent.mdl->fpath.c_str());
 			}
 		}
 
-		if (sent.mdl && sent.mdl->loadState == MDL_LOAD_DONE && sent.mdl->valid) {
+		if (sent.mdl && sent.mdl->loadState == MODEL_LOAD_DONE && sent.mdl->valid) {
 			if (!ent->drawCached) {
 				ent->drawOrigin = ent->getOrigin();
 				ent->drawAngles = ent->getAngles();

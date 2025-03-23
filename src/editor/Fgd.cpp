@@ -42,8 +42,8 @@ void Fgd::merge(Fgd* other) {
 		FgdClass* fgdClass = it->second;
 
 		if (classMap.find(className) != classMap.end()) {
-			debugf("Skipping duplicate definition for '%s' (merging %s.fgd into %s.fgd)\n",
-				className.c_str(), name.c_str(), other->name.c_str());
+			//debugf("Skipping duplicate definition for '%s' (merging %s.fgd into %s.fgd)\n",
+			//	className.c_str(), name.c_str(), other->name.c_str());
 			continue;
 		}
 

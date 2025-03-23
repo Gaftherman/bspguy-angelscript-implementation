@@ -9,12 +9,6 @@
 #include "Entity.h"
 #include "colors.h"
 
-enum SPR_LOAD_STATE {
-	SPR_LOAD_INITIAL,
-	SPR_LOAD_UPLOAD,
-	SPR_LOAD_DONE
-};
-
 enum sprite_formats
 {
 	SPR_NORMAL,
@@ -73,11 +67,13 @@ public:
 
 	bool isSprite() override { return true; };
 
+	void loadData() override;
+
 private:
 	SpriteHeader* header;
 
 	bool validate();
-	void loadData();
+	
 
 	ShaderProgram* frameShader;
 	ShaderProgram* outlineShader;

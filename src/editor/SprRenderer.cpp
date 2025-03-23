@@ -19,8 +19,7 @@ SprRenderer::SprRenderer(ShaderProgram* frameShader, ShaderProgram* outlineShade
 	outlineShader->bind();
 	u_color_outline = glGetUniformLocation(outlineShader->ID, "color");
 
-	loadState = SPR_LOAD_INITIAL;
-	loadData();
+	loadState = MODEL_LOAD_WAITING;
 }
 
 SprRenderer::~SprRenderer() {
@@ -100,7 +99,7 @@ bool SprRenderer::validate() {
 }
 
 void SprRenderer::upload() {
-	if (loadState != SPR_LOAD_UPLOAD) {
+	if (loadState != MODEL_LOAD_UPLOAD) {
 		logf("SPR upload called before initial load\n");
 		return;
 	}
@@ -112,14 +111,15 @@ void SprRenderer::upload() {
 	frameBuffer->upload();
 	outlineBuffer->upload();
 
-	loadState = SPR_LOAD_DONE;
+	loadState = MODEL_LOAD_DONE;
 }
 
 void SprRenderer::loadData() {
 	int len;
 	char* buffer = loadFile(fpath, len);
 	if (!buffer) {
-		loadState = SPR_LOAD_DONE;
+		loadState = MODEL_LOAD_DONE;
+		g_loading_models.dec();
 		return;
 	}
 
@@ -127,6 +127,7 @@ void SprRenderer::loadData() {
 
 	if (!validate()) {
 		delete[] buffer;
+		g_loading_models.dec();
 		return;
 	}
 
@@ -199,7 +200,8 @@ void SprRenderer::loadData() {
 	delete[] palette;
 
 	valid = true;
-	loadState = SPR_LOAD_UPLOAD;
+	loadState = MODEL_LOAD_UPLOAD;
+	g_loading_models.dec();
 }
 
 void SprRenderer::getBoundingBox(vec3& mins, vec3& maxs, float scale) {
@@ -209,7 +211,7 @@ void SprRenderer::getBoundingBox(vec3& mins, vec3& maxs, float scale) {
 }
 
 bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
-	if (!valid || loadState != SPR_LOAD_DONE) {
+	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return false;
 	}
 
@@ -294,7 +296,7 @@ bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 }
 
 void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, bool selected) {
-	if (!valid || loadState != SPR_LOAD_DONE) {
+	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
 

@@ -43,13 +43,14 @@ set(SOURCE_FILES
 	src/bsp/colors.h		src/bsp/colors.cpp
 	
 	# Math and stuff
-	src/util/util.h			src/util/util.cpp
-	src/util/vectors.h		src/util/vectors.cpp
-	src/util/mat4x4.h		src/util/mat4x4.cpp
-	src/util/Polygon3D.h	src/util/Polygon3D.cpp
-	src/util/Line2D.h		src/util/Line2D.cpp
-	src/util/mstream.h		src/util/mstream.cpp
-	src/globals.h			src/globals.cpp
+	src/util/util.h				src/util/util.cpp
+	src/util/vectors.h			src/util/vectors.cpp
+	src/util/mat4x4.h			src/util/mat4x4.cpp
+	src/util/Polygon3D.h		src/util/Polygon3D.cpp
+	src/util/Line2D.h			src/util/Line2D.cpp
+	src/util/mstream.h			src/util/mstream.cpp
+	src/util/ThreadSafeInt.h	src/util/ThreadSafeInt.cpp
+	src/globals.h				src/globals.cpp
 	
 	# Navigation meshes
 	src/nav/NavMesh.h				src/nav/NavMesh.cpp
@@ -66,7 +67,7 @@ set(SOURCE_FILES
 	src/gl/ShaderProgram.h		src/gl/ShaderProgram.cpp
 	src/gl/VertexBuffer.h		src/gl/VertexBuffer.cpp
 	src/gl/Texture.h			src/gl/Texture.cpp
-	src/editor/LightmapNode.h	src/editor/LightmapNode.cpp
+	src/gl/TextureArray.h			src/gl/TextureArray.cpp
 	
 	# 3D editor
 	src/editor/Renderer.h			src/editor/Renderer.cpp
@@ -80,6 +81,7 @@ set(SOURCE_FILES
 	src/editor/MdlRenderer.h		src/editor/MdlRenderer.cpp
 	src/editor/SprRenderer.h		src/editor/SprRenderer.cpp
 	src/editor/BaseRenderer.h		src/editor/BaseRenderer.cpp
+	src/editor/TextureAtlas.h		src/editor/TextureAtlas.cpp
 	src/editor/studio.h
 	
 	# map compiler code
@@ -173,6 +175,7 @@ if(MSVC)
 											src/gl/ShaderProgram.h
 											src/gl/VertexBuffer.h
 											src/gl/Texture.h
+											src/gl/TextureArray.h
 											src/gl/primitives.h
 											src/gl/shaders.h)
 											
@@ -180,11 +183,12 @@ if(MSVC)
 											src/gl/ShaderProgram.cpp
 											src/gl/VertexBuffer.cpp
 											src/gl/Texture.cpp
+											src/gl/TextureArray.cpp
 											src/gl/primitives.cpp
 											src/gl/shaders.cpp)
 											
 	source_group("Header Files\\editor" FILES	src/editor/BspRenderer.h
-												src/editor/LightmapNode.h
+												src/editor/TextureAtlas.h
 												src/editor/Renderer.h
 												src/editor/Fgd.h
 												src/editor/Gui.h
@@ -197,7 +201,7 @@ if(MSVC)
 												src/editor/Clipper.h)
 											
 	source_group("Source Files\\editor" FILES	src/editor/BspRenderer.cpp
-												src/editor/LightmapNode.cpp
+												src/editor/TextureAtlas.cpp
 												src/editor/Renderer.cpp
 												src/editor/Fgd.cpp
 												src/editor/Gui.cpp
@@ -223,6 +227,7 @@ if(MSVC)
 												src/util/Line2D.h
 												src/util/mstream.h
 												src/util/lzma_util.h
+												src/util/ThreadSafeInt.h
 												src/util/mat4x4.h)
 												
 	source_group("Source Files\\util" FILES		src/util/util.cpp
@@ -231,6 +236,7 @@ if(MSVC)
 												src/util/Line2D.cpp
 												src/util/mstream.cpp
 												src/util/lzma_util.cpp
+												src/util/ThreadSafeInt.cpp
 												src/util/mat4x4.cpp)
 												
 	source_group("Header Files\\nav" FILES		src/nav/NavMesh.h

@@ -36,12 +36,6 @@ struct MdlMeshRender {
 
 class Entity;
 
-enum MDL_LOAD_STATE {
-	MDL_LOAD_INITIAL,
-	MDL_LOAD_UPLOAD,
-	MDL_LOAD_DONE
-};
-
 class MdlRenderer : public BaseRenderer {
 public:
 	uint8_t iController[4];
@@ -68,6 +62,8 @@ public:
 	void getModelBoundingBox(vec3 angles, int sequence, vec3& mins, vec3& maxs);
 
 	bool isStudioModel() override { return true; };
+
+	void loadData() override;
 
 private:
 	ShaderProgram* shaderProgram;
@@ -115,7 +111,6 @@ private:
 	// for transformverts
 	vec3 transformedVerts[MAXSTUDIOVERTS];
 
-	void loadData();
 	bool loadTextureData();
 	bool loadSequenceData();
 	bool loadMeshes();

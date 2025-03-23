@@ -2,6 +2,7 @@
 #include <string>
 #include "ShaderProgram.h"
 #include "Entity.h"
+#include "ThreadSafeInt.h"
 
 enum render_modes {
 	RENDER_MODE_NORMAL,
@@ -10,6 +11,13 @@ enum render_modes {
 	RENDER_MODE_GLOW,
 	RENDER_MODE_SOLID,
 	RENDER_MODE_ADDITIVE,
+};
+
+enum MODEL_LOAD_STATE {
+	MODEL_LOAD_WAITING,
+	MODEL_LOAD_INITIAL,
+	MODEL_LOAD_UPLOAD,
+	MODEL_LOAD_DONE
 };
 
 class BaseRenderer {
@@ -32,4 +40,8 @@ public:
 	
 	virtual bool isStudioModel() { return false;  }
 	virtual bool isSprite() { return false; }
+	virtual void loadData() = 0;
 };
+
+// used to prevent too many models loading at once and freezing the program
+extern ThreadSafeInt g_loading_models;

@@ -16,22 +16,11 @@ MdlRenderer::MdlRenderer(ShaderProgram* shaderProgram, string modelPath) {
 	this->shaderProgram = shaderProgram;
 	valid = false;
 
-	shaderProgram->bind();
-	u_sTexId = glGetUniformLocation(shaderProgram->ID, "sTex");
-	u_elights = glGetUniformLocation(shaderProgram->ID, "elights");
-	u_ambient = glGetUniformLocation(shaderProgram->ID, "ambient");
-	u_lightsId = glGetUniformLocation(shaderProgram->ID, "lights");
-	u_bonesId = glGetUniformLocation(shaderProgram->ID, "bones");
-	u_additiveEnable = glGetUniformLocation(shaderProgram->ID, "additiveEnable");
-	u_chromeEnable = glGetUniformLocation(shaderProgram->ID, "chromeEnable");
-	u_flatshadeEnable = glGetUniformLocation(shaderProgram->ID, "flatshadeEnable");
-	u_viewerOriginId = glGetUniformLocation(shaderProgram->ID, "viewerOrigin");
-	u_viewerRightId = glGetUniformLocation(shaderProgram->ID, "viewerRight");
-	u_textureST = glGetUniformLocation(shaderProgram->ID, "textureST");
-
-	loadFuture = async(launch::async, &MdlRenderer::loadData, this);
+	//loadFuture = async(launch::async, &MdlRenderer::loadData, this);
 	//loadData();
 	//upload();
+
+	loadState = MODEL_LOAD_WAITING;
 }
 
 MdlRenderer::~MdlRenderer() {
@@ -330,7 +319,8 @@ void MdlRenderer::loadData() {
 	int len;
 	char* buffer = loadFile(fpath, len);
 	if (!buffer) {
-		loadState = MDL_LOAD_DONE;
+		loadState = MODEL_LOAD_DONE;
+		g_loading_models.dec();
 		return;
 	}
 
@@ -338,7 +328,8 @@ void MdlRenderer::loadData() {
 	texheader = header = (studiohdr_t*)buffer;
 	texdata = mstream(buffer, len);
 	if (!validate() || isEmpty()) {
-		loadState = MDL_LOAD_DONE;
+		loadState = MODEL_LOAD_DONE;
+		g_loading_models.dec();
 		return;
 	}
 
@@ -349,7 +340,8 @@ void MdlRenderer::loadData() {
 	iMouth = 0;
 
 	if (!loadTextureData() || !loadSequenceData()) {
-		loadState = MDL_LOAD_DONE;
+		loadState = MODEL_LOAD_DONE;
+		g_loading_models.dec();
 		return;
 	}
 
@@ -365,11 +357,12 @@ void MdlRenderer::loadData() {
 	}
 
 	valid = true;
-	loadState = MDL_LOAD_UPLOAD;
+	loadState = MODEL_LOAD_UPLOAD;
+	g_loading_models.dec();
 }
 
 void MdlRenderer::upload() {
-	if (loadState != MDL_LOAD_UPLOAD) {
+	if (loadState != MODEL_LOAD_UPLOAD) {
 		logf("MDL upload called before initial load\n");
 		return;
 	}
@@ -393,7 +386,20 @@ void MdlRenderer::upload() {
 		}
 	}
 
-	loadState = MDL_LOAD_DONE;
+	shaderProgram->bind();
+	u_sTexId = glGetUniformLocation(shaderProgram->ID, "sTex");
+	u_elights = glGetUniformLocation(shaderProgram->ID, "elights");
+	u_ambient = glGetUniformLocation(shaderProgram->ID, "ambient");
+	u_lightsId = glGetUniformLocation(shaderProgram->ID, "lights");
+	u_bonesId = glGetUniformLocation(shaderProgram->ID, "bones");
+	u_additiveEnable = glGetUniformLocation(shaderProgram->ID, "additiveEnable");
+	u_chromeEnable = glGetUniformLocation(shaderProgram->ID, "chromeEnable");
+	u_flatshadeEnable = glGetUniformLocation(shaderProgram->ID, "flatshadeEnable");
+	u_viewerOriginId = glGetUniformLocation(shaderProgram->ID, "viewerOrigin");
+	u_viewerRightId = glGetUniformLocation(shaderProgram->ID, "viewerRight");
+	u_textureST = glGetUniformLocation(shaderProgram->ID, "textureST");
+
+	loadState = MODEL_LOAD_DONE;
 }
 
 bool MdlRenderer::loadTextureData() {
@@ -706,7 +712,7 @@ bool MdlRenderer::loadMeshes() {
 		}
 	}
 
-	debugf("Total polys: %d, Mesh kb: %d\n", uiDrawnPolys, (int)(meshBytes / 1024.0f));
+	//debugf("Total polys: %d, Mesh kb: %d\n", uiDrawnPolys, (int)(meshBytes / 1024.0f));
 
 	return true;
 }
@@ -1120,7 +1126,7 @@ void R_ConcatTransforms(float in1[3][4], float in2[3][4], float out[3][4])
 
 void MdlRenderer::SetUpBones(vec3 angles, int sequence, float frame, int gaitsequence, float gaitframe)
 {
-	if (loadState != MDL_LOAD_DONE && g_main_thread_id != this_thread::get_id()) {
+	if (loadState != MODEL_LOAD_DONE && g_main_thread_id != this_thread::get_id()) {
 		return; // don't let multiple threads access the same buffers
 	}
 	angles = angles.flipToStudioMdl();
@@ -1280,7 +1286,7 @@ void MdlRenderer::transformVerts() {
 }
 
 void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin, vec3 viewerRight, vec3 color) {
-	if (!valid || loadState != MDL_LOAD_DONE) {
+	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
 
@@ -1421,7 +1427,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin
 
 // get a AABB containing all model vertices at the given angles and animation frame
 void MdlRenderer::getModelBoundingBox(vec3 angles, int sequence, vec3& mins, vec3& maxs) {
-	if (loadState != MDL_LOAD_DONE && g_main_thread_id != this_thread::get_id()) {
+	if (loadState != MODEL_LOAD_DONE && g_main_thread_id != this_thread::get_id()) {
 		// don't let main thread transform verts before they're loaded
 		mins = vec3();
 		maxs = vec3();
@@ -1512,7 +1518,7 @@ void MdlRenderer::getModelBoundingBox(vec3 angles, int sequence, vec3& mins, vec
 }
 
 bool MdlRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
-	if (!valid || loadState != MDL_LOAD_DONE) {
+	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return false;
 	}
 
