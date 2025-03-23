@@ -296,7 +296,7 @@ private:
 	void drawPlane(BSPPLANE& plane, COLOR4 color, float sz=32768);
 	void drawClipnodes(Bsp* map, int iNode, int& currentPlane, int activePlane);
 	void drawNodes(Bsp* map, int iNode, int& currentPlane, int activePlane);
-	void drawModelsAndSprites();
+	bool drawModelsAndSprites();
 	BaseRenderer* loadModel(Entity* ent);
 
 	vec3 getEntOrigin(Bsp* map, Entity* ent);

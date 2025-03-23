@@ -366,7 +366,9 @@ void Renderer::renderLoop() {
 		
 		// studio models have transparent boxes that need to draw over the world but behind transparent
 		// brushes like a trigger_once which is rendered using the clipnode model
-		drawModelsAndSprites();
+		if (drawModelsAndSprites()) {
+			isLoading = true;
+		}
 		
 		// draw transparent entity faces
 		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
@@ -2562,9 +2564,9 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 	return mdl->second;
 }
 
-void Renderer::drawModelsAndSprites() {
+bool Renderer::drawModelsAndSprites() {
 	if (mapRenderer->map->ents.empty()) {
-		return;
+		return false;
 	}
 
 	vec3 worldOffset = mapRenderer->map->ents[0]->getOrigin();
@@ -2573,7 +2575,7 @@ void Renderer::drawModelsAndSprites() {
 	glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
 
 	if (!(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES)))
-		return
+		return false;
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
@@ -2603,6 +2605,8 @@ void Renderer::drawModelsAndSprites() {
 	float aspect = (float)windowWidth / (float)windowHeight;
 	Frustum frustum = getViewFrustum(cameraOrigin, cameraAngles, aspect, zNear, zFar, fov);
 
+	bool modelsLoading = false;
+
 	vector<DepthSortedEnt> depthSortedMdlEnts;
 	for (int i = 0; i < mapRenderer->map->ents.size(); i++) {
 		Entity* ent = mapRenderer->map->ents[i];
@@ -2613,6 +2617,10 @@ void Renderer::drawModelsAndSprites() {
 
 		if (ent->hidden)
 			continue;
+
+		if (sent.mdl && (sent.mdl->loadState != MODEL_LOAD_DONE)) {
+			modelsLoading = true;
+		}
 
 		if (sent.mdl && sent.mdl->loadState != MODEL_LOAD_INITIAL) {
 			if (sent.mdl->loadState == MODEL_LOAD_WAITING) {
@@ -2631,7 +2639,8 @@ void Renderer::drawModelsAndSprites() {
 			else if (sent.mdl->loadState == MODEL_LOAD_UPLOAD) {
 				sent.mdl->upload();
 				const char* typ = sent.mdl->isSprite() ? "SPR" : "MDL";
-				debugf("Loaded %s: %s\n", typ, sent.mdl->fpath.c_str());
+				if (sent.mdl->loadState != MODEL_LOAD_UPLOAD)
+					logf("Loaded %s: %s\n", typ, sent.mdl->fpath.c_str());
 			}
 		}
 
@@ -2776,6 +2785,8 @@ void Renderer::drawModelsAndSprites() {
 
 	colorShader->bind();
 	glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+
+	return modelsLoading;
 }
 
 vec3 Renderer::getEntOrigin(Bsp* map, Entity* ent) {

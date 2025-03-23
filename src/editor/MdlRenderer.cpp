@@ -367,8 +367,15 @@ void MdlRenderer::upload() {
 		return;
 	}
 
+	int uploadCount = 0;
+
 	for (int i = 0; i < numTextures; i++) {
-		glTextures[i]->upload(glTextures[i]->format);
+		if (!glTextures[i]->uploaded) {
+			glTextures[i]->upload(glTextures[i]->format);
+			if (++uploadCount > 0) {
+				return;
+			}
+		}
 	}
 
 	for (int b = 0; b < header->numbodyparts; b++) {
@@ -381,7 +388,12 @@ void MdlRenderer::upload() {
 			mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
 
 			for (int k = 0; k < mod->nummesh; k++) {
-				meshBuffers[b][m][k].buffer->upload();
+				if (!meshBuffers[b][m][k].buffer->isUploaded()) {
+					meshBuffers[b][m][k].buffer->upload();
+					if (++uploadCount > 0) {
+						return;
+					}
+				}
 			}
 		}
 	}

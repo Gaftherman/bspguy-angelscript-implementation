@@ -173,6 +173,10 @@ void VertexBuffer::setData(const void* data, int numVerts)
 	this->numVerts = numVerts;
 }
 
+bool VertexBuffer::isUploaded() {
+	return vboId != -1;
+}
+
 void VertexBuffer::upload() {
 	if (vboId != -1) {
 		// already uploaded, just replace the data

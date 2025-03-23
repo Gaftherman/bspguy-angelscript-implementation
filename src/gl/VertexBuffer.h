@@ -63,6 +63,7 @@ public:
 	//       Data will be deleted when the buffer is destroyed.
 	void setData(const void * data, int numVerts);
 
+	bool isUploaded();
 	void upload();
 	void deleteBuffer();
 	void setShader(ShaderProgram* program, bool hideErrors=false);

@@ -18,6 +18,7 @@
 #include "LeafNavMesh.h"
 #include <unordered_map>
 #include <lzma_util.h>
+#include "BaseRenderer.h"
 
 // embedded binary data
 #include "fonts/notosans.h"
