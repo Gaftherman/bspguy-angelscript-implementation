@@ -1308,7 +1308,7 @@ void Renderer::updateEntDirectionVectors() {
 	for (int i = 0; i < numPointers; i++) {
 		Entity* ent = directEnts[i];
 		vec3 ori = getEntOrigin(mapRenderer->map, ent).flip();
-		vec3 angles = ent->getAngles() * (PI / 180.0f);
+		vec3 angles = ent->getVisualAngles() * (PI / 180.0f);
 
 		// i swear every use of entity angles needs a matrix with its own unique order/inversions
 		// this is the combo used so far
@@ -2683,7 +2683,7 @@ bool Renderer::drawModelsAndSprites() {
 		if (sent.mdl && sent.mdl->loadState == MODEL_LOAD_DONE && sent.mdl->valid) {
 			if (!ent->drawCached) {
 				ent->drawOrigin = ent->getOrigin();
-				ent->drawAngles = ent->getAngles();
+				ent->drawAngles = ent->getVisualAngles();
 				ent->drawSequence = atoi(ent->getKeyvalue("sequence").c_str());
 				EntRenderOpts opts = ent->getRenderOpts();
 

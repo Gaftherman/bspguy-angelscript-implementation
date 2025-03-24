@@ -2041,6 +2041,17 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 			rotateFaceMath(faceMath, angleTransform);
 		}
 
+		/*
+		// debug rotated solid entity picking (not the same transform as rendering for some reason)
+		if (modelIdx == 63) {
+			vector<vec3> debugVerts;
+			for (vec3& ogvert : faceMath.verts) {
+				debugVerts.push_back((angleTransform * vec4(ogvert, 1)).xyz());
+			}
+			g_app->debugPoly = Polygon3D(debugVerts);
+		}
+		*/
+
 		BSPFACE& face = map->faces[model.iFirstFace + k];
 		
 		if (skipSpecial && modelIdx == 0) {

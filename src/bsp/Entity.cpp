@@ -170,7 +170,8 @@ bool Entity::isBspModel() {
 
 bool Entity::isSprite() {
 	string model = getKeyvalue("model");
-	return model.find(".spr") == model.size() - 4;
+	int ext = model.find(".spr");
+	return ext != -1 && ext == model.size() - 4;
 }
 
 string Entity::getTargetname() {
@@ -249,6 +250,16 @@ vec3 Entity::getAngles() {
 	return cachedAngles;
 }
 
+vec3 Entity::getVisualAngles() {
+	vec3 angles = getAngles();
+
+	if (getBspModelIdx() != -1 || getClassname().find("info_player_") == 0) {
+		angles.x *= -1;
+	}
+
+	return angles;
+}
+
 EntRenderOpts Entity::getRenderOpts() {
 	if (hasCachedRenderOpts) {
 		return cachedRenderOpts;
@@ -285,21 +296,38 @@ mat4x4 Entity::getRotationMatrix(bool flipped) {
 	cachedRotationMatrixFlipped.loadIdentity();
 
 	if (canRotate()) {
-		vec3 angles = getAngles() * (PI / 180.0f);
-		
+		vec3 angles = getVisualAngles() * (PI / 180.0f);
+		bool isBspModel = getBspModelIdx() != -1;
+
 		if (angles != vec3()) {
 			if (flipped) {
 				// well this makes no sense but it's required for object picking
 				// but not for rendering. I guess it's a combination of flips or undoing them, idk
-				cachedRotationMatrixFlipped.rotateY(angles.x);
-				cachedRotationMatrixFlipped.rotateZ(-angles.y);
-				cachedRotationMatrixFlipped.rotateX(-angles.z);
+				if (isBspModel) {
+					cachedRotationMatrixFlipped.rotateX(-angles.z);
+					cachedRotationMatrixFlipped.rotateY(angles.x);
+					cachedRotationMatrixFlipped.rotateZ(-angles.y);
+				}
+				else {
+					cachedRotationMatrixFlipped.rotateY(angles.x);
+					cachedRotationMatrixFlipped.rotateZ(-angles.y);
+					cachedRotationMatrixFlipped.rotateX(-angles.z);
+				}
 			}
 			else {
-				cachedRotationMatrix.rotateX(angles.z);
-				cachedRotationMatrix.rotateY(angles.y);
-				cachedRotationMatrix.rotateZ(angles.x);
+				if (isBspModel) {
+					cachedRotationMatrix.rotateY(angles.y);
+					cachedRotationMatrix.rotateZ(angles.x);
+					cachedRotationMatrix.rotateX(angles.z);
+				}
+				else {
+					cachedRotationMatrix.rotateX(angles.z);
+					cachedRotationMatrix.rotateY(angles.y);
+					cachedRotationMatrix.rotateZ(angles.x);
+				}
 			}
+
+
 		}
 	}
 

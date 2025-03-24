@@ -72,6 +72,8 @@ public:
 
 	vec3 getAngles();
 
+	vec3 getVisualAngles(); // angles for displaying models
+
 	EntRenderOpts getRenderOpts();
 
 	mat4x4 getRotationMatrix(bool flipped);

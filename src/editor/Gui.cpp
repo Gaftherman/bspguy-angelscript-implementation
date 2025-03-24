@@ -4719,6 +4719,7 @@ void Gui::drawEntityReport() {
 		int idx;
 		bool selected;
 		bool hasFgd;
+		float scrollY;
 		string cname;
 	};
 
@@ -4738,6 +4739,7 @@ void Gui::drawEntityReport() {
 			static char keyFilter[MAX_FILTERS][MAX_KEY_LEN];
 			static char valueFilter[MAX_FILTERS][MAX_VAL_LEN];
 			static int lastSelect = -1;
+			static int lastKeyboardNavSelect = 0;
 			static string classFilter = "(none)";
 			static bool partialMatches = true;
 
@@ -4827,7 +4829,6 @@ void Gui::drawEntityReport() {
 					filteredEnts[i].selected = selection.count(filteredEnts[i].idx);
 				}
 			}
-			entityReportReselectNeeded = false;
 
 			ImGuiListClipper clipper;
 			clipper.Begin(filteredEnts.size());
@@ -4853,6 +4854,8 @@ void Gui::drawEntityReport() {
 					}
 
 					if (ImGui::Selectable((cname + "##ent" + to_string(i)).c_str(), filteredEnts[i].selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+						lastKeyboardNavSelect = i;
+
 						if (expected_key_mod_flags & ImGuiMod_Ctrl) {
 							filteredEnts[i].selected = !filteredEnts[i].selected;
 							lastSelect = i;
@@ -4908,6 +4911,27 @@ void Gui::drawEntityReport() {
 				}
 			}
 			clipper.End();
+
+			entityReportReselectNeeded = false;
+
+			if (filteredEnts.size()) {
+				if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+					lastKeyboardNavSelect = clamp(lastKeyboardNavSelect + 1, 0, filteredEnts.size() - 1);
+					app->deselectObject();
+					app->pickInfo.selectEnt(filteredEnts[lastKeyboardNavSelect].idx);
+					app->postSelectEnt();
+					entityReportReselectNeeded = true;
+					ImGui::SetScrollY(clipper.ItemsHeight * lastKeyboardNavSelect - clipper.ItemsHeight*2);
+				}
+				if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+					lastKeyboardNavSelect = clamp(lastKeyboardNavSelect - 1, 0, filteredEnts.size() - 1);
+					app->deselectObject();
+					app->pickInfo.selectEnt(filteredEnts[lastKeyboardNavSelect].idx);
+					app->postSelectEnt();
+					entityReportReselectNeeded = true;
+					ImGui::SetScrollY(clipper.ItemsHeight * lastKeyboardNavSelect - clipper.ItemsHeight * 2);
+				}
+			}
 
 			ImGui::EndChild();
 
