@@ -1,6 +1,7 @@
 #pragma once
 #include "BspRenderer.h"
 #include "bsptypes.h"
+#include "unordered_set"
 
 // Undoable actions following the Command Pattern
 
@@ -136,7 +137,7 @@ public:
 // refreshes specific models after face edits
 class FacesEditCommand : public LumpReplaceCommand {
 public:
-	vector<int> modelRefreshes;
+	unordered_set<int> modelRefreshes;
 	vector<int> faces;
 	bool textureDataReloadNeeded;
 

@@ -6,38 +6,37 @@
 #include "globals.h"
 
 // v5 fix:
-// - face texture axes wrong for rotated objects
-// - initial font load is very slow on netbook
-// - figure out mdl asan corruption.maybe related to structure packing if it only happens in release mode
+// initial font load is very slow on netbook
 
 // v5 new:
-// - ripent saftey warning
-// - embed / unembed all textures
-// - hold click to select behind
-// - gradually selected more ents in report for lightstyle with shift, now cant right click(was in face mode oops)
+// ripent saftey warning
+// embed / unembed all textures
+// hold click to select behind
+// gradually selected more ents in report for lightstyle with shift, now cant right click(was in face mode oops)
 
 // v5 todo low prio:
-// - alloc block includes sky tex ?
-// - skybox rendering
-// - max world boundary config
-// - orient turrets based on key
-// - dialogs for errors / warnings
-// - ignorable popups for misc messages
-// - "pose" key for dead monsters ? (svencoop1)
-// - render transparent textures with alpha
-// - ent links should be animated.people ask what each color means
-// - refactor tooltips.make sure everything has one
-// - expand input text for multiline
-// - import / export ent files(select all excludes worldspawn)
-// - speed up clipnode gen ?
-// - box selection for entities
-// - test cs 1.6 fgd
-// - hold click to select ents behind
-// - combine buckets for tex that can be doubled
-// - add glew to a repo somewhere so fresh building is easier
-// - scale axes in wrong place for rotated solids
+// alloc block includes sky tex ?
+// skybox rendering
+// max world boundary config
+// orient turrets based on key
+// dialogs for errors / warnings
+// ignorable popups for misc messages
+// "pose" key for dead monsters ? (svencoop1)
+// render transparent textures with alpha
+// ent links should be animated.people ask what each color means
+// refactor tooltips.make sure everything has one
+// expand input text for multiline
+// import / export ent files(select all excludes worldspawn)
+// speed up clipnode gen ?
+// box selection for entities
+// test cs 1.6 fgd
+// hold click to select ents behind
+// combine buckets for tex that can be doubled
+// add glew to a repo somewhere so fresh building is easier
+// scale axes in wrong place for rotated solids
 
 // todo:
+// figure out mdl asan corruption. maybe a false positive it doesn't really make sense. disabling external sequence loads fixes
 // gui scale not accurate and mostly broken
 // invalid solid undo not reverting plane vertex positions sometimes
 // backwards mins/maxs when creating second teleport in scale mode and cant drag the handle
@@ -66,7 +65,7 @@
 // "Validate" doesn't return any response.. -Sparks (add a results window or something for that + clean/optimize)
 // copy-paste ents from Jack -Outerbeast
 // clipnode models sometimes missing faces or extending to infinity
-// - floating point inaccuracies probably. Changing starting cube size also changes the model
+// floating point inaccuracies probably. Changing starting cube size also changes the model
 // show tooltip when hovering over ent target/caller
 // Add tooltips for everything
 // first-time launch help window or something

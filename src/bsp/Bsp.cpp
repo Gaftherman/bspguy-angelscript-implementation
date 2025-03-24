@@ -3468,6 +3468,10 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 		}
 	}
 
+	if (!embedded) {
+		logf("Failed to embed %s. Texture not found in any loaded WAD.\n", tex.szName);
+	}
+
 	return embedded;
 }
 
@@ -3726,7 +3730,6 @@ set<int> Bsp::selectConnectedTexture(int modelId, int faceId) {
 	while (anyNewFaces) {
 		anyNewFaces = false;
 
-		logf("Loop again!\n");
 		for (int fa = 0; fa < model.nFaces; fa++) {
 			int testFaceIdx = model.iFirstFace + fa;
 			BSPFACE& faceA = faces[testFaceIdx];
@@ -3766,7 +3769,6 @@ set<int> Bsp::selectConnectedTexture(int modelId, int faceId) {
 
 				selected.insert(testFaceIdx);
 				anyNewFaces = true;
-				logf("SElect %d add %d\n", testFaceIdx, uniqueVerts.size());
 			}
 		}
 	}

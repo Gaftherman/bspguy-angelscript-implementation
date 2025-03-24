@@ -542,7 +542,9 @@ int ModelEditCommand::memoryUsage() {
 
 
 FacesEditCommand::FacesEditCommand(string desc) : LumpReplaceCommand(desc) {
-	this->modelRefreshes = g_app->pickInfo.getModelIndexes();
+	for (int idx : g_app->pickInfo.getModelIndexes()) {
+		this->modelRefreshes.insert(idx);
+	}
 	this->faces = g_app->pickInfo.faces;
 	textureDataReloadNeeded = false;
 }
@@ -558,8 +560,8 @@ void FacesEditCommand::refresh() {
 	}
 	g_app->pickInfo.deselect();
 
-	for (int i = 0; i < modelRefreshes.size(); i++)
-		g_app->mapRenderer->refreshModel(modelRefreshes[i], false);
+	for (int idx : modelRefreshes)
+		g_app->mapRenderer->refreshModel(idx, false);
 
 	if (g_app->pickMode == PICK_FACE) {
 		for (int i = 0; i < faces.size(); i++) {
@@ -569,6 +571,7 @@ void FacesEditCommand::refresh() {
 	}
 
 	g_app->pickCount++;
+	g_app->updateTextureAxes();
 	g_app->gui->refresh();
 }
 

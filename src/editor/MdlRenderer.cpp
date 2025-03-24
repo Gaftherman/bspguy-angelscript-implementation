@@ -336,7 +336,8 @@ void MdlRenderer::loadData() {
 	memset(iController, 127, 4);
 	memset(iBlender, 0, 2);
 	memset(cachedBounds, 0, sizeof(cachedBounds));
-	memset(seqheaders, 0, sizeof(seqheaders));
+	for (int i = 0; i < MAXSTUDIOANIMATIONS; i++)
+		seqheaders[i] = mstream();
 	iMouth = 0;
 
 	if (!loadTextureData() || !loadSequenceData()) {
@@ -503,7 +504,7 @@ bool MdlRenderer::loadSequenceData() {
 	string ext = fpath.substr(lastDot);
 	string basepath = fpath.substr(0, lastDot);
 
-	for (int i = 1; i < header->numseqgroups; i++) {
+	for (int i = 1; i < header->numseqgroups && i < MAXSTUDIOSEQUENCES; i++) {
 		string suffix = i < 10 ? "0" + to_string(i) : to_string(i);
 		string spath = basepath + suffix + ext;
 

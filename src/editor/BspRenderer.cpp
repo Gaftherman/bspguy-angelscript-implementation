@@ -28,8 +28,6 @@
 #include "TextureArray.h"
 
 
-#include "icons/missing.h"
-
 BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colorShader, PointEntRenderer* pointEntRenderer) {
 	this->map = map;
 	this->bspShader = bspShader;
@@ -68,12 +66,6 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	greyTex->upload(GL_RGB);
 	blackTex->upload(GL_RGB);
 	blueTex->upload(GL_RGB);
-
-	byte* img_dat = NULL;
-	uint w, h;
-	lodepng_decode24(&img_dat, &w, &h, missing_dat, sizeof(missing_dat));
-	missingTex = new Texture(w, h, img_dat);
-	missingTex->upload(GL_RGB);
 
 	preloadTextures();
 	//loadTextures();
@@ -126,6 +118,23 @@ void BspRenderer::preloadTextures() {
 	}
 }
 
+Texture* BspRenderer::generateMissingTexture(int width, int height) {
+	Texture* tex = new Texture(width, height);
+
+	static const COLOR3 pink = COLOR3(255, 0, 255);
+	static const COLOR3 black = COLOR3(0, 0, 0);
+	COLOR3* dat = (COLOR3*)tex->data;
+
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			bool isPink = ((x / 8) + ((y / 8) & 1)) & 1;
+			dat[y * width + x] = isPink ? pink : black;
+		}
+	}
+
+	return tex;
+}
+
 void BspRenderer::loadTextures() {
 	for (int i = 0; i < wads.size(); i++) {
 		delete wads[i];
@@ -165,7 +174,9 @@ void BspRenderer::loadTextures() {
 	for (int i = 0; i < map->textureCount; i++) {
 		int32_t texOffset = ((int32_t*)map->textures)[i + 1];
 		if (texOffset == -1) {
-			glTexturesSwap[i] = missingTex;
+			Texture* missingCopy = generateMissingTexture(16, 16);
+			glTexturesSwap[i] = missingCopy;
+			glTextureArray->add(missingCopy);
 			continue;
 		}
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
@@ -193,8 +204,9 @@ void BspRenderer::loadTextures() {
 			}
 
 			if (!foundInWad) {
-				glTexturesSwap[i] = missingTex;
-				missingCount++;
+				Texture* missingCopy = generateMissingTexture(tex.nWidth, tex.nHeight);
+				glTexturesSwap[i] = missingCopy;
+				glTextureArray->add(missingCopy);
 				continue;
 			}
 		}
@@ -520,8 +532,7 @@ void BspRenderer::deleteRenderFaces() {
 void BspRenderer::deleteTextures() {
 	if (glTextures != NULL) {
 		for (int i = 0; i < numLoadedTextures; i++) {
-			if (glTextures[i] != missingTex)
-				delete glTextures[i];
+			delete glTextures[i];
 		}
 		delete[] glTextures;
 	}
@@ -1452,7 +1463,6 @@ BspRenderer::~BspRenderer() {
 	delete greyTex;
 	delete blackTex;
 	delete blueTex;
-	delete missingTex;
 
 	delete glTextureArray;
 

@@ -75,7 +75,7 @@ private:
 	studiohdr_t* texheader = NULL; // external texture data
 	mstream data; // TODO: parse structures into class members instead of seeking through the original data
 	mstream texdata;
-	std::future<void> loadFuture;
+	mstream seqheaders[MAXSTUDIOSEQUENCES]; // external sequence model data
 
 	// opengl uniforms
 	uint u_sTexId;
@@ -95,8 +95,6 @@ private:
 		bool isCached;
 	};
 	AABB cachedBounds[MAXSTUDIOANIMATIONS]; // cached results for getModelBoundingBox
-
-	mstream seqheaders[MAXSTUDIOSEQUENCES]; // external sequence model data
 
 	// for setupbones
 	vec3 pos[MAXSTUDIOBONES];

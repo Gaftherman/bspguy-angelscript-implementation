@@ -35,12 +35,13 @@ void AppSettings::loadDefault()
 	autoload_layout_height = 0;
 	texture_filtering = false;
 	confirm_exit = true;
+	unicode_font = false;
 	settings_tab = 0;
 	engine = ENGINE_SVEN_COOP;
 
 	render_flags = g_render_flags = RENDER_TEXTURES | RENDER_LIGHTMAPS | RENDER_SPECIAL
 		| RENDER_ENTS | RENDER_SPECIAL_ENTS | RENDER_POINT_ENTS | RENDER_WIREFRAME | RENDER_ENT_CONNECTIONS
-		| RENDER_ENT_CLIPNODES;
+		| RENDER_ENT_CLIPNODES | RENDER_ENT_DIRECTIONS;
 
 	vsync = true;
 
@@ -104,6 +105,7 @@ void AppSettings::load() {
 			else if (key == "autoload_layout") { g_settings.autoload_layout = atoi(val.c_str()) != 0; }
 			else if (key == "autoload_layout_width") { g_settings.autoload_layout_width = atoi(val.c_str()); }
 			else if (key == "autoload_layout_height") { g_settings.autoload_layout_height = atoi(val.c_str()); }
+			else if (key == "unicode_font") { g_settings.unicode_font = atoi(val.c_str()); }
 			else if (key == "engine") { 
 				g_settings.engine = clamp(atoi(val.c_str()), 0, 1);
 				g_limits = g_engine_limits[g_settings.engine];
@@ -180,15 +182,15 @@ void AppSettings::save() {
 
 	file << "gamedir=" << g_settings.gamedir << endl;
 	for (int i = 0; i < fgdPaths.size(); i++) {
-		file << "fgd=" << g_settings.fgdPaths[i] << endl;
+		file << "fgd=" << string(g_settings.fgdPaths[i].c_str()) << endl;
 	}
 
 	for (int i = 0; i < resPaths.size(); i++) {
-		file << "res=" << g_settings.resPaths[i] << endl;
+		file << "res=" << string(g_settings.resPaths[i].c_str()) << endl;
 	}
 
 	for (int i = 0; i < recentFiles.size(); i++) {
-		file << "recent=" << g_settings.recentFiles[i] << endl;
+		file << "recent=" << string(g_settings.recentFiles[i].c_str()) << endl;
 	}
 
 	file << "vsync=" << g_settings.vsync << endl;
@@ -196,6 +198,7 @@ void AppSettings::save() {
 	file << "verbose_logs=" << g_settings.verboseLogs << endl;
 	file << "texture_filtering=" << g_settings.texture_filtering << endl;
 	file << "confirm_exit=" << g_settings.confirm_exit << endl;
+	file << "unicode_font=" << g_settings.unicode_font << endl;
 	file << "fov=" << g_settings.fov << endl;
 	file << "zfar=" << g_settings.zfar << endl;
 	file << "zfarmdl=" << g_settings.zFarMdl << endl;

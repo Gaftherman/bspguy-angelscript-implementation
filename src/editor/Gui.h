@@ -112,7 +112,7 @@ private:
 	int copiedMiptex = -1;
 	int copiedLightmapFace = -1; // index into faces
 	LIGHTMAP copiedLightmap = LIGHTMAP();
-	bool refreshSelectedFaces = false;
+	bool refreshAfterFacePaste = false;
 
 	ImGuiTextBuffer Buf = ImGuiTextBuffer();
 	ImVector<int> LineOffsets; // Index to lines offset. We maintain this with AddLog() calls, allowing us to have a random access on lines

@@ -1368,7 +1368,7 @@ void Renderer::updateTextureAxes() {
 	}
 
 	int numVerts = pickInfo.faces.size() * 6;
-	cVert* verts = new cVert[numVerts];
+	vector<cVert> verts;
 	Bsp* map = mapRenderer->map;
 	const float len = 16;
 
@@ -1377,18 +1377,49 @@ void Renderer::updateTextureAxes() {
 		int faceidx = pickInfo.faces[i];
 		BSPFACE& face = map->faces[faceidx];
 		BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-		vec3 center = map->get_face_center(faceidx).flip();
-		vec3 norm = crossProduct(info.vT, info.vS).normalize();
-		
-		verts[vidx++] = cVert(center, COLOR4(255, 255, 0, 255));
-		verts[vidx++] = cVert(center + info.vS.flip().normalize(len), COLOR4(255, 255, 0, 255));
-		verts[vidx++] = cVert(center, COLOR4(0, 255, 0, 255));
-		verts[vidx++] = cVert(center + info.vT.flip().normalize(len), COLOR4(0, 255, 0, 255));
-		verts[vidx++] = cVert(center, COLOR4(0, 64, 255, 255));
-		verts[vidx++] = cVert(center + norm.flip().normalize(len), COLOR4(0, 64, 255, 255));
+		vec3 center = map->get_face_center(faceidx);
+
+		int model = map->get_model_from_face(faceidx);
+
+		if (model != 0) {
+			for (int k = 0; k < map->ents.size(); k++) {
+				Entity* ent = map->ents[k];
+				if (ent->getBspModelIdx() == model) {
+					mat4x4 rotMat = ent->getRotationMatrix(true);
+					mat4x4 rotMat2 = ent->getRotationMatrix(false);
+					vec3 offset = ent->getOrigin();
+					center = ((rotMat * vec4(center, 1)).xyz() + offset).flip();
+					vec3 vS = ((rotMat * vec4(info.vS, 1)).xyz()).flip();
+					vec3 vT = ((rotMat * vec4(info.vT, 1)).xyz()).flip();
+					vec3 norm = crossProduct(vT, vS).normalize();
+
+					verts.push_back(cVert(center, COLOR4(255, 255, 0, 255)));
+					verts.push_back(cVert(center + vS.normalize(len), COLOR4(255, 255, 0, 255)));
+					verts.push_back(cVert(center, COLOR4(0, 255, 0, 255)));
+					verts.push_back(cVert(center + vT.normalize(len), COLOR4(0, 255, 0, 255)));
+					verts.push_back(cVert(center, COLOR4(0, 64, 255, 255)));
+					verts.push_back(cVert(center + norm.normalize(len), COLOR4(0, 64, 255, 255)));
+				}
+			}
+		}
+		else {
+			center = center.flip();
+			vec3 norm = crossProduct(info.vT, info.vS).normalize();
+
+			// world face
+			verts.push_back(cVert(center, COLOR4(255, 255, 0, 255)));
+			verts.push_back(cVert(center + info.vS.flip().normalize(len), COLOR4(255, 255, 0, 255)));
+			verts.push_back(cVert(center, COLOR4(0, 255, 0, 255)));
+			verts.push_back(cVert(center + info.vT.flip().normalize(len), COLOR4(0, 255, 0, 255)));
+			verts.push_back(cVert(center, COLOR4(0, 64, 255, 255)));
+			verts.push_back(cVert(center + norm.flip().normalize(len), COLOR4(0, 64, 255, 255)));
+		}
 	}
 
-	allTextureAxes = new VertexBuffer(colorShader, COLOR_4B | POS_3F, verts, numVerts);
+	cVert* uploadVerts = new cVert[verts.size()];
+	memcpy(uploadVerts, &verts[0], sizeof(cVert) * verts.size());
+
+	allTextureAxes = new VertexBuffer(colorShader, COLOR_4B | POS_3F, uploadVerts, verts.size());
 	allTextureAxes->upload();
 	allTextureAxes->ownData = true;
 }

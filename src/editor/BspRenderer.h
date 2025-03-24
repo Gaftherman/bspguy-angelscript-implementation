@@ -239,7 +239,6 @@ private:
 	Texture* greyTex = NULL;
 	Texture* blackTex = NULL;
 	Texture* blueTex = NULL;
-	Texture* missingTex = NULL;
 
 	bool lightmapsGenerated = false;
 	bool lightmapsUploaded = false;
@@ -267,4 +266,5 @@ private:
 	void delayLoadData();
 	bool getRenderPointers(int faceIdx, RenderFace** renderFace, RenderGroup** renderGroup);
 	int getBestClipnodeHull(int modelIdx);
+	Texture* generateMissingTexture(int width, int height);
 };

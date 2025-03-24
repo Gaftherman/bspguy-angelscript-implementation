@@ -204,7 +204,7 @@ void Gui::copyTexture() {
 }
 
 void Gui::pasteTexture() {
-	refreshSelectedFaces = true;
+	refreshAfterFacePaste = true;
 }
 
 void Gui::copyLightmap() {
@@ -609,16 +609,22 @@ void Gui::draw3dContextMenus() {
 				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
 				uint32_t selectedMiptex = texinfo.iMiptex;
 
+				for (int i : app->pickInfo.faces) {
+					g_app->mapRenderer->highlightFace(i, false);
+				}
+
 				app->pickInfo.deselect();
 				for (int i = 0; i < map->faceCount; i++) {
 					BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
 					if (info.iMiptex == selectedMiptex) {
 						app->pickInfo.selectFace(i);
+						g_app->mapRenderer->highlightFace(i, true);
 					}
 				}
+				g_app->updateTextureAxes();
 
 				logf("Selected %d faces\n", app->pickInfo.faces.size());
-				refreshSelectedFaces = true;
+				g_app->pickCount++;
 			}
 			tooltip(g, "Select every face in the map which has this texture.");
 
@@ -626,14 +632,19 @@ void Gui::draw3dContextMenus() {
 				Bsp* map = app->pickInfo.getMap();
 
 				set<int> newSelect = map->selectConnectedTexture(app->pickInfo.getModelIndex(), app->pickInfo.getFaceIndex());
-				app->pickInfo.deselect();
-
-				for (int i : newSelect) {
-					app->pickInfo.selectFace(i);
+				for (int i : app->pickInfo.faces) {
+					g_app->mapRenderer->highlightFace(i, false);
 				}
 
+				app->pickInfo.deselect();
+				for (int i : newSelect) {
+					app->pickInfo.selectFace(i);
+					g_app->mapRenderer->highlightFace(i, true);
+				}
+				g_app->updateTextureAxes();
+
 				logf("Selected %d faces\n", app->pickInfo.faces.size());
-				refreshSelectedFaces = true;
+				g_app->pickCount++;
 			}
 			tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
 
@@ -3805,15 +3816,8 @@ void Gui::loadFonts() {
 	}
 
 	vector<uint8_t> decompressed;
-	// data copied to new array so that ImGui doesn't delete static data
-	byte* smallFontData = NULL;
-	int notosans_unicode_sz = 0;
-	if (lzmaDecompress((uint8_t*)notosans_unicode, sizeof(notosans_unicode), decompressed)) {
-		notosans_unicode_sz = decompressed.size();
-		smallFontData = new byte[notosans_unicode_sz];
-		memcpy(smallFontData, &decompressed[0], notosans_unicode_sz);
-	}
 
+	// data copied to new array so that ImGui doesn't delete static data
 	byte* largeFontData = NULL;
 	int notosans_sz = 0;
 	if (lzmaDecompress((uint8_t*)notosans, sizeof(notosans), decompressed)) {
@@ -3838,7 +3842,30 @@ void Gui::loadFonts() {
 	// largeFont, which I'm using now for quality reasons (font scaling breaks anti-aliasing
 	// and makes the font look worse if scaled up). It will also improve startup time as
 	// glyphs are loaded on-demand instead of 16k all at once!!! Should be ready early 2025.
-	smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_unicode_sz, fontSize*g_smallFontSizeMult, NULL, ranges.Data);
+
+	decompressed.clear();
+	byte* smallFontData = NULL;
+
+	if (g_settings.unicode_font) {
+		int notosans_unicode_sz = 0;
+		if (lzmaDecompress((uint8_t*)notosans_unicode, sizeof(notosans_unicode), decompressed)) {
+			notosans_unicode_sz = decompressed.size();
+			smallFontData = new byte[notosans_unicode_sz];
+			memcpy(smallFontData, &decompressed[0], notosans_unicode_sz);
+		}
+
+		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_unicode_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
+	}
+	else {
+		if (lzmaDecompress((uint8_t*)notosans, sizeof(notosans), decompressed)) {
+			notosans_sz = decompressed.size();
+			smallFontData = new byte[notosans_sz];
+			memcpy(smallFontData, &decompressed[0], notosans_sz);
+		}
+
+		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
+	}
+	
 	largeFont = io.Fonts->AddFontFromMemoryTTF((void*)largeFontData, notosans_sz, fontSize*1.25f, NULL, ranges.Data);
 	consoleFont = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontData, notosans_mono_sz, fontSize, NULL, ranges.Data);
 	consoleFontLarge = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontLargeData, notosans_mono_sz, fontSize*1.1f, NULL, ranges.Data);
@@ -3916,7 +3943,8 @@ void Gui::drawLog() {
 
 void Gui::drawSettings() {
 
-	ImGui::SetNextWindowSize(ImVec2(790, 350), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(5, 50), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(790, 460), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(740, 200), ImVec2(FLT_MAX, app->windowHeight - 40));
 
 	if (ImGui::Begin("Editor Setup", &showSettingsWidget))
@@ -4001,6 +4029,15 @@ void Gui::drawSettings() {
 
 			if (ImGui::Checkbox("VSync", &vsync)) {
 				glfwSwapInterval(vsync ? 1 : 0);
+			}
+
+			ImGui::NextColumn();
+
+			if (ImGui::Checkbox("Unicode Font", &g_settings.unicode_font)) {
+				shouldReloadFonts = true;
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("The unicode font may take a long time to load depending on your specs.\nA new version of ImGui is coming soon to improve that.\n");
 			}
 		}
 		else if (settingsTab == 1) {
@@ -4593,7 +4630,6 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 			app->pickMode = PICK_FACE;
 			showTextureWidget = true;
 			app->pickCount++;
-			refreshSelectedFaces = true;
 			app->goToFace(map, faceIdx);
 		}
 		ImGui::NextColumn();
@@ -5376,7 +5412,7 @@ void Gui::drawTextureTool() {
 					tex_size_kb = (szAll + 512) / 1024;
 				}
 				else {
-					textureName[0] = '\0';
+					textureName[0] = 0;
 				}
 
 				if (textureName != last_texture_name) {
@@ -5418,14 +5454,14 @@ void Gui::drawTextureTool() {
 						textureId = NULL;
 						width = 0;
 						height = 0;
-						textureName[0] = '\0';
+						textureName[0] = 0;
 					}
 				}
 			}
 			else {
 				scaleX = scaleY = shiftX = shiftY = width = height = 0;
 				textureId = NULL;
-				textureName[0] = '\0';
+				textureName[0] = 0;
 			}
 
 			checkFaceErrors();
@@ -5606,9 +5642,9 @@ void Gui::drawTextureTool() {
 			textureChanged = true;
 		}
 		ImGui::EndDisabled();
-		if (refreshSelectedFaces) {
+		if (refreshAfterFacePaste) {
 			textureChanged = true;
-			refreshSelectedFaces = false;
+			refreshAfterFacePaste = false;
 			int32_t texOffset = ((int32_t*)map->textures)[copiedMiptex + 1];
 			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 			strncpy(textureName, tex.szName, MAXTEXTURENAME);
@@ -5619,7 +5655,7 @@ void Gui::drawTextureTool() {
 		ImGui::SameLine();
 		ImGui::Text("%dx%d", width, height);
 
-		if ((scaledX || scaledY || shiftedX || shiftedY || rotated || textureChanged || refreshSelectedFaces || toggledFlags)) {
+		if ((scaledX || scaledY || shiftedX || shiftedY || rotated || textureChanged || refreshAfterFacePaste || toggledFlags)) {
 			if (!faceUndoCommand)
 				faceUndoCommand = new FacesEditCommand("Edit Face");
 			
@@ -5724,7 +5760,7 @@ void Gui::drawTextureTool() {
 			}
 		}
 
-		refreshSelectedFaces = false;
+		refreshAfterFacePaste = false;
 
 		float imgWidth = min(256.0f, inputWidth * 2 - 2);
 		ImVec2 imgSize = ImVec2(imgWidth, imgWidth);
