@@ -588,7 +588,7 @@ bool MdlRenderer::loadMeshes() {
 
 				texdata.seek(texheader->textureindex + texId * sizeof(mstudiotexture_t));
 				mstudiotexture_t* texture = (mstudiotexture_t*)texdata.getOffsetBuffer();
-				meshBuffers[b][m][k].texture = glTextures[mesh->skinref];
+				meshBuffers[b][m][k].skinref = mesh->skinref;
 
 				data.seek(mesh->triindex);
 				short* ptricmds = (short*)data.getOffsetBuffer();
@@ -1298,7 +1298,7 @@ void MdlRenderer::transformVerts() {
 	//logf("Transformed %d verts\n", vertCount);
 }
 
-void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin, vec3 viewerRight, vec3 color) {
+void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewerOrigin, vec3 viewerRight) {
 	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
@@ -1310,14 +1310,14 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin
 	float deltaTime = now - lastDrawCall;
 	lastDrawCall = now;
 
-	sequence = clamp(sequence, 0, header->numseq - 1);
-	mstudioseqdesc_t* seq = getSequence(sequence);
+	opts.sequence = clamp(opts.sequence, 0, header->numseq - 1);
+	mstudioseqdesc_t* seq = getSequence(opts.sequence);
 	if (seq && seq->numframes > 1) {
 		drawFrame += seq->fps * deltaTime;
 		drawFrame = normalizeRangef(drawFrame, 0.0f, seq->numframes - 1);
 	}
 
-	SetUpBones(angles, sequence, drawFrame);
+	SetUpBones(angles, opts.sequence, drawFrame);
 
 	glDisable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
@@ -1331,7 +1331,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin
 	glUniform1i(u_elights, 1);
 
 	// ambient lighting
-	vec3 ambientColor = color * 0.4f;
+	vec3 ambientColor = opts.rendercolor.toVec() * 0.4f;
 	glUniform3f(u_ambient, ambientColor.x, ambientColor.y, ambientColor.z);
 
 	/*
@@ -1355,7 +1355,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin
 		memset(lights[i], 0, 3*sizeof(vec3));
 	}
 	lights[0][0] = vec3(1024, 1024, 1024); // light position
-	lights[0][1] = color; // diffuse color
+	lights[0][1] = opts.rendercolor.toVec(); // diffuse color
 	glUniformMatrix3fv(u_lightsId, 4, false, (float*)lights);
 	
 	// bone transforms
@@ -1373,63 +1373,69 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin
 	glUniform3f(u_viewerOriginId, uploadOrigin.x, uploadOrigin.y, uploadOrigin.z);
 	glUniform3f(u_viewerRightId, viewerRight.x, viewerRight.y, viewerRight.z);
 
-	data.seek(header->bodypartindex);
-	mstudiobodyparts_t* bod = (mstudiobodyparts_t*)data.getOffsetBuffer();
+	data.seek(header->skinindex);
+	
+	int skin = clamp(opts.skin, 0, header->numskinfamilies-1);
+	short* pskinref = (short*)data.getOffsetBuffer();
 
-	int meshCount = 0;
+	int bodyValue = clamp(opts.body, 0, 255);
+
 	for (int b = 0; b < header->numbodyparts; b++) {
 		// Try loading required model info
 		data.seek(header->bodypartindex + b * sizeof(mstudiobodyparts_t));
 		mstudiobodyparts_t* bod = (mstudiobodyparts_t*)data.getOffsetBuffer();
 
-		for (int i = 0; i < bod->nummodels && i < 1; i++) {
-			data.seek(bod->modelindex + i * sizeof(mstudiomodel_t));
-			mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
+		int activeModel = (bodyValue / bod->base) % bod->nummodels;
+		bodyValue -= activeModel * bod->base;
 
-			for (int k = 0; k < mod->nummesh; k++) {
-				meshCount++;
-				MdlMeshRender& render = meshBuffers[b][i][k];
+		data.seek(bod->modelindex + activeModel * sizeof(mstudiomodel_t));
+		mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
 
-				if (!render.texture)
-					continue;
-				
-				render.texture->bind();
-
-				if (!render.buffer) {
-					continue;
-				}
-
-				if (render.flags & STUDIO_NF_ADDITIVE) {
-					glEnable(GL_BLEND);
-					glUniform1i(u_additiveEnable, 1);
-				}
-				else {
-					glDisable(GL_BLEND);
-					glUniform1i(u_additiveEnable, 0);
-				}
-
-				int flatShade = 0;
-				if (render.flags & STUDIO_NF_FULLBRIGHT) {
-					flatShade = 2;
-				} else if (render.flags & STUDIO_NF_FLATSHADE) {
-					flatShade = 1;
-				}
-
-				glUniform1i(u_flatshadeEnable, flatShade);
-
-				if (render.flags & STUDIO_NF_CHROME) {
-					const float s = 1.0 / (float)render.texture->width;
-					const float t = 1.0 / (float)render.texture->height;
-					
-					glUniform1i(u_chromeEnable, 1);
-					glUniform2f(u_textureST, s, t);
-				}
-				else {
-					glUniform1i(u_chromeEnable, 0);
-				}
-
-				render.buffer->draw(GL_TRIANGLES);
+		for (int k = 0; k < mod->nummesh; k++) {
+			MdlMeshRender& render = meshBuffers[b][activeModel][k];
+			
+			short remappedSkin = pskinref[skin*header->numskinref + render.skinref];
+			if (remappedSkin < 0 || remappedSkin >= header->numtextures) {
+				continue;
 			}
+
+			Texture* tex = glTextures[remappedSkin];
+			tex->bind();
+
+			if (!render.buffer) {
+				continue;
+			}
+
+			if (render.flags & STUDIO_NF_ADDITIVE) {
+				glEnable(GL_BLEND);
+				glUniform1i(u_additiveEnable, 1);
+			}
+			else {
+				glDisable(GL_BLEND);
+				glUniform1i(u_additiveEnable, 0);
+			}
+
+			int flatShade = 0;
+			if (render.flags & STUDIO_NF_FULLBRIGHT) {
+				flatShade = 2;
+			} else if (render.flags & STUDIO_NF_FLATSHADE) {
+				flatShade = 1;
+			}
+
+			glUniform1i(u_flatshadeEnable, flatShade);
+
+			if (render.flags & STUDIO_NF_CHROME) {
+				const float s = 1.0 / (float)tex->width;
+				const float t = 1.0 / (float)tex->height;
+					
+				glUniform1i(u_chromeEnable, 1);
+				glUniform2f(u_textureST, s, t);
+			}
+			else {
+				glUniform1i(u_chromeEnable, 0);
+			}
+
+			render.buffer->draw(GL_TRIANGLES);
 		}
 	}
 
@@ -1539,8 +1545,10 @@ bool MdlRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 		return false;
 	}
 
+	EntRenderOpts opts = ent->getRenderOpts();
+
 	vec3 mins, maxs;
-	getModelBoundingBox(ent->drawAngles, ent->drawSequence, mins, maxs);
+	getModelBoundingBox(ent->drawAngles, opts.sequence, mins, maxs);
 	mins += ent->drawOrigin;
 	maxs += ent->drawOrigin;
 
@@ -1550,35 +1558,37 @@ bool MdlRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 	}
 	bestDist = oldBestDist;	
 
-	SetUpBones(ent->drawAngles, ent->drawSequence, ent->drawFrame);
+	SetUpBones(ent->drawAngles, opts.sequence, ent->drawFrame);
 	transformVerts();
 
 	start -= ent->drawOrigin;
 
+	int bodyValue = clamp(opts.body, 0, 255);
 	for (int b = 0; b < header->numbodyparts; b++) {
 		// Try loading required model info
 		data.seek(header->bodypartindex + b * sizeof(mstudiobodyparts_t));
 		mstudiobodyparts_t* bod = (mstudiobodyparts_t*)data.getOffsetBuffer();
 
-		for (int i = 0; i < bod->nummodels && i < 1; i++) {
-			data.seek(bod->modelindex + i * sizeof(mstudiomodel_t));
-			mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
+		int activeModel = (bodyValue / bod->base) % bod->nummodels;
+		bodyValue -= activeModel * bod->base;
 
-			for (int k = 0; k < mod->nummesh; k++) {
-				MdlMeshRender& render = meshBuffers[b][i][k];
+		data.seek(bod->modelindex + activeModel * sizeof(mstudiomodel_t));
+		mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
 
-				for (int v = 0; v < render.numVerts; v += 3) {
-					const vec3& v0 = render.transformVerts[v];
-					const vec3& v1 = render.transformVerts[v+1];
-					const vec3& v2 = render.transformVerts[v+2];
+		for (int k = 0; k < mod->nummesh; k++) {
+			MdlMeshRender& render = meshBuffers[b][activeModel][k];
+
+			for (int v = 0; v < render.numVerts; v += 3) {
+				const vec3& v0 = render.transformVerts[v];
+				const vec3& v1 = render.transformVerts[v+1];
+				const vec3& v2 = render.transformVerts[v+2];
 					
-					float t = rayTriangleIntersect(start, rayDir, v0, v1, v2);
-					//g_app->drawPolygon3D(Polygon3D({ v0, v1, v2 }), COLOR4(0, 255, 0, 255));
+				float t = rayTriangleIntersect(start, rayDir, v0, v1, v2);
+				//g_app->drawPolygon3D(Polygon3D({ v0, v1, v2 }), COLOR4(0, 255, 0, 255));
 
-					if (t > 0 && t < bestDist) {
-						bestDist = t;
-						return true;
-					}
+				if (t > 0 && t < bestDist) {
+					bestDist = t;
+					return true;
 				}
 			}
 		}

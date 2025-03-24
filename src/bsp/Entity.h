@@ -23,6 +23,9 @@ struct EntRenderOpts {
 	float framerate;
 	float scale;
 	int vp_type;
+	int body;
+	int skin;
+	int sequence;
 };
 
 class Entity
@@ -42,7 +45,6 @@ public:
 	vec3 drawAngles;
 	vec3 drawOrigin;
 	vec3 drawMin, drawMax; // model bounding box
-	int drawSequence;
 	float drawFrame;
 
 	Entity(void);

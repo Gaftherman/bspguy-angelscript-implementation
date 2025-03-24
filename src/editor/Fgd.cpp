@@ -420,7 +420,7 @@ void Fgd::parseKeyvalue(char*& readPtr, FgdClass& outClass) {
 	readPtr++;
 
 	def.iType = FGD_KEY_STRING;
-	auto idef = fgdKeyTypes.find(def.valueType);
+	auto idef = fgdKeyTypes.find(toLowerCase(def.valueType));
 	if (idef != fgdKeyTypes.end()) {
 		def.iType = idef->second;
 	}
@@ -535,16 +535,7 @@ void Fgd::parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey) 
 			readPtr++;
 			return;
 		}
-		if (readPtr[0] == '\n') {
-			// end of option
-			if (fieldCount > 0 || choice.svalue.length()) {
-				outKey.choices.push_back(choice);
-				choice = KeyvalueChoice();
-				fieldCount = 0;
-			}
-			readPtr++;
-		}
-		else if (readPtr[0] == ':') {
+		else if (readPtr[0] == ':' || readPtr[0] == '\n') {
 			// end of field
 			if (fieldCount == 0) {
 				choice.svalue = field;
@@ -565,6 +556,16 @@ void Fgd::parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey) 
 			}
 
 			fieldCount++;
+
+			if (readPtr[0] == '\n') {
+				// end of option
+				if (fieldCount > 1 || (fieldCount == 1 && choice.svalue.length())) {
+					outKey.choices.push_back(choice);
+				}
+				choice = KeyvalueChoice();
+				fieldCount = 0;
+			}
+
 			readPtr++;
 		}
 	}

@@ -2696,12 +2696,11 @@ bool Renderer::drawModelsAndSprites() {
 			if (!ent->drawCached) {
 				ent->drawOrigin = ent->getOrigin();
 				ent->drawAngles = ent->getVisualAngles();
-				ent->drawSequence = atoi(ent->getKeyvalue("sequence").c_str());
 				EntRenderOpts opts = ent->getRenderOpts();
 
 				if (sent.mdl->isStudioModel()) {
 					vec3 mins, maxs;
-					((MdlRenderer*)sent.mdl)->getModelBoundingBox(ent->drawAngles, ent->drawSequence, mins, maxs);
+					((MdlRenderer*)sent.mdl)->getModelBoundingBox(ent->drawAngles, opts.sequence, mins, maxs);
 					ent->drawMin = mins + sent.origin;
 					ent->drawMax = maxs + sent.origin;
 				}
@@ -2724,9 +2723,11 @@ bool Renderer::drawModelsAndSprites() {
 			}
 
 			if (!sent.ent->drawCached) {
+				EntRenderOpts opts = ent->getRenderOpts();
+
 				if (sent.mdl->isStudioModel()) {
 					vec3 mins, maxs;
-					((MdlRenderer*)sent.mdl)->getModelBoundingBox(ent->drawAngles, ent->drawSequence, mins, maxs);
+					((MdlRenderer*)sent.mdl)->getModelBoundingBox(ent->drawAngles, opts.sequence, mins, maxs);
 					ent->drawMin = mins + sent.origin;
 					ent->drawMax = maxs + sent.origin;
 				}
@@ -2802,13 +2803,15 @@ bool Renderer::drawModelsAndSprites() {
 
 		// draw the model
 		ent->didStudioDraw = true;
+		EntRenderOpts renderOpts = ent->getRenderOpts();
+		vec3 drawOri = ent->drawOrigin + worldOffset;
+
 		if (mdl->isStudioModel()) {
-			((MdlRenderer*)mdl)->draw(ent->drawOrigin + worldOffset, ent->drawAngles, ent->drawSequence,
-				g_app->cameraOrigin, g_app->cameraRight, isSelected ? vec3(1, 0, 0) : vec3(1, 1, 1));
+			renderOpts.rendercolor = isSelected ? COLOR3(255, 0, 0) : COLOR3(255, 255, 255);
+
+			((MdlRenderer*)mdl)->draw(drawOri, ent->drawAngles, renderOpts, g_app->cameraOrigin, g_app->cameraRight);
 		}
 		else if (mdl->isSprite()) {
-			EntRenderOpts renderOpts = ent->getRenderOpts();
-
 			COLOR3 color = COLOR3(255, 255, 255);
 			COLOR3 outlineColor = COLOR3(0, 0, 0);
 			if (ent->isIconSprite) {
@@ -2822,8 +2825,7 @@ bool Renderer::drawModelsAndSprites() {
 				outlineColor = COLOR3(255, 255, 0);
 			}
 
-			((SprRenderer*)mdl)->draw(ent->drawOrigin + worldOffset, ent->drawAngles, renderOpts,
-				color, outlineColor, ent->isIconSprite);
+			((SprRenderer*)mdl)->draw(drawOri, ent->drawAngles, renderOpts, color, outlineColor, ent->isIconSprite);
 		}
 		
 		drawCount++;
@@ -2831,7 +2833,7 @@ bool Renderer::drawModelsAndSprites() {
 		// debug the model verts bounding box
 		if (false && mdl->isStudioModel()) {
 			vec3 mins, maxs;
-			((MdlRenderer*)mdl)->getModelBoundingBox(ent->drawAngles, ent->drawSequence, mins, maxs);
+			((MdlRenderer*)mdl)->getModelBoundingBox(ent->drawAngles, renderOpts.sequence, mins, maxs);
 			mins += ent->drawOrigin;
 			maxs += ent->drawOrigin;
 

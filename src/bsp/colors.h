@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "vectors.h"
 
 #pragma pack(push, 1)
 struct COLOR3
@@ -8,6 +9,7 @@ struct COLOR3
 
 	COLOR3() {}
 	COLOR3(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b) {}
+	vec3 toVec() { return vec3(r / 255.0f, g / 255.0f, b / 255.0f); }
 };
 #pragma pack(pop)
 struct COLOR4

@@ -6,8 +6,6 @@
 #include "globals.h"
 
 // v5 fix:
-// body/skin for mdl (or new_model/new_body for squadmaker
-// iconsprites too big
 // tooltips for entity report filters
 // test settings migration v4 to v5
 // "pitch" doesn't work for light_environment (svencoop1)

@@ -2649,7 +2649,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 					KeyvalueChoice& choice = keyvalue.choices[k];
 					bool selected = choice.svalue == value || (value.empty() && choice.svalue == keyvalue.defaultValue);
 
-					if (ImGui::Selectable(choice.name.c_str(), selected)) {
+					if (ImGui::Selectable((choice.name).c_str(), selected)) {
 						for (int i = 0; i < g_app->pickInfo.ents.size(); i++) {
 							int idx = g_app->pickInfo.ents[i];
 							Entity* ent = g_app->pickInfo.getMap()->ents[idx];
@@ -2659,6 +2659,13 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 						
 						app->updateEntConnections();
 						app->pushEntityUndoState("Edit Keyvalue");
+					}
+					if (ImGui::IsItemHovered()) {
+						string tooltip = choice.svalue + " : " + choice.name;
+						if (choice.desc.size()) {
+							tooltip += " : " + choice.desc;
+						}
+						ImGui::SetTooltip(tooltip.c_str());
 					}
 				}
 

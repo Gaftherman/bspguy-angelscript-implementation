@@ -270,7 +270,7 @@ EntRenderOpts Entity::getRenderOpts() {
 	cachedRenderOpts.rendermode = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
 
 	kv = keyvalues.find("renderamt");
-	cachedRenderOpts.renderamt = kv == keyvalues.end() ? 0.0f : atoi(kv->second.c_str());
+	cachedRenderOpts.renderamt = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
 
 	kv = keyvalues.find("rendercolor");
 	cachedRenderOpts.rendercolor = kv == keyvalues.end() ? COLOR3(0,0,0) : parseColor(kv->second);
@@ -282,7 +282,20 @@ EntRenderOpts Entity::getRenderOpts() {
 	cachedRenderOpts.scale = kv == keyvalues.end() ? 1.0f : atof(kv->second.c_str());
 
 	kv = keyvalues.find("vp_type");
-	cachedRenderOpts.vp_type = kv == keyvalues.end() ? 0.0f : atoi(kv->second.c_str());
+	cachedRenderOpts.vp_type = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
+
+	kv = keyvalues.find("new_body");
+	cachedRenderOpts.body = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
+	kv = keyvalues.find("body");
+	cachedRenderOpts.body = kv == keyvalues.end() ? cachedRenderOpts.body : atoi(kv->second.c_str());
+
+	kv = keyvalues.find("new_skin");
+	cachedRenderOpts.skin = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
+	kv = keyvalues.find("skin");
+	cachedRenderOpts.skin = kv == keyvalues.end() ? cachedRenderOpts.skin : atoi(kv->second.c_str());
+
+	kv = keyvalues.find("sequence");
+	cachedRenderOpts.sequence = kv == keyvalues.end() ? 0 : atoi(kv->second.c_str());
 
 	hasCachedRenderOpts = true;
 	return cachedRenderOpts;

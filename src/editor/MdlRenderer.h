@@ -30,7 +30,7 @@ struct MdlMeshRender {
 	short* origNorms; // original mdl normals used to create the rendered normal
 	int numVerts;
 	int flags;
-	Texture* texture;
+	int skinref; // index into glTextures or remappable skin
 	VertexBuffer* buffer;
 };
 
@@ -51,7 +51,7 @@ public:
 	MdlRenderer(ShaderProgram* shaderProgram, string modelPath);
 	~MdlRenderer();
 
-	void draw(vec3 origin, vec3 angles, int sequence, vec3 viewerOrigin, vec3 viewerRight, vec3 color);
+	void draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewerOrigin, vec3 viewerRight);
 
 	void upload() override; // called by main thread to upload data to gpu
 
