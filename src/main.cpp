@@ -6,7 +6,12 @@
 #include "globals.h"
 
 // v5 fix:
-// initial font load is very slow on netbook
+// body/skin for mdl (or new_model/new_body for squadmaker
+// iconsprites too big
+// tooltips for entity report filters
+// test settings migration v4 to v5
+// "pitch" doesn't work for light_environment (svencoop1)
+// alt instead of ctrl for slow movement, then can use hotkeys
 
 // v5 new:
 // ripent saftey warning

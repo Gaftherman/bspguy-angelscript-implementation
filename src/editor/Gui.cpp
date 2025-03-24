@@ -2476,7 +2476,6 @@ void Gui::drawKeyvalueEditor_SmartEditTab(Fgd* fgd) {
 			if (key == "spawnflags") {
 				continue;
 			}
-			string niceName = keyvalue.description;
 
 			if (currentGroup != keyvalue.fgdSource) {
 				if (i != 0) {
@@ -2580,7 +2579,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 		}
 
 		string value = matchingValues ? matchValue : "(no change)";
-		string niceName = keyvalue.description;
+		string niceName = keyvalue.smartName;
 
 		// TODO: ImGui doesn't have placeholder text like in HTML forms,
 		// but it would be nice to show an example/default value here somehow.
@@ -2611,8 +2610,12 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 		}
 		ImGui::Text(keyNames[bufferIdx]);
 		if (ImGui::IsItemHovered()) {
+			string tooltip = key + " : " + niceName;
+			if (keyvalue.description.size()) {
+				tooltip += " : " + keyvalue.description;
+			}
 			//ImGui::SetTooltip((key + "(" + keyvalue.valueType + ") : " + niceName).c_str());
-			ImGui::SetTooltip((key + " : " + niceName).c_str());
+			ImGui::SetTooltip(tooltip.c_str());
 		}
 		ImGui::NextColumn();
 
@@ -2739,9 +2742,14 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 }
 
 void Gui::drawKeyvalueEditor_FlagsTab(Fgd* fgd) {
-	if (!fgd) {
+	if (app->fgds.empty()) {
 		ImGui::Text("No FGD loaded.");
 		ImGui::Text("Add an FGD in Settings or use the Raw Edit tab instead.");
+		return;
+	}
+	if (!fgd) {
+		Entity* ent = g_app->pickInfo.getEnt();
+		ImGui::Text("No entity definition found for %s.", ent->getClassname().c_str());
 		return;
 	}
 

@@ -2,7 +2,7 @@
 #include <vector>
 #include "colors.h"
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <vector>
 #include "types.h"
 
@@ -31,14 +31,16 @@ enum FGD_KEY_TYPES {
 struct KeyvalueChoice {
 	string name;
 	string svalue;
-	int ivalue;
-	bool isInteger;
+	string desc; // if "flags", this is a 0/1 indicating default ticked status
+	int ivalue = 0;
+	bool isInteger = false;
 };
 
 struct KeyvalueDef {
 	string name;
 	string valueType;
 	int iType;
+	string smartName;
 	string description;
 	string defaultValue;
 	string fgdSource; // FGD file and class this originates from
@@ -52,7 +54,8 @@ class Fgd;
 struct FgdClass {
 	int classType;
 	string name;
-	string description;
+	string description; // optional
+	string url; // optional J.A.C.K field
 	vector<KeyvalueDef> keyvalues;
 	vector<string> baseClasses;
 	string spawnFlagNames[32];
@@ -65,7 +68,7 @@ struct FgdClass {
 	vec3 mins;
 	vec3 maxs;
 	COLOR3 color;
-	map< string, string > otherTypes; // unrecognized types
+	unordered_map< string, string > otherTypes; // unrecognized types
 
 	// if false, then need to get props from the base class
 	bool colorSet;
@@ -103,7 +106,7 @@ public:
 	string path;
 	string name;
 	vector<FgdClass*> classes;
-	map<string, FgdClass*> classMap;
+	unordered_map<string, FgdClass*> classMap;
 
 	vector<FgdGroup> pointEntGroups;
 	vector<FgdGroup> solidEntGroups;
@@ -117,33 +120,23 @@ public:
 	FgdClass* getFgdClass(string cname);
 
 private:
-	int lineNum;
-	string line; // current line being parsed
+	char* startFileData;
+	char* endFileData;
 
-	void parseClassHeader(FgdClass& outClass);
-	void parseKeyvalue(FgdClass& outClass, string fgdName);
-	void parseChoicesOrFlags(KeyvalueDef& outKey);
+	void parseClass(char*& readPtr, FgdClass& outClass);
+	void parseClassProp(char*& readPtr, FgdClass& outClass);
+	void parseKeyvalue(char*& readPtr, FgdClass& outClass);
+	void parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey);
 
 	void processClassInheritance();
 
 	void createEntGroups();
 	void setSpawnflagNames();
 
-	// true if value begins a group of strings separated by spaces
-	bool stringGroupStarts(string s);
-
-	// true if any closing paren or quote is found
-	bool stringGroupEnds(string s);
-
-	// get the value inside a prefixed set of parens
-	string getValueInParens(string s);
-
-	// groups strings separated by spaces but enclosed in quotes/parens
-	vector<string> groupParts(vector<string>& ungrouped);
-
-	string getValueInQuotes(string s);
-
-	vector<string> splitStringIgnoringQuotes(string s, string delimitter);
-
 	void sortClasses();
+
+	// read string up until a delimiter is found.
+	// return the string and increment readPtr after it
+	string readUntil(char*& readPtr, const char* delimit);
+	string readUntilNot(char*& readPtr, const char* delimit);
 };

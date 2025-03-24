@@ -5,7 +5,7 @@
 #include "globals.h"
 #include <algorithm>
 
-map<string, int> fgdKeyTypes{
+unordered_map<string, int> fgdKeyTypes{
 	{"integer", FGD_KEY_INTEGER},
 	{"choices", FGD_KEY_CHOICES},
 	{"flags", FGD_KEY_FLAGS},
@@ -16,6 +16,8 @@ map<string, int> fgdKeyTypes{
 	{"target_source", FGD_KEY_TARGET_SRC},
 	{"target_destination", FGD_KEY_TARGET_DST}
 };
+
+const char* whitespace = " \t\n\r";
 
 Fgd::Fgd(string path) {
 	this->path = path;
@@ -69,7 +71,6 @@ bool Fgd::parse() {
 
 	ifstream in(path);
 
-	lineNum = 0;
 	int lastBracket = -1;
 
 	FgdClass* fgdClass = new FgdClass();
@@ -81,24 +82,45 @@ bool Fgd::parse() {
 		fname = path.substr(lastSlash + 1);
 	}
 	
+	string fullText = "";
 
-	line = "";
+	string line = "";
 	while (getline(in, line)) {
-		lineNum++;
+		fullText += line + "\n";
+	}
+	fullText += "\n"; // simplifies EOM tests
 
-		// strip comments
-		size_t cpos = line.find("//");
-		if (cpos != string::npos)
-			line = line.substr(0, cpos);
+	const char* whitespace = " \t\n\r";
+	int readPos = 0;
+	char* fullFileData = new char[fullText.length()];
+	startFileData = fullFileData;
+	endFileData = fullFileData + fullText.length();
+	char* readPtr = fullFileData;
+	memcpy(fullFileData, &fullText[0], fullText.length());
 
-		line = trimSpaces(line);
+	while (true) {
+		// skip over comments
+		readUntil(readPtr, "/@");
+		if (readPtr >= endFileData) { break; }
 
-		if (line.empty())
+		if (readPtr[0] == '/' && readPtr[1] == '/') {
+			readUntil(readPtr, "\n");
 			continue;
-		
-		if (line.find("@include") == 0) {
-			string baseFgd = getValueInQuotes(line.substr(8));
-			string basePath = path.substr(0, path.find_last_of("/\\") + 1) + baseFgd;
+		}
+
+		// name of the definition
+		readPtr += 1;
+		char* oldReadPtr = readPtr;
+		string defName = readUntil(readPtr, whitespace);
+		if (readPtr >= endFileData) { break; }
+
+		if (defName == "include") {
+			string fgdName = trimSpaces(readUntil(readPtr, "/@"));
+			if (readPtr >= endFileData) { break; }
+
+			replaceAll(fgdName, "\"", "");
+
+			string basePath = path.substr(0, path.find_last_of("/\\") + 1) + fgdName;
 
 			if (g_parsed_fgds.count(basePath)) {
 				continue;
@@ -113,43 +135,19 @@ bool Fgd::parse() {
 			delete tmp;
 			continue;
 		}
+		else {
+			readPtr = oldReadPtr;
 
-		if (line[0] == '@') {
-			if (bracketNestLevel) {
-				logf("ERROR: New FGD class definition starts before previous one ends (%s line %d)\n", name.c_str(), lineNum);
+			FgdClass* outClass = new FgdClass();
+			parseClass(readPtr, *outClass);
+			if (outClass->name.length()) {
+				classes.push_back(outClass);
+				classMap[outClass->name] = outClass;
 			}
-
-			parseClassHeader(*fgdClass);
-		}
-
-		if (line.find('[') != string::npos) {
-			bracketNestLevel++;
-		}
-		if (line.find(']') != string::npos) {
-			bracketNestLevel--;
-			if (bracketNestLevel == 0) {
-				classes.push_back(fgdClass);
-				fgdClass = new FgdClass();
-			}
-		}
-
-		if (line == "[" || line == "]") {
-			continue;
-		}
-
-		if (bracketNestLevel == 1) {
-			parseKeyvalue(*fgdClass, fname);
-		}
-
-		if (bracketNestLevel == 2) {
-			if (fgdClass->keyvalues.size() == 0) {
-				logf("ERROR: FGD Choice values begin before any keyvalue are defined (%s.fgd line %d)\n", name.c_str(), lineNum);
-				continue;
-			}
-			KeyvalueDef& lastKey = fgdClass->keyvalues[fgdClass->keyvalues.size()-1];
-			parseChoicesOrFlags(lastKey);
 		}
 	}
+
+	delete[] fullFileData;
 
 	processClassInheritance();
 	createEntGroups();
@@ -158,228 +156,408 @@ bool Fgd::parse() {
 	return true;
 }
 
-void Fgd::parseClassHeader(FgdClass& fgdClass) {
-	vector<string> headerParts = splitString(line, "=");
+string Fgd::readUntil(char*& readPtr, const char* delimit) {
+	if (readPtr >= endFileData) return "";
+	int spanEnd = strcspn(readPtr, delimit);
+	string span = std::string(readPtr, spanEnd);
+	readPtr += spanEnd;
+	return span;
+}
 
-	// group parts enclosed in parens or quotes
-	vector<string> typeParts = splitString(trimSpaces(headerParts[0]), " ");
-	typeParts = groupParts(typeParts);
+string Fgd::readUntilNot(char*& readPtr, const char* delimit) {
+	if (readPtr >= endFileData) return "";
+	int spanEnd = strspn(readPtr, delimit);
+	string span = std::string(readPtr, spanEnd);
+	readPtr += spanEnd;
+	return span;
+}
 
-	string classType = toLowerCase(typeParts[0]);
+void Fgd::parseClass(char*& readPtr, FgdClass& outClass) {
+	// example class with no keys:
+	// @PointClass base(Targetname, Angles, Origin) studio("path/model.mdl") = 
+	//		example_entity_name : "example entity description, visible in Hammers 'help' Box. []
+	
+	// class type
+	string ctype = toLowerCase(readUntil(readPtr, whitespace));
+	if (readPtr >= endFileData) { return; }
 
-	if (classType == "@baseclass") {
-		fgdClass.classType = FGD_CLASS_BASE;
+	if (ctype == "pointclass") {
+		outClass.classType = FGD_CLASS_POINT;
 	}
-	else if (classType == "@solidclass") {
-		fgdClass.classType = FGD_CLASS_SOLID;
+	else if (ctype == "solidclass") {
+		outClass.classType = FGD_CLASS_SOLID;
 	}
-	else if (classType == "@pointclass") {
-		fgdClass.classType = FGD_CLASS_POINT;
+	else if (ctype == "baseclass") {
+		outClass.classType = FGD_CLASS_BASE;
 	}
 	else {
-		logf("ERROR: Unrecognized FGD class type '%s' (%s line %d)\n", typeParts[0].c_str(), name.c_str(), lineNum);
-		return;
-	}
-	
-	// parse constructors/properties
-	for (int i = 1; i < typeParts.size(); i++) {
-		string lpart = toLowerCase(typeParts[i]);
-
-		if (lpart.find("base(") == 0) {
-			vector<string> baseClassList = splitString(getValueInParens(typeParts[i]), ",");
-			for (int k = 0; k < baseClassList.size(); k++) {
-				string baseClass = trimSpaces(baseClassList[k]);
-				fgdClass.baseClasses.push_back(baseClass);
-			}
-		}
-		else if (lpart.find("size(") == 0) {
-			vector<string> sizeList = splitString(getValueInParens(typeParts[i]), ",");
-
-			if (sizeList.size() == 1) {
-				vec3 size = parseVector(sizeList[0]);
-				fgdClass.mins = size * -0.5f;
-				fgdClass.maxs = size * 0.5f;
-			}
-			else if (sizeList.size() == 2) {
-				fgdClass.mins = parseVector(sizeList[0]);
-				fgdClass.maxs = parseVector(sizeList[1]);
-			}
-			else {
-				logf("ERROR: Expected 2 vectors in size() property (%s line %d)\n", name.c_str(), lineNum);
-			}
-
-			fgdClass.sizeSet = true;
-		}
-		else if (lpart.find("color(") == 0) {
-			vector<string> nums = splitString(getValueInParens(typeParts[i]), " ");
-
-			if (nums.size() == 3) {
-				fgdClass.color = { (byte)atoi(nums[0].c_str()), (byte)atoi(nums[1].c_str()), (byte)atoi(nums[2].c_str()) };
-			}
-			else {
-				logf("ERROR: Expected 3 components in color() property (%s.fgd line %d)\n", name.c_str(), lineNum);
-			}
-
-			fgdClass.colorSet = true;
-		}
-		else if (lpart.find("studio(") == 0) {
-			fgdClass.model = getValueInParens(typeParts[i]);
-			fgdClass.isModel = true;
-		}
-		else if (lpart.find("iconsprite(") == 0) {
-			fgdClass.iconSprite = getValueInParens(typeParts[i]);
-		}
-		else if (lpart.find("sprite(") == 0) {
-			fgdClass.sprite = getValueInParens(typeParts[i]);
-			fgdClass.isSprite = true;
-		}
-		else if (lpart.find("decal(") == 0) {
-			fgdClass.isDecal = true;
-		}
-		else if (typeParts[i].find("(") != string::npos) {
-			string typeName = typeParts[i].substr(0, typeParts[i].find("("));
-			logf("WARNING: Unrecognized FGD type '%s' (%s.fgd line %d)\n", typeName.c_str(), name.c_str(), lineNum);
-		}
+		logf("WARNING: Unrecognized definition type %s (%s.fgd pos %d)\n",
+			ctype.c_str(), name.c_str(), readPtr - startFileData);
 	}
 
-	if (headerParts.size() == 0) {
-		logf("ERROR: Unexpected end of class header (%s.fgd line %d)\n", name.c_str(), lineNum);
-		return;
+	// class props
+	while (true) {
+		readUntilNot(readPtr, whitespace);
+		if (readPtr >= endFileData) { return; }
+
+		if (readPtr[0] == '=') {
+			break; // end of props
+		}
+
+		parseClassProp(readPtr, outClass);
+		if (readPtr >= endFileData) { return; }
 	}
 
-	vector<string> nameParts = splitStringIgnoringQuotes(headerParts[1], ":");
+	// class name
+	readPtr += 1; // skip =
+	if (readPtr >= endFileData) { return; }
 
-	if (nameParts.size() >= 2) {
-		fgdClass.description = getValueInQuotes(nameParts[1]);
+	outClass.name = trimSpaces(readUntil(readPtr, "[:/"));
+	if (readPtr >= endFileData) { return; }
+
+	// skip over comments
+	if (readPtr[0] == '/' && readPtr[1] == '/') {
+		readUntil(readPtr, "\n");
+		readPtr++;
+		if (readPtr >= endFileData) { return; }
 	}
-	if (nameParts.size() >= 1) {
-		fgdClass.name = trimSpaces(nameParts[0]);
-		// strips brackets if they're there
-		fgdClass.name = fgdClass.name.substr(0, fgdClass.name.find(" "));
+
+	// optional description, url, and any future fields
+	int fieldCount = 0;
+	while (true) {
+		if (readPtr[0] == '[') {
+			// end of optional fields
+			readPtr += 1; // skip [
+			if (readPtr >= endFileData) { return; }
+			break;
+		}
+
+		readPtr += 1; // skip :
+		if (readPtr >= endFileData) { return; }
+
+		string optionalField = trimSpaces(readUntil(readPtr, "[:\"/"));
+
+		// skip over comments
+		if (readPtr[0] == '/' && readPtr[1] == '/') {
+			readUntil(readPtr, "\n");
+			readPtr++;
+			if (readPtr >= endFileData) { return; }
+			continue;
+		}
+		// skip special chars in quoted values
+		if (readPtr[0] == '\"') {
+			readPtr++;
+			if (readPtr >= endFileData) { return; }
+			optionalField = trimSpaces(readUntil(readPtr, "\""));
+			if (readPtr >= endFileData) { return; }
+			readUntil(readPtr, "[:");
+		}
+		
+		if (fieldCount == 0) {
+			// description field
+			replaceAll(optionalField, "\"", "");
+			outClass.description = optionalField;
+		}
+		else if (fieldCount == 1) {
+			// url field (J.A.C.K. only)
+			replaceAll(optionalField, "\"", "");
+			outClass.url = optionalField;
+		}
+		else {
+			logf("WARNING: Unrecognized optional class field %s (%s.fgd pos %d)\n",
+				optionalField.c_str(), name.c_str(), readPtr - startFileData);
+		}
+
+		fieldCount++;
+	}
+
+	// keyvalues
+	while (true) {
+		readUntilNot(readPtr, whitespace);
+		if (readPtr >= endFileData) { return; }
+
+		if (readPtr[0] == ']') {
+			// end of class
+			readPtr += 1; // skip ]
+			if (readPtr >= endFileData) { return; }
+			return;
+		}
+
+		// skip over comments
+		if (readPtr[0] == '/' && readPtr[1] == '/') {
+			readUntil(readPtr, "\n");
+			readPtr++;
+			continue;
+		}
+
+		parseKeyvalue(readPtr, outClass);
+		if (readPtr >= endFileData) { return; }
 	}
 }
 
-void Fgd::parseKeyvalue(FgdClass& outClass, string fgdName) {
-	vector<string> keyParts = splitStringIgnoringQuotes(line, ":");
+void Fgd::parseClassProp(char*& readPtr, FgdClass& outClass) {
+	// example props:
+	// base(Targetname, Angles, Origin) studio("path/model.mdl")
+
+	string propName = trimSpaces(readUntil(readPtr, "("));
+	readPtr++;
+	string propContent = trimSpaces(readUntil(readPtr, "\")"));
+
+	// skip special chars in quoted values
+	while (readPtr[0] == '\"') {
+		readPtr++;
+		if (readPtr >= endFileData) { return; }
+		propContent += trimSpaces(readUntil(readPtr, "\""));
+		readPtr++;
+		if (readPtr >= endFileData) { return; }
+		readUntil(readPtr, "\")");
+	}
+
+	string lowerProp = toLowerCase(propName);
+	readPtr++;
+
+	if (lowerProp == "base") {
+		vector<string> baseClassList = splitString(propContent, ",");
+		for (int k = 0; k < baseClassList.size(); k++) {
+			string baseClass = trimSpaces(baseClassList[k]);
+			outClass.baseClasses.push_back(baseClass);
+		}
+	}
+	else if (lowerProp == "size") {
+		vector<string> sizeList = splitString(propContent, ",");
+
+		if (sizeList.size() == 1) {
+			vec3 size = parseVector(sizeList[0]);
+			outClass.mins = size * -0.5f;
+			outClass.maxs = size * 0.5f;
+		}
+		else if (sizeList.size() == 2) {
+			outClass.mins = parseVector(sizeList[0]);
+			outClass.maxs = parseVector(sizeList[1]);
+		}
+		else {
+			logf("ERROR: Expected 2 vectors in size() property (%s.fgd pos %d)\n", name.c_str(), readPtr - startFileData);
+		}
+
+		outClass.sizeSet = true;
+	}
+	else if (lowerProp == "color") {
+		vector<string> nums = splitString(propContent, " ");
+
+		if (nums.size() == 3) {
+			outClass.color = { (byte)atoi(nums[0].c_str()), (byte)atoi(nums[1].c_str()), (byte)atoi(nums[2].c_str()) };
+		}
+		else {
+			logf("ERROR: Expected 3 components in color() property (%s.fgd pos %d)\n", name.c_str(), readPtr - startFileData);
+		}
+
+		outClass.colorSet = true;
+	}
+	else if (lowerProp == "studio") {
+		replaceAll(propContent, "\"", "");
+		outClass.model = propContent;
+		outClass.isModel = true;
+	}
+	else if (lowerProp == "iconsprite") {
+		replaceAll(propContent, "\"", "");
+		outClass.iconSprite = propContent;
+	}
+	else if (lowerProp == "sprite") {
+		replaceAll(propContent, "\"", "");
+		outClass.sprite = propContent;
+		outClass.isSprite = true;
+	}
+	else if (lowerProp == "decal") {
+		outClass.isDecal = true;
+	}
+	else {
+		debugf("Unrecognized class prop '%s' (%s.fgd pos %d)\n",
+			propName.c_str(), name.c_str(), readPtr - startFileData);
+	}
+}
+
+void Fgd::parseKeyvalue(char*& readPtr, FgdClass& outClass) {
+	// FGD is supposed to be whitespace agnostic but I don't see any way to delimit keyvalues here.
+	// There can be any number of optional fields separated by ":". Maybe I want to add "asdf(integer)"
+	// to one of my fields and ruing everything? I'm gonna have to go with newlines
+	//
+	// health(integer)
+	// health(integer) readonly
+	// health(integer) : "Strength"
+	// health(integer) : "Strength" : 1 : "Number of points of damage to take before breaking. 0 means don't break."
+	// health(integer) : "Strength" : : "Number of points of damage to take before breaking. 0 means don't break."
+	// health(integer) readonly : "Strength" : : "This keyvalue is not editable."
 
 	KeyvalueDef def;
+
+	def.name = trimSpaces(readUntil(readPtr, "(]/"));
+	if (readPtr >= endFileData) { return; }
+
+	if (readPtr == "]") {
+		// end of class
+		return;
+	}
+
 	def.color = outClass.color;
 
-	def.name = keyParts[0].substr(0, keyParts[0].find("("));
-	def.valueType = toLowerCase(getValueInParens(keyParts[0]));
+	readPtr++;
+	def.valueType = trimSpaces(readUntil(readPtr, ")]"));
+	if (readPtr >= endFileData) { return; }
+	if (readPtr == "]") {
+		// end of class
+		return;
+	}
+	readPtr++;
 
 	def.iType = FGD_KEY_STRING;
-	if (fgdKeyTypes.find(def.valueType) != fgdKeyTypes.end()) {
-		def.iType = fgdKeyTypes[def.valueType];
-	}
-
-	if (keyParts.size() > 1)
-		def.description = getValueInQuotes(keyParts[1]);
-	else {
-		def.description = def.name;
-		
-		// capitalize (infodecal)
-		if ((def.description[0] > 96) && (def.description[0] < 123)) 
-			def.description[0] = def.description[0] - 32;
-	}
-
-	if (keyParts.size() > 2) {
-		if (keyParts[2].find("=") != string::npos) { // choice
-			def.defaultValue = trimSpaces(keyParts[2].substr(0, keyParts[2].find("=")));
-		}
-		else if (keyParts[2].find("\"") != string::npos) { // string
-			def.defaultValue = getValueInQuotes(keyParts[2]);
-		}
-		else { // integer
-			def.defaultValue = trimSpaces(keyParts[2]);
-		}
+	auto idef = fgdKeyTypes.find(def.valueType);
+	if (idef != fgdKeyTypes.end()) {
+		def.iType = idef->second;
 	}
 
 	def.fgdSource = outClass.name;
-	def.sourceDesc = std::string(fgdName.c_str()) + " --> " + std::string(outClass.name.c_str())
+	def.sourceDesc = std::string(name.c_str()) + " --> " + std::string(outClass.name.c_str())
 		+ " --> " + std::string(def.name.c_str());
 
-	outClass.keyvalues.push_back(def);
+	int fieldCount = 0;
+	while (true) {
+		string field = trimSpaces(readUntil(readPtr, "\":\n=]/"));
+		if (readPtr >= endFileData) { return; }
 
-	//logf << "ADD KEY " << def.name << "(" << def.valueType << ") : " << def.description << " : " << def.defaultValue << endl;
+		// skip special chars in quoted values
+		if (readPtr[0] == '\"') {
+			readPtr++;
+			if (readPtr >= endFileData) { return; }
+			field = trimSpaces(readUntil(readPtr, "\""));
+			if (readPtr >= endFileData) { return; }
+			readUntil(readPtr, ":\n=]/");
+		}
+		// skip over comments
+		if (readPtr[0] == '/' && readPtr[1] == '/') {
+			readUntil(readPtr, "\n");
+			if (readPtr >= endFileData) { return; }
+		}
+
+		if (readPtr[0] == ']') {
+			// end of class
+			outClass.keyvalues.push_back(def);
+			return;
+		}
+		if (readPtr[0] == '=') {
+			// start of choices or flags
+			readPtr++;
+			parseChoices(readPtr, outClass, def);
+			outClass.keyvalues.push_back(def);
+			return;
+		}
+		if (readPtr[0] == ':' || readPtr[0] == '\n') {
+			// optional field
+			if (fieldCount == 0) {
+				// modifiers after key name and type
+			}
+			else if (fieldCount == 1) {
+				def.smartName = field;
+			}
+			else if (fieldCount == 2) {
+				def.defaultValue = field;
+			}
+			else if (fieldCount == 3) {
+				def.description = field;
+			}
+			else {
+				logf("WARNING: Unrecognized keyvalue prop '%s' in class %s (%s.fgd pos %d)\n",
+					field.c_str(), outClass.name.c_str(), name.c_str(), readPtr - startFileData);
+			}
+
+			if (readPtr[0] == '\n') {
+				// end of keyvalue
+				outClass.keyvalues.push_back(def);
+				return;
+			}
+
+			readPtr++;
+			fieldCount++;
+		}
+	}
 }
 
-void Fgd::parseChoicesOrFlags(KeyvalueDef& outKey) {
-	vector<string> keyParts = splitString(line, ":");
+void Fgd::parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey) {
+	// Again, I'm not seeing a way delimit options here. Maybe I want to add "0:"" to one of my fields.
+	// Going with newlines. The 3rd field is an optional description for J.A.C.K.
+	// 
+	// [
+	//		0 : "something" : "This is something"
+	//		1 : "something else (default)" : "This is something else"
+	//		2 : "something completely different" : "This is something completely different"
+	// ]
 
-	KeyvalueChoice def;
+	readUntil(readPtr, "[");
+	readPtr++;
+	if (readPtr >= endFileData) { return; }
 
-	if (keyParts[0].find("\"") != string::npos) {
-		def.svalue = getValueInQuotes(keyParts[0]);
-		def.ivalue = 0;
-		def.isInteger = false;
-	}
-	else {
-		def.svalue = trimSpaces(keyParts[0]);
-		def.ivalue = atoi(keyParts[0].c_str());
-		def.isInteger = true;
-	}
-	
-	if (keyParts.size() > 1)
-		def.name = getValueInQuotes(keyParts[1]);
+	KeyvalueChoice choice;
+	int fieldCount = 0;
+	while (true) {
+		string field = trimSpaces(readUntil(readPtr, "\":\n]/"));
+		if (readPtr >= endFileData) { return; }
 
-	outKey.choices.push_back(def);
+		// skip over comments
+		if (readPtr[0] == '/' && readPtr[1] == '/') {
+			readUntil(readPtr, "\n");
+			if (readPtr >= endFileData) { return; }
+		}
+		// skip special chars in quoted values
+		bool isString = false;
+		if (readPtr[0] == '\"') {
+			readPtr++;
+			field = trimSpaces(readUntil(readPtr, "\""));
+			if (readPtr >= endFileData) { return; }
+			readUntil(readPtr, ":\n]");
+			isString = true;
+			if (readPtr >= endFileData) { return; }
+		}
 
-	//logf << "ADD CHOICE LINE " << lineNum << " = " << def.svalue << " : " << def.name << endl;
-}
-
-vector<string> Fgd::groupParts(vector<string>& ungrouped) {
-	vector<string> grouped;
-
-	for (int i = 0; i < ungrouped.size(); i++) {
-
-		if (stringGroupStarts(ungrouped[i])) {
-			string groupedPart = ungrouped[i];
-			for (i = i + 1; i < ungrouped.size(); i++) {
-				groupedPart += " " + ungrouped[i];
-				if (stringGroupEnds(ungrouped[i])) {
-					break;
+		if (readPtr[0] == ']') {
+			// end of choices
+			if (fieldCount > 0 || choice.svalue.length()) {
+				outKey.choices.push_back(choice);
+			}
+			readPtr++;
+			return;
+		}
+		if (readPtr[0] == '\n') {
+			// end of option
+			if (fieldCount > 0 || choice.svalue.length()) {
+				outKey.choices.push_back(choice);
+				choice = KeyvalueChoice();
+				fieldCount = 0;
+			}
+			readPtr++;
+		}
+		else if (readPtr[0] == ':') {
+			// end of field
+			if (fieldCount == 0) {
+				choice.svalue = field;
+				if (!isString) {
+					choice.isInteger = true;
+					choice.ivalue = atoi(field.c_str());
 				}
 			}
-			grouped.push_back(groupedPart);
+			else if (fieldCount == 1) {
+				choice.name = field;
+			}
+			else if (fieldCount == 2) {
+				choice.desc = field;
+			}
+			else {
+				logf("WARNING: Unrecognized keyvalue choice prop '%s' in class %s (%s.fgd pos %d)\n",
+					field.c_str(), outClass.name.c_str(), name.c_str(), readPtr - startFileData);
+			}
+
+			fieldCount++;
+			readPtr++;
 		}
-		else {
-			grouped.push_back(ungrouped[i]);
-		}
 	}
-
-	return grouped;
-}
-
-bool Fgd::stringGroupStarts(string s) {
-	if (s.find("(") != string::npos) {
-		return s.find(")") == string::npos;
-	}
-	
-	size_t startStringPos = s.find("\"");
-	if (startStringPos != string::npos) {
-		size_t endStringPos = s.rfind("\"");
-		return endStringPos == startStringPos || endStringPos == string::npos;
-	}
-	
-	return false;
-}
-
-bool Fgd::stringGroupEnds(string s) {
-	return s.find(")") != string::npos || s.find("\"") != string::npos;
-}
-
-string Fgd::getValueInParens(string s) {
-	s = s.substr(s.find("(") + 1);
-	s = s.substr(0, s.rfind(")"));
-	replaceAll(s, "\"", "");
-	return trimSpaces(s);
-}
-
-string Fgd::getValueInQuotes(string s) {
-	s = s.substr(s.find("\"") + 1);
-	s = s.substr(0, s.rfind("\""));
-	return s;
 }
 
 void Fgd::processClassInheritance() {
@@ -574,48 +752,6 @@ void Fgd::setSpawnflagNames() {
 			}
 		}
 	}
-}
-
-vector<string> Fgd::splitStringIgnoringQuotes(string s, string delimitter) {
-	vector<string> split;
-	if (s.size() == 0 || delimitter.size() == 0)
-		return split;
-
-	size_t delimitLen = delimitter.length();
-	while (s.size()) {
-
-		bool foundUnquotedDelimitter = false;
-		int searchOffset = 0;
-		while (!foundUnquotedDelimitter && searchOffset < s.size()) {
-			size_t delimitPos = s.find(delimitter, searchOffset);
-
-			if (delimitPos == string::npos) {
-				split.push_back(s);
-				return split;
-			}
-
-			int quoteCount = 0;
-			for (int i = 0; i < delimitPos; i++) {
-				quoteCount += s[i] == '"';
-			}
-
-			if (quoteCount % 2 == 1) {
-				searchOffset = delimitPos + 1;
-				continue;
-			}
-
-			split.push_back(s.substr(0, delimitPos));
-			s = s.substr(delimitPos + delimitLen);
-			foundUnquotedDelimitter = true;
-		}
-
-		if (!foundUnquotedDelimitter) {
-			break;
-		}
-		
-	}
-
-	return split;
 }
 
 bool sortFgdClasses(FgdClass* a, FgdClass* b) { return a->name < b->name; }
