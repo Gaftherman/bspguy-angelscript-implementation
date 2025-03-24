@@ -1668,65 +1668,73 @@ STRUCTCOUNT Bsp::delete_unused_hulls(bool noProgress) {
 				needsVisibleHull = !is_invisible_solid(usageEnts[k]);
 			}
 			else if (passableEnts.find(cname) != passableEnts.end()) {
-				needsPlayerHulls = needsMonsterHulls = !(spawnflags & 8); // "Passable" or "Not solid" unchecked
-				needsVisibleHull = !(spawnflags & 8) || !is_invisible_solid(usageEnts[k]);
+				bool notPassable = !(spawnflags & 8); // "Passable" or "Not solid" unchecked
+				needsPlayerHulls |= notPassable;
+				needsMonsterHulls |= notPassable;
+				needsVisibleHull |= notPassable || !is_invisible_solid(usageEnts[k]);
 			}
 			else if (cname.find("trigger_") == 0) {
 				if (conditionalPointEntTriggers.find(cname) != conditionalPointEntTriggers.end()) {
-					needsVisibleHull = spawnflags & 8; // "Everything else" flag checked
-					needsPlayerHulls = !(spawnflags & 2); // "No clients" unchecked
-					needsMonsterHulls = (spawnflags & 1) || (spawnflags & 4); // "monsters" or "pushables" checked
+					needsVisibleHull |= !!(spawnflags & 8); // "Everything else" flag checked
+					needsPlayerHulls |= !(spawnflags & 2); // "No clients" unchecked
+					needsMonsterHulls |= (spawnflags & 1) || (spawnflags & 4); // "monsters" or "pushables" checked
 				}
 				else if (cname == "trigger_push") { 
-					needsPlayerHulls = !(spawnflags & 8); // "No clients" unchecked
-					needsMonsterHulls = (spawnflags & 4) || !(spawnflags & 16); // "Pushables" checked or "No monsters" unchecked
-					needsVisibleHull = true; // needed for point-ent pushing
+					needsPlayerHulls |= !(spawnflags & 8); // "No clients" unchecked
+					needsMonsterHulls |= (spawnflags & 4) || !(spawnflags & 16); // "Pushables" checked or "No monsters" unchecked
+					needsVisibleHull |= true; // needed for point-ent pushing
 				}
 				else if (cname == "trigger_hurt") {
-					needsPlayerHulls = !(spawnflags & 8); // "No clients" unchecked
-					needsMonsterHulls = !(spawnflags & 16) || !(spawnflags & 32); // "Fire/Touch client only" unchecked
+					needsPlayerHulls |= !(spawnflags & 8); // "No clients" unchecked
+					needsMonsterHulls |= !(spawnflags & 16) || !(spawnflags & 32); // "Fire/Touch client only" unchecked
 				}
 				else {
-					needsPlayerHulls = true;
-					needsMonsterHulls = true;
+					needsPlayerHulls |= true;
+					needsMonsterHulls |= true;
 				}
 			}
 			else if (cname == "func_clip") {
-				needsPlayerHulls = !(spawnflags & 8); // "No clients" not checked
-				needsMonsterHulls = (spawnflags & 8) || !(spawnflags & 16); // "Pushables" checked or "No monsters" unchecked
-				needsVisibleHull = (spawnflags & 32) || (spawnflags & 64); // "Everything else" or "item_inv" checked
+				needsPlayerHulls |= !(spawnflags & 8); // "No clients" not checked
+				needsMonsterHulls |= (spawnflags & 8) || !(spawnflags & 16); // "Pushables" checked or "No monsters" unchecked
+				needsVisibleHull |= (spawnflags & 32) || (spawnflags & 64); // "Everything else" or "item_inv" checked
 			}
 			else if (cname == "func_conveyor") {
-				needsPlayerHulls = needsMonsterHulls = !(spawnflags & 2); // "Not Solid" unchecked
-				needsVisibleHull = !(spawnflags & 2) || !is_invisible_solid(usageEnts[k]);
+				bool isSolid = !(spawnflags & 2); // "Not Solid" unchecked
+				needsPlayerHulls |= isSolid;
+				needsMonsterHulls |= isSolid;
+				needsVisibleHull |= isSolid || !is_invisible_solid(usageEnts[k]);
 			}
 			else if (cname == "func_friction") {
-				needsPlayerHulls = true;
-				needsMonsterHulls = true;
+				needsPlayerHulls |= true;
+				needsMonsterHulls |= true;
 			}
 			else if (cname == "func_rot_button") {
-				needsPlayerHulls = needsMonsterHulls = !(spawnflags & 1); // "Not solid" unchecked
-				needsVisibleHull = true;
+				bool isSolid = !(spawnflags & 1); // "Not Solid" unchecked
+				needsPlayerHulls |= isSolid;
+				needsMonsterHulls |= isSolid;
+				needsVisibleHull |= true;
 			}
 			else if (cname == "func_rotating") {
-				needsPlayerHulls = needsMonsterHulls = !(spawnflags & 64); // "Not solid" unchecked
-				needsVisibleHull = true;
+				bool isSolid = !(spawnflags & 64); // "Not Solid" unchecked
+				needsPlayerHulls |= isSolid;
+				needsMonsterHulls |= isSolid;
+				needsVisibleHull |= true;
 			}
 			else if (cname == "func_ladder") {
-				needsPlayerHulls = true;
-				needsVisibleHull = true;
+				needsPlayerHulls |= true;
+				needsVisibleHull |= true;
 			}
 			else if (playerOnlyTriggers.find(cname) != playerOnlyTriggers.end()) {
-				needsPlayerHulls = true;
+				needsPlayerHulls |= true;
 			}
 			else if (monsterOnlyTriggers.find(cname) != monsterOnlyTriggers.end()) {
-				needsMonsterHulls = true;
+				needsMonsterHulls |= true;
 			}
 			else {
 				// assume all hulls are needed
-				needsPlayerHulls = true;
-				needsMonsterHulls = true;
-				needsVisibleHull = true;
+				needsPlayerHulls |= true;
+				needsMonsterHulls |= true;
+				needsVisibleHull |= true;
 				break;
 			}
 		}
@@ -2720,14 +2728,15 @@ int Bsp::allocblock_reduction() {
 			continue;
 
 		bool isVisibleModel = false;
-		string modelKey = "*" + to_string(i);
+		string usedBy = "";
 
 		for (Entity* ent : ents) {
-			if (ent->getKeyvalue("model") == modelKey) {
+			if (ent->getBspModelIdx() == i) {
 				if (ent->isEverVisible()) {
 					isVisibleModel = true;
 					break;
 				}
+				usedBy = ent->getTargetname() + " (" + ent->getClassname() + ")";
 			}
 		}
 
@@ -2751,7 +2760,7 @@ int Bsp::allocblock_reduction() {
 
 		if (anyScales) {
 			scaleCount++;
-			logf("Scale up model %d\n", i);
+			logf("Scale up textures on model %d used by %s\n", i, usedBy.c_str());
 		}
 	}
 
