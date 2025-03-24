@@ -2579,7 +2579,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 		}
 
 		string value = matchingValues ? matchValue : "(no change)";
-		string niceName = keyvalue.smartName;
+		string niceName = keyvalue.smartName.length() ? keyvalue.smartName : keyvalue.name;
 
 		// TODO: ImGui doesn't have placeholder text like in HTML forms,
 		// but it would be nice to show an example/default value here somehow.
@@ -2610,7 +2610,9 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 		}
 		ImGui::Text(keyNames[bufferIdx]);
 		if (ImGui::IsItemHovered()) {
-			string tooltip = key + " : " + niceName;
+			string tooltip = key;
+			if (keyvalue.smartName.length())
+				tooltip += " : " + keyvalue.smartName;
 			if (keyvalue.description.size()) {
 				tooltip += " : " + keyvalue.description;
 			}
@@ -4602,11 +4604,14 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 		unordered_map<string, AllocInfoInt> infos;
 
 		for (int i = 0; i < map->faceCount; i++) {
+			BSPFACE& f = map->faces[i];
+			BSPTEXTUREINFO& tinfo = map->texinfos[f.iTextureInfo];
+			if (tinfo.nFlags & TEX_SPECIAL)
+				continue; // does not use lightmaps
+
 			int size[2];
 			GetFaceLightmapSize(map, i, size);
 
-			BSPFACE& f = map->faces[i];
-			BSPTEXTUREINFO& tinfo = map->texinfos[f.iTextureInfo];
 			int32_t texOffset = ((int32_t*)map->textures)[tinfo.iMiptex + 1];
 			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 

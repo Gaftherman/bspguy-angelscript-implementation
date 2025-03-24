@@ -2707,6 +2707,11 @@ float Bsp::calc_allocblock_usage() {
 	int total = 0;
 
 	for (int i = 0; i < faceCount; i++) {
+		BSPFACE& face = faces[i];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+		if (info.nFlags & TEX_SPECIAL)
+			continue; // does not use lightmaps
+
 		int size[2];
 		GetFaceLightmapSize(this, i, size);
 

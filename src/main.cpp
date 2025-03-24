@@ -8,7 +8,6 @@
 // v5 fix:
 // tooltips for entity report filters
 // test settings migration v4 to v5
-// "pitch" doesn't work for light_environment (svencoop1)
 // alt instead of ctrl for slow movement, then can use hotkeys
 
 // v5 new:
@@ -18,7 +17,6 @@
 // gradually selected more ents in report for lightstyle with shift, now cant right click(was in face mode oops)
 
 // v5 todo low prio:
-// alloc block includes sky tex ?
 // skybox rendering
 // max world boundary config
 // orient turrets based on key
@@ -27,28 +25,22 @@
 // "pose" key for dead monsters ? (svencoop1)
 // render transparent textures with alpha
 // ent links should be animated.people ask what each color means
-// refactor tooltips.make sure everything has one
+// refactor tooltips
 // expand input text for multiline
 // import / export ent files(select all excludes worldspawn)
 // speed up clipnode gen ?
 // box selection for entities
-// test cs 1.6 fgd
 // hold click to select ents behind
-// combine buckets for tex that can be doubled
 // add glew to a repo somewhere so fresh building is easier
 // scale axes in wrong place for rotated solids
 
 // todo:
 // figure out mdl asan corruption. maybe a false positive it doesn't really make sense. disabling external sequence loads fixes
-// gui scale not accurate and mostly broken
 // invalid solid undo not reverting plane vertex positions sometimes
-// backwards mins/maxs when creating second teleport in scale mode and cant drag the handle
 // dbm_14 invisible triggers not showing clipndoes.
 // can't select by clipnodes when manually toggled on and rendering disabled for ents
 // abort scale/vertex edits if an overflow occurs
 // 3d axes don't appear until moving mouse over 3D view sometimes
-// "Hide" axes setting not loaded properly
-// crash using 3d scale axes
 // add option to simplify clipnode hulls with QHull for shrinkwrap-style bounding volumes
 // merge redundant submodels and duplicate structures
 // no lightmap renders black faces if no lightmap data for face
@@ -70,8 +62,6 @@
 // clipnode models sometimes missing faces or extending to infinity
 // floating point inaccuracies probably. Changing starting cube size also changes the model
 // show tooltip when hovering over ent target/caller
-// Add tooltips for everything
-// first-time launch help window or something
 // export embedded textures
 // texture browser/import
 

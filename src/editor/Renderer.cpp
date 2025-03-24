@@ -887,14 +887,15 @@ void Renderer::postLoadFgds()
 
 	for (int i = 0; i < mapRenderer->map->ents.size(); i++) {
 		Entity* ent = mapRenderer->map->ents[i];
-		if (ent->hasCachedMdl && ent->cachedMdl == NULL) {
-			ent->hasCachedMdl = false; // try loading a model from the FGDs
-		}
+		ent->clearCache();
 	}
 
 	swapPointEntRenderer = NULL;
 
 	gui->entityReportFilterNeeded = true;
+
+	updateEntConnections();
+	updateEntDirectionVectors();
 }
 
 void Renderer::postLoadFgdsAndTextures() {
@@ -3226,7 +3227,7 @@ void Renderer::updateEntConnections() {
 		for (int i = 0; i < pickInfo.ents.size(); i++) {
 			int entindx = pickInfo.ents[i];
 			Entity* self = map->ents[entindx];
-			string selfName = self->getTargetname();
+			unordered_set<string> selfNames = self->getAllTargetnames();
 
 			for (int k = 0; k < map->ents.size(); k++) {
 				Entity* ent = map->ents[k];
@@ -3235,9 +3236,9 @@ void Renderer::updateEntConnections() {
 					continue;
 
 				
-				string tname = ent->getTargetname();
-				bool isTarget = tname.size() && self->hasTarget(tname);
-				bool isCaller = selfName.length() && ent->hasTarget(selfName);
+				unordered_set<string> tnames = ent->getAllTargetnames();
+				bool isTarget = tnames.size() && self->hasTarget(tnames);
+				bool isCaller = selfNames.size() && ent->hasTarget(selfNames);
 
 				EntConnection link;
 				memset(&link, 0, sizeof(EntConnection));

@@ -70,6 +70,7 @@ public:
 	bool isSprite();
 
 	string getTargetname();
+	unordered_set<string> getAllTargetnames(); // includes target_source/target_name_or_class keys in the FGD
 	string getClassname();
 
 	vec3 getOrigin();
@@ -96,6 +97,8 @@ public:
 
 	bool hasTarget(string tname);
 
+	bool hasTarget(const unordered_set<string>& checkNames);
+
 	void renameTargetnameValues(string oldTargetname, string newTargetname);
 
 	int getMemoryUsage(); // aproximate
@@ -111,6 +114,7 @@ private:
 
 	int cachedModelIdx = -2; // -2 = not cached
 	unordered_set<string> cachedTargets;
+	unordered_set<string> cachedTargetnames;
 	bool targetsCached = false;
 	bool hasCachedTargetname = false;
 	bool hasCachedClassname = false;
@@ -119,6 +123,7 @@ private:
 	bool hasCachedRenderOpts = false;
 	bool hasCachedRotMatrixes = false;
 	bool hasCachedFgdTint = false;
+	bool hasCachedTargetnames = false;
 	string cachedTargetname;
 	string cachedClassname;
 	vec3 cachedOrigin;

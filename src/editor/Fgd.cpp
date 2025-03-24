@@ -14,7 +14,9 @@ unordered_map<string, int> fgdKeyTypes{
 	{"sound", FGD_KEY_SOUND},
 	{"sprite", FGD_KEY_SPRITE},
 	{"target_source", FGD_KEY_TARGET_SRC},
-	{"target_destination", FGD_KEY_TARGET_DST}
+	{"target_name_or_class", FGD_KEY_TARGET_SRC},
+	{"target_destination", FGD_KEY_TARGET_DST},
+	{"target_generic", FGD_KEY_TARGET_DST}, // for not listing missing targets in J.A.C.K
 };
 
 const char* whitespace = " \t\n\r";
@@ -112,9 +114,10 @@ bool Fgd::parse() {
 		readPtr += 1;
 		char* oldReadPtr = readPtr;
 		string defName = readUntil(readPtr, whitespace);
+		string defNameLower = toLowerCase(defName);
 		if (readPtr >= endFileData) { break; }
 
-		if (defName == "include") {
+		if (defNameLower == "include") {
 			string fgdName = trimSpaces(readUntil(readPtr, "/@"));
 			if (readPtr >= endFileData) { break; }
 
@@ -135,15 +138,14 @@ bool Fgd::parse() {
 			delete tmp;
 			continue;
 		}
-		else {
+		else if (defNameLower == "baseclass" || defNameLower == "solidclass" || defNameLower == "pointclass") {
 			readPtr = oldReadPtr;
 
 			FgdClass* outClass = new FgdClass();
 			parseClass(readPtr, *outClass);
 
 			for (KeyvalueDef& def : outClass->keyvalues) {
-				string lowerType = toLowerCase(def.valueType);
-				if (lowerType == "color255" || lowerType == "color") {
+				if (def.iType == FGD_KEY_RGB) {
 					outClass->iconColorKey = def.name;
 					//logf("icon color key for %s is %s\n", outClass->name.c_str(), def.name.c_str());
 					break;
@@ -154,6 +156,10 @@ bool Fgd::parse() {
 				classes.push_back(outClass);
 				classMap[outClass->name] = outClass;
 			}
+		}
+		else {
+			logf("WARNING: Unrecognized definition type %s (%s.fgd pos %d)\n",
+				defName.c_str(), name.c_str(), readPtr - startFileData);
 		}
 	}
 
@@ -201,7 +207,7 @@ void Fgd::parseClass(char*& readPtr, FgdClass& outClass) {
 		outClass.classType = FGD_CLASS_BASE;
 	}
 	else {
-		logf("WARNING: Unrecognized definition type %s (%s.fgd pos %d)\n",
+		logf("WARNING: Unrecognized class definition type %s (%s.fgd pos %d)\n",
 			ctype.c_str(), name.c_str(), readPtr - startFileData);
 	}
 

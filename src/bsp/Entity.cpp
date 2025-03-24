@@ -191,6 +191,35 @@ string Entity::getTargetname() {
 	return cachedTargetname;
 }
 
+unordered_set<string> Entity::getAllTargetnames() {
+	if (hasCachedTargetnames) {
+		return cachedTargetnames;
+	}
+
+	unordered_set<string> tnameKeys = { "targetname" };
+	cachedTargetnames.clear();
+
+	FgdClass* fgd = g_app->mergedFgd ? g_app->mergedFgd->getFgdClass(getClassname()) : NULL;
+	if (fgd) {
+		for (KeyvalueDef& def : fgd->keyvalues) {
+			if (def.iType == FGD_KEY_TARGET_SRC) {
+				tnameKeys.insert(def.name);
+			}
+		}
+	}
+
+	for (const string& key : tnameKeys) {
+		string val = getKeyvalue(key);
+		if (val.size()) {
+			cachedTargetnames.insert(val);
+		}
+	}
+
+	hasCachedTargetnames = true;
+
+	return cachedTargetnames;
+}
+
 string Entity::getClassname() {
 	if (hasCachedClassname) {
 		return cachedClassname;
@@ -254,8 +283,22 @@ vec3 Entity::getAngles() {
 vec3 Entity::getVisualAngles() {
 	vec3 angles = getAngles();
 
-	if (getBspModelIdx() != -1 || getClassname().find("info_player_") == 0) {
+	string cname = getClassname();
+
+	if (getBspModelIdx() != -1 || cname.find("info_player_") == 0) {
 		angles.x *= -1;
+	}
+
+	static unordered_set<string> pitch_angle_classnames = {
+		"light_environment",
+		"light_spot",
+		"info_sunlight"
+	};
+
+	if (pitch_angle_classnames.count(cname)) {
+		string pitchkey = getKeyvalue("pitch");
+		if (pitchkey.size())
+			angles.x += atof(pitchkey.c_str());
 	}
 
 	return angles;
@@ -431,9 +474,11 @@ vec3 Entity::getHullOrigin(Bsp* map) {
 	return ori;
 }
 
-// TODO: maybe store this in a text file or something
+// this is here because the command-line merger doesn't load any FGDs
+// and also because the sven co-op FGD doesn't mark target keys properly.
+// This should be removed once the sven co-op FGD keys have the proper types.
 #define TOTAL_TARGETNAME_KEYS 134
-const char* potential_tergetname_keys[TOTAL_TARGETNAME_KEYS] = {
+const char* potential_targetname_keys[TOTAL_TARGETNAME_KEYS] = {
 	// common target-related keys
 	"targetname",
 	"target",
@@ -639,12 +684,26 @@ unordered_set<string> Entity::getTargets() {
 		return cachedTargets;
 	}
 
-	unordered_set<string> targets;
+	unordered_set<string> targetKeys;
+	cachedTargets.clear();
 
 	for (int i = 1; i < TOTAL_TARGETNAME_KEYS; i++) { // skip targetname
-		const char* key = potential_tergetname_keys[i];
-		if (hasKey(key)) {
-			targets.insert(keyvalues[key]);
+		targetKeys.insert(potential_targetname_keys[i]);
+	}
+
+	FgdClass* fgd = g_app->mergedFgd ? g_app->mergedFgd->getFgdClass(getClassname()) : NULL;
+	if (fgd) {
+		for (KeyvalueDef& def : fgd->keyvalues) {
+			if (def.iType == FGD_KEY_TARGET_DST) {
+				targetKeys.insert(def.name);
+			}
+		}
+	}
+
+	for (const string& key : targetKeys) {
+		string val = getKeyvalue(key);
+		if (val.size()) {
+			cachedTargets.insert(val);
 		}
 	}
 
@@ -659,18 +718,13 @@ unordered_set<string> Entity::getTargets() {
 			if (hashPos != string::npos) {
 				tname = tname.substr(0, hashPos);
 			}
-			targets.insert(tname);
+			cachedTargets.insert(tname);
 		}
 	}
 
-	cachedTargets.clear();
-	cachedTargets.reserve(targets.size());
-	for (string tar : targets) {
-		cachedTargets.insert(tar);
-	}
-	targetsCached = true;
 
-	return targets;
+	targetsCached = true;
+	return cachedTargets;
 }
 
 bool Entity::hasTarget(string checkTarget) {
@@ -681,9 +735,23 @@ bool Entity::hasTarget(string checkTarget) {
 	return cachedTargets.find(checkTarget) != cachedTargets.end();
 }
 
+bool Entity::hasTarget(const unordered_set<string>& checkNames) {
+	if (!targetsCached) {
+		getTargets();
+	}
+
+	for (const string& name : checkNames) {
+		if (cachedTargets.find(name) != cachedTargets.end()) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void Entity::renameTargetnameValues(string oldTargetname, string newTargetname) {
 	for (int i = 0; i < TOTAL_TARGETNAME_KEYS; i++) {
-		const char* key = potential_tergetname_keys[i];
+		const char* key = potential_targetname_keys[i];
 		auto entkey = keyvalues.find(key);
 		if (entkey != keyvalues.end() && entkey->second == oldTargetname) {
 			keyvalues[key] = newTargetname;
@@ -803,6 +871,7 @@ void Entity::clearCache() {
 	hasCachedRenderOpts = false;
 	hasCachedRotMatrixes = false;
 	hasCachedFgdTint = false;
+	hasCachedTargetnames = false;
 	cachedMdl = NULL;
 	cachedTargets.clear();
 }
