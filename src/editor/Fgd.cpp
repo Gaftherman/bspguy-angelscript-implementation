@@ -140,6 +140,16 @@ bool Fgd::parse() {
 
 			FgdClass* outClass = new FgdClass();
 			parseClass(readPtr, *outClass);
+
+			for (KeyvalueDef& def : outClass->keyvalues) {
+				string lowerType = toLowerCase(def.valueType);
+				if (lowerType == "color255" || lowerType == "color") {
+					outClass->iconColorKey = def.name;
+					//logf("icon color key for %s is %s\n", outClass->name.c_str(), def.name.c_str());
+					break;
+				}
+			}
+
 			if (outClass->name.length()) {
 				classes.push_back(outClass);
 				classMap[outClass->name] = outClass;
@@ -606,6 +616,9 @@ void Fgd::processClassInheritance() {
 				if (!classes[i]->sizeSet && allBaseClasses[k]->sizeSet) {
 					classes[i]->mins = allBaseClasses[k]->mins;
 					classes[i]->maxs = allBaseClasses[k]->maxs;
+				}
+				if (classes[i]->iconColorKey.empty()) {
+					classes[i]->iconColorKey = allBaseClasses[k]->iconColorKey;
 				}
 				for (int c = 0; c < allBaseClasses[k]->keyvalues.size(); c++) {
 					if (!addedKeys.count(allBaseClasses[k]->keyvalues[c].name)) {

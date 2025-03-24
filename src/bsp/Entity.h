@@ -35,8 +35,10 @@ public:
 	bool drawCached; // origin, angles, sequence, and model are cached?
 	BaseRenderer* cachedMdl = NULL;
 	string cachedMdlCname; // classname that was used to load the model
+	COLOR3 cachedFgdTint;
 	bool hasCachedMdl = false;
 	bool didStudioDraw = false;
+	bool isIconSprite = false;
 	vec3 drawAngles;
 	vec3 drawOrigin;
 	vec3 drawMin, drawMax; // model bounding box
@@ -78,6 +80,9 @@ public:
 
 	mat4x4 getRotationMatrix(bool flipped);
 
+	// color assigned by color255 key in the FGD (lights)
+	COLOR3 getFgdTint();
+
 	// true if this type of entity can be rotated by its angles keyvalue
 	bool canRotate();
 
@@ -111,6 +116,7 @@ private:
 	bool hasCachedAngles = false;
 	bool hasCachedRenderOpts = false;
 	bool hasCachedRotMatrixes = false;
+	bool hasCachedFgdTint = false;
 	string cachedTargetname;
 	string cachedClassname;
 	vec3 cachedOrigin;

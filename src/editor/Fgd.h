@@ -68,6 +68,7 @@ struct FgdClass {
 	vec3 mins;
 	vec3 maxs;
 	COLOR3 color;
+	string iconColorKey; // key used to define iconsprite color in the editor
 	unordered_map< string, string > otherTypes; // unrecognized types
 
 	// if false, then need to get props from the base class

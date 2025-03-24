@@ -2524,6 +2524,7 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 	string lowerModel;
 	bool foundModelKey = false;
 	bool isMdlNotSpr = true;
+	ent->isIconSprite = false;
 	for (int i = 0; i < tryModelKeys.size(); i++) {
 		ModelKey key = tryModelKeys[i];
 		model = ent->getKeyvalue(key.name);
@@ -2531,8 +2532,19 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 		if (tryModelKeys[i].isClassname) {
 			if (g_app->mergedFgd) {
 				FgdClass* fgd = g_app->mergedFgd->getFgdClass(ent->getKeyvalue(key.name));
-				model = fgd ? fgd->model : "";
-				lowerModel = toLowerCase(model);
+				if (fgd) {
+					if (fgd->model.length()) {
+						model = fgd->model;
+					}
+					else if (fgd->sprite.length()) {
+						model = fgd->sprite;
+					}
+					else if (fgd->iconSprite.length()) {
+						model = fgd->iconSprite;
+						ent->isIconSprite = true;
+					}
+					lowerModel = toLowerCase(model);
+				}
 			}
 			else {
 				continue;
@@ -2563,7 +2575,7 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 		string findPath = findAsset(model);
 		studioModelPaths[lowerModel] = findPath;
 		if (!findPath.size()) {
-			debugf("Failed to find model for entity '%s' (%s): %s\n",
+			logf("Failed to find model for entity '%s' (%s): %s\n",
 				ent->getTargetname().c_str(), ent->getClassname().c_str(),
 				model.c_str());
 			ent->hasCachedMdl = true;
@@ -2751,12 +2763,13 @@ bool Renderer::drawModelsAndSprites() {
 
 		ent->drawFrame = mdl->drawFrame;
 
+		EntCube* entcube = mapRenderer->renderEnts[depthSortedMdlEnts[i].idx].pointEntCube;
+
 		{ // draw the colored transparent cube
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 			//EntCube* entcube = mapRenderer->pointEntRenderer->getEntCube(ent);
-			EntCube* entcube = mapRenderer->renderEnts[depthSortedMdlEnts[i].idx].pointEntCube;
 			colorShader->bind();
 			colorShader->pushMatrix(MAT_MODEL);
 			*colorShader->modelMat = mapRenderer->renderEnts[entidx].modelMat;
@@ -2795,7 +2808,22 @@ bool Renderer::drawModelsAndSprites() {
 		}
 		else if (mdl->isSprite()) {
 			EntRenderOpts renderOpts = ent->getRenderOpts();
-			((SprRenderer*)mdl)->draw(ent->drawOrigin + worldOffset, ent->drawAngles, renderOpts, isSelected);
+
+			COLOR3 color = COLOR3(255, 255, 255);
+			COLOR3 outlineColor = COLOR3(0, 0, 0);
+			if (ent->isIconSprite) {
+				vec3 sz = entcube->maxs - entcube->mins;
+				float minDim = min(min(sz.x, sz.y), sz.z);
+				renderOpts.scale = ((SprRenderer*)mdl)->getScaleToFitInsideCube(minDim);
+				color = ent->getFgdTint();
+			}
+			else if (isSelected) {
+				color = COLOR3(255, 32, 32);
+				outlineColor = COLOR3(255, 255, 0);
+			}
+
+			((SprRenderer*)mdl)->draw(ent->drawOrigin + worldOffset, ent->drawAngles, renderOpts,
+				color, outlineColor, ent->isIconSprite);
 		}
 		
 		drawCount++;

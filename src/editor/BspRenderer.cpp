@@ -1996,7 +1996,7 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 				entIdx = i;
 				foundBetterPick = true;
 			}
-			else if (ent->cachedMdl && ent->cachedMdl->pick(start, dir, ent, bestDist)) {
+			else if (ent->cachedMdl && !ent->isIconSprite && ent->cachedMdl->pick(start, dir, ent, bestDist)) {
 				entIdx = i;
 				foundBetterPick = true;
 			}

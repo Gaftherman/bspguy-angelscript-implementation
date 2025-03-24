@@ -7,6 +7,7 @@
 #include "globals.h"
 #include "Renderer.h"
 #include <unordered_set>
+#include "Fgd.h"
 
 using namespace std;
 
@@ -333,6 +334,31 @@ mat4x4 Entity::getRotationMatrix(bool flipped) {
 
 	hasCachedRotMatrixes = true;
 	return flipped ? cachedRotationMatrixFlipped : cachedRotationMatrix;
+}
+
+COLOR3 Entity::getFgdTint() {
+	if (hasCachedFgdTint) {
+		return cachedFgdTint;
+	}
+
+	if (!g_app->mergedFgd) {
+		return COLOR3(255, 255, 255);
+	}
+
+	FgdClass* fgd = g_app->mergedFgd->getFgdClass(getClassname());
+
+	if (fgd->iconColorKey.empty()) {
+		return COLOR3(255, 255, 255);
+	}
+
+	string val = getKeyvalue(fgd->iconColorKey);
+	if (val.empty()) {
+		return COLOR3(255, 255, 255);
+	}
+
+	cachedFgdTint = parseColor(val);
+	hasCachedFgdTint = true;
+	return cachedFgdTint;
 }
 
 bool Entity::canRotate() {
@@ -763,6 +789,7 @@ void Entity::clearCache() {
 	hasCachedAngles = false;
 	hasCachedRenderOpts = false;
 	hasCachedRotMatrixes = false;
+	hasCachedFgdTint = false;
 	cachedMdl = NULL;
 	cachedTargets.clear();
 }

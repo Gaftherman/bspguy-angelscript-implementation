@@ -61,7 +61,7 @@ public:
 	~SprRenderer();
 
 	void upload() override;
-	void draw(vec3 ori, vec3 angles, EntRenderOpts opts, bool selected);
+	void draw(vec3 ori, vec3 angles, EntRenderOpts opts, COLOR3 tint, COLOR3 outlineColor, bool noOutline);
 	void getBoundingBox(vec3& mins, vec3& maxs, float scale);
 	bool pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) override;
 
@@ -69,11 +69,11 @@ public:
 
 	void loadData() override;
 
+	// get sprite scale which would fit inside a cube with the specified dimensions
+	float getScaleToFitInsideCube(int size);
+
 private:
 	SpriteHeader* header;
-
-	bool validate();
-	
 
 	ShaderProgram* frameShader;
 	ShaderProgram* outlineShader;
@@ -88,4 +88,8 @@ private:
 	mstream data;
 
 	float maxCoord; // max distance a vertex is from its origin
+	int maxWidth;
+	int maxHeight;
+
+	bool validate();
 };

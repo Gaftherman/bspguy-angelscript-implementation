@@ -148,6 +148,8 @@ void SprRenderer::loadData() {
 	tVert* frameVerts = new tVert[framesVertCount];
 	vec3* outlineVerts = new vec3[linesVertCount];
 	maxCoord = 0;
+	maxWidth = 0;
+	maxHeight = 0;
 
 	for (int i = 0; i < header->frames; i++) {
 		data.seek(frameOffset);
@@ -180,6 +182,9 @@ void SprRenderer::loadData() {
 		float x = frame->x;
 		float y = frame->y;
 
+		maxWidth = max(maxWidth, (int)frame->width);
+		maxHeight = max(maxHeight, (int)frame->height);
+
 		frameVerts[i * 4 + 3] = tVert(vec3(0, y, x+w), 0, 0);
 		frameVerts[i * 4 + 2] = tVert(vec3(0, y-h, x+w), 0, 1);
 		frameVerts[i * 4 + 1] = tVert(vec3(0, y-h, x) , 1, 1);
@@ -208,6 +213,10 @@ void SprRenderer::getBoundingBox(vec3& mins, vec3& maxs, float scale) {
 	float s = maxCoord * scale;
 	mins = vec3(-s, -s, -s);
 	maxs = vec3(s, s, s);
+}
+
+float SprRenderer::getScaleToFitInsideCube(int size) {
+	return size / (float)max(maxWidth, maxHeight);
 }
 
 bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
@@ -295,12 +304,12 @@ bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 	return false;
 }
 
-void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, bool selected) {
+void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, COLOR3 tint, COLOR3 outlineColor, bool noOutline) {
 	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
 
-	COLOR4 color = COLOR4(255, 255, 255, 255);
+	COLOR4 color = COLOR4(tint.r, tint.g, tint.b, 255);
 	float framerate = opts.framerate != 0 ? opts.framerate : 10.0f;
 	float scale = opts.scale;
 
@@ -319,27 +328,23 @@ void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, bool selected)
 		float dist = (ori - g_app->cameraOrigin).length();
 		float brightness = clamp(GLARE_FALLOFF / (dist * dist), 0.05f, 1.0f);
 		scale *= dist * 0.02f;
-		color = COLOR4(255, 255, 255, opts.renderamt * brightness);
+		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt * brightness);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		glDisable(GL_DEPTH_TEST);
 		break;
 	}
 	case RENDER_MODE_ADDITIVE:
-		color = COLOR4(255, 255, 255, opts.renderamt);
+		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		break;
 	case RENDER_MODE_TEXTURE:
 	case RENDER_MODE_SOLID:
-		color = COLOR4(255, 255, 255, opts.renderamt);
+		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		break;
 	}
 
 	glEnable(GL_BLEND);
-
-	if (selected) {
-		color = COLOR4(255, 32, 32, 255);
-	}
 
 	float now = glfwGetTime();
 	if (lastDrawCall == 0) {
@@ -414,14 +419,11 @@ void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, bool selected)
 		frameShader->modelMat->scale(scale, scale, scale);
 	}
 
-	if (g_render_flags & RENDER_WIREFRAME) {
+	if ((g_render_flags & RENDER_WIREFRAME) && !noOutline) {
 		outlineShader->bind();
 		*outlineShader->modelMat = *frameShader->modelMat;
 		outlineShader->updateMatrixes();
-		if (selected)
-			glUniform4f(u_color_outline, 1, 1, 0, 1);
-		else
-			glUniform4f(u_color_outline, 0.0f, 0.0f, 0.0f, 1);
+		glUniform4f(u_color_outline, outlineColor.r, outlineColor.g, outlineColor.b, 1);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		outlineBuffer->drawRange(GL_LINE_STRIP, frame * 5, frame * 5 + 5);
