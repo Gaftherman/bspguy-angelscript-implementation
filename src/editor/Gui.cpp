@@ -41,7 +41,7 @@ char const* bspFilterPatterns[1] = { "*.bsp" };
 void tooltip(ImGuiContext& g, const char* text) {
 	if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
 		ImGui::BeginTooltip();
-		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		ImGui::PushTextWrapPos(min(ImGui::GetFontSize() * 35.0f, (float)g_app->windowWidth));
 		ImGui::TextUnformatted(text);
 		ImGui::PopTextWrapPos();
 		ImGui::EndTooltip();
@@ -141,6 +141,9 @@ void Gui::draw() {
 	*/
 	if (showEntityReport) {
 		drawEntityReport();
+	}
+	if (g_settings.first_load) {
+		drawWelcomePopup();
 	}
 
 	if (app->pickMode == PICK_OBJECT) {
@@ -362,6 +365,7 @@ void Gui::draw3dContextMenus() {
 					}
 					ImGui::EndMenu();
 				}
+				tooltip(g, "Creates a clipnode hull for the selected model by extending the planes of Hull 0.\nClipnodes are used for entity collision detection.");
 
 				if (ImGui::BeginMenu("Delete Hull", !app->isLoading)) {
 					if (ImGui::MenuItem("All Hulls")) {
@@ -406,6 +410,7 @@ void Gui::draw3dContextMenus() {
 
 					ImGui::EndMenu();
 				}
+				tooltip(g, "Deletes a hull from the selected model. Run the Clean command afterward to reduce the clipnode count for the map. Be careful using this as it can cause crashes if the entity needs the deleted hull.");
 
 				if (ImGui::BeginMenu("Simplify Hull", !app->isLoading)) {
 					if (ImGui::MenuItem("Clipnodes")) {
@@ -436,6 +441,7 @@ void Gui::draw3dContextMenus() {
 
 					ImGui::EndMenu();
 				}
+				tooltip(g, "Replaces a clipnode hull with a simple box. Run the Clean command afterward to reduce the clipnode count for the map.");
 
 				bool canRedirect = model.iHeadnodes[1] != model.iHeadnodes[2] || model.iHeadnodes[1] != model.iHeadnodes[3];
 
@@ -466,7 +472,7 @@ void Gui::draw3dContextMenus() {
 
 					ImGui::EndMenu();
 				}
-
+				tooltip(g, "Redirect a clipnode hull to another clipnode hull. Run the Clean command afterward to reduce the clipnode count for the map. This is safer than deleting but makes collision detection less accurate.");
 				ImGui::Separator();
 
 				bool anySolidSelected = false;
@@ -491,7 +497,9 @@ void Gui::draw3dContextMenus() {
 
 					command->pushUndoState();
 				}
-				tooltip(g, "Create a copy of this BSP model and assign to this entity.\n\nThis lets you edit the model for this entity without affecting others.");
+				tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
+					"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
+					"This also prevents model edits from affecting multiple entities at once.");
 			
 				/*
 				if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading)) {
@@ -547,6 +555,10 @@ void Gui::draw3dContextMenus() {
 					app->ungrabEnts();
 				}
 			}
+			tooltip(g, "Attach the entity to your camera for easy movement.\n"
+				"Mouse wheel scrolling controls the distance from the camera."
+				"\nHold Shift/Ctrl for faster/slower distance adjustments.");
+
 			bool shouldHide = app->pickInfo.shouldHideSelection();
 
 			if (ImGui::MenuItem(shouldHide ? "Hide" : "Unhide", "H", false, app->pickInfo.ents.size() != 0)) {
@@ -586,6 +598,7 @@ void Gui::draw3dContextMenus() {
 			if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts)) {
 				app->unhideEnts();
 			}
+			tooltip(g, "Unhides entities you previously marked as hidden.");
 
 			ImGui::EndPopup();
 		}
@@ -819,10 +832,13 @@ void Gui::drawMenuBar() {
 
 		if (ImGui::MenuItem("Validate")) {
 			Bsp* map = app->mapRenderer->map;
-			logf("Validating %s\n", map->name.c_str());
+			logf("\n-------- Validating %s --------\n", map->name.c_str());
 			map->validate();
+			logf("-----------------------------------------\n", map->name.c_str());
+			ImGui::SetWindowCollapsed("Messages", false);
+			showLogWidget = true;
 		}
-		tooltip(g, "Checks BSP data structures for invalid values and references. Trivial problems are fixed automatically. Results are output to the Log widget.");
+		tooltip(g, "Checks BSP data structures for invalid values and references. Trivial problems are fixed automatically. Results are output to the Messages widget.");
 		ImGui::EndDisabled();
 
 		if (g_settings.recentFiles.size()) {
@@ -893,9 +909,8 @@ void Gui::drawMenuBar() {
 		if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste)) {
 			app->pasteEnts(false);
 		}
-		tooltip(g, "Creates entities from text data. You can use this to transfer entities "
-			"from one bspguy window to another, or paste from .ent file text. Copy any entity "
-			"in the viewer then paste to a text editor to see the format of the text data.");
+		tooltip(g, "Paste entities from your clipboard. Entity data is stored as text which you "
+			"can transfer to text editors or other bspguy windows.");
 		if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste)) {
 			app->pasteEnts(true);
 		}
@@ -937,6 +952,9 @@ void Gui::drawMenuBar() {
 				app->ungrabEnts();
 			}
 		}
+		tooltip(g, "Attach the entity to your camera for easy movement.\n"
+			"Mouse wheel scrolling controls the distance from the camera."
+			"\nHold Shift/Ctrl for faster/slower distance adjustments.");
 
 		bool shouldHide = app->pickInfo.shouldHideSelection();
 
@@ -951,6 +969,8 @@ void Gui::drawMenuBar() {
 		if (ImGui::MenuItem("Unhide All", "", false, app->anyHiddenEnts)) {
 			app->unhideEnts();
 		}
+		tooltip(g, "Unhides entities you previously marked as hidden.");
+
 		if (ImGui::MenuItem("Transform", "Ctrl+M", false, entSelected)) {
 			showTransformWidget = !showTransformWidget;
 		}
@@ -1145,7 +1165,8 @@ void Gui::drawMenuBar() {
 			changed = g_settings.engine != ENGINE_SVEN_COOP;
 			g_settings.engine = ENGINE_SVEN_COOP;
 		}
-		tooltip(g, "Sven Co-op has higher map limits than Half-Life.\n\nAttempting to run a "
+		tooltip(g, "Sven Co-op has higher map limits than Half-Life. Some maps need this selected to display correctly in the editor."
+			"\n\nAttempting to run a "
 			"Sven Co-op map in Half-Life may result in AllocBlock Full errors, Bad Surface Extents, "
 			"crashes caused by large textures, and visual glitches caused by crossing the +/-4096 map boundary. "
 			"See the Porting Tools menu for solutions to these problems.\n\n"
@@ -1339,8 +1360,10 @@ void Gui::drawMenuBar() {
 			command->pushUndoState();
 		}
 		tooltip(g, "Scans for duplicated BSP models and updates entity model keys to reference only one model in set of duplicated models. "
-			"This lowers the model count and allows more game models to be precached.\n\n"
-			"This does not delete BSP data structures unless you run the Clean command afterward.");
+			"This lowers the model count and allows more game models to be precached. Lightmaps are ignored during the scan, so this might "
+			"make some entities appear too bright in dark areas, or too dark in lit areas.\n\n"
+			"This does not delete BSP data structures unless you run the Clean command afterward. Cut/copy problematic entities before "
+			"deduplicating if you don't want their models swapped.");
 
 		if (ImGui::BeginMenu("Delete OOB Data", !app->isLoading)) {
 
@@ -1406,7 +1429,7 @@ void Gui::drawMenuBar() {
 		tooltip(g, "Deletes BSP data and entities inside of a box defined by 2 \"cull\" entities "
 			"(for the min and max extent of the box). This is useful for getting maps to run in an "
 			"engine with stricter map limits. Works best with enclosed areas. Trying to partially "
-			"delete features in a room will likely result in broken collision detection.\n\n"
+			"delete features in a room will likely result in holes and broken clipnodes.\n\n"
 			"Create 2 cull entities to define the culling box. "
 			"A transparent red box will form between them.");
 
@@ -1415,7 +1438,7 @@ void Gui::drawMenuBar() {
 			map->remove_unused_wads(wads);
 			command->pushUndoState();
 		}
-		tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue.\n\nIn Half-Life, unused WADs cause crashes if they don't exist.\nIn Sven Co-op, missing WADs are ignored.\n");
+		tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue and strips folder paths.\n\nIn Half-Life, unused WADs cause crashes if they don't exist.\nIn Sven Co-op, missing WADs are ignored.\n");
 
 		ImGui::Separator();
 
@@ -1495,13 +1518,11 @@ void Gui::drawMenuBar() {
 			}
 			tooltip(g, "Subdivides faces until they have valid extents. The drawback to this method is reduced in-game performace from higher poly counts.");
 
-			ImGui::MenuItem("##", "WIP");
-			tooltip(g, "Anything you choose here will break lightmaps. "
-				"Run the map through a RAD compiler to fix, and pray that the mapper didn't "
-				"customize compile settings much.");
-
 			ImGui::EndMenu();
 		}
+		tooltip(g, "Anything you choose here will break lightmaps. "
+			"Run the map through a RAD compiler to fix, and pray that the mapper didn't "
+			"customize compile settings much.");
 
 		if (ImGui::MenuItem("Zero Entity Origins", 0, false, !app->isLoading)) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("Zero Entity Origins");
@@ -1598,8 +1619,7 @@ void Gui::drawMenuBar() {
 			g_settings.save();
 			logf("Layout saved to %s\n", userLayout.c_str());
 		}
-		tooltip(g, "Save the position and size of your widgets as they are now. For easing frustration when "
-			"you accidentally resize the window while moving it and your right-aligned widgets move to the center of the screen.\n");
+		tooltip(g, "Save the position and size of your widgets as they are now.");
 
 		if (ImGui::MenuItem("Load Widget Layout", NULL, false)) {
 			if (!fileExists(userLayout)) {
@@ -2250,7 +2270,7 @@ void Gui::drawKeyvalueEditor() {
 				for (int i = 0; i < app->fgds.size(); i++) {
 					if (app->fgds[i]->getFgdClass(cname)) {
 						fgd = app->fgds[i];
-						fgdClass = app->mergedFgd->getFgdClass(cname);
+						fgdClass = app->mergedFgd ? app->mergedFgd->getFgdClass(cname) : NULL;
 						break;
 					}
 				}
@@ -2400,13 +2420,13 @@ void Gui::drawKeyvalueEditor() {
 
 void Gui::drawKeyvalueEditor_SmartEditTab(Fgd* fgd) {
 	Entity* ent = g_app->pickInfo.getEnt();
-	if (!fgd) {
-		ImGui::Text("No entity definition found for %s.", ent->getClassname().c_str());
+	if (app->fgds.empty()) {
+		ImGui::Text("No FGD loaded.");
+		ImGui::Text("Add an FGD in Settings or use the Raw Edit tab instead.");
 		return;
 	}
-	if (app->fgds.empty()) {
-		ImGui::Text("No FGD files loaded");
-		ImGui::Text("Add an FGD in Settings or use the Raw Edit tab instead.");
+	if (!fgd) {
+		ImGui::Text("No entity definition found for %s.", ent->getClassname().c_str());
 		return;
 	}
 
@@ -4263,6 +4283,39 @@ void Gui::drawAbout() {
 	}
 
 	ImGui::End();
+}
+
+void Gui::drawWelcomePopup() {
+	ImGui::SetNextWindowSize(ImVec2(600, 250), ImGuiCond_FirstUseEver);
+	
+	ImGui::OpenPopup("Welcome to bspguy!!!");
+
+	if (ImGui::BeginPopupModal("Welcome to bspguy!!!", NULL))
+	{
+		ImGui::TextWrapped(
+			"This editor requires some setup for maps to display properly.\n\n"
+			
+			"Go to Settings and configure your game directory, asset paths, and at least one FGD. "
+			"If you don't do this, you will be seeing a lot of pink cubes and missing textures."
+		);
+
+		ImGui::Dummy(ImVec2(0, 10));
+		ImGui::Separator();
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (ImGui::Button("OK", ImVec2(140, 0))) {
+			g_settings.first_load = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Open Settings", ImVec2(140, 0))) {
+			g_settings.first_load = false;
+			showSettingsWidget = true;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::EndPopup();
+	}
 }
 
 void Gui::drawLimitsSummary(Bsp* map, bool modalMode) {

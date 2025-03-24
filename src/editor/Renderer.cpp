@@ -1282,7 +1282,7 @@ void Renderer::updateEntDirectionVectors() {
 		// don't show for sprites either unless force rotation is on (the vector makes no sense)
 		if ((!ent->isBspModel() || !ent->canRotate()) && (!ent->isSprite() || g_app->forceAngleRotation)) {
 			string cname = ent->getClassname();
-			FgdClass* clazz = mergedFgd->getFgdClass(cname);
+			FgdClass* clazz = mergedFgd ? mergedFgd->getFgdClass(cname) : NULL;
 			// show if the FGD says the ent uses angles, or if the fgd is missing and the ent has angles,
 			// or if force angles are on
 			bool classUsesAngle = clazz ? (clazz->hasKey("angles") || clazz->hasKey("angle")) : false;
@@ -3916,12 +3916,17 @@ void Renderer::unhideEnts() {
 	vector<Entity*> ents = pickInfo.getEnts();
 	Bsp* map = mapRenderer->map;
 
+	int numHidden = 0;
+
 	for (int i = 0; i < map->ents.size(); i++) {
+		if (map->ents[i]->hidden)
+			numHidden++;
 		map->ents[i]->hidden = false;
 	}
 
 	anyHiddenEnts = false;
 	mapRenderer->preRenderEnts();
+	logf("Unhid %d entities\n", numHidden);
 }
 
 void Renderer::cutEnts() {

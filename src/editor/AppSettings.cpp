@@ -36,12 +36,13 @@ void AppSettings::loadDefault()
 	texture_filtering = false;
 	confirm_exit = true;
 	unicode_font = false;
+	first_load = true;
 	settings_tab = 0;
 	engine = ENGINE_SVEN_COOP;
 
 	render_flags = g_render_flags = RENDER_TEXTURES | RENDER_LIGHTMAPS | RENDER_SPECIAL
-		| RENDER_ENTS | RENDER_SPECIAL_ENTS | RENDER_POINT_ENTS | RENDER_WIREFRAME | RENDER_ENT_CONNECTIONS
-		| RENDER_ENT_CLIPNODES | RENDER_ENT_DIRECTIONS;
+		| RENDER_ENTS | RENDER_SPECIAL_ENTS | RENDER_POINT_ENTS | RENDER_WIREFRAME
+		| RENDER_ENT_CONNECTIONS | RENDER_ENT_CLIPNODES | RENDER_WORLD_CLIPNODES | RENDER_ENT_DIRECTIONS;
 
 	vsync = true;
 
@@ -90,6 +91,8 @@ void AppSettings::load() {
 			else if (key == "verbose_logs") { g_settings.verboseLogs = atoi(val.c_str()) != 0; }
 			else if (key == "texture_filtering") { g_settings.texture_filtering = atoi(val.c_str()) != 0; }
 			else if (key == "confirm_exit") { g_settings.confirm_exit = atoi(val.c_str()) != 0; }
+			else if (key == "unicode_font") { g_settings.unicode_font = atoi(val.c_str()) != 0; }
+			else if (key == "first_load") { g_settings.first_load = atoi(val.c_str()) != 0; }
 			else if (key == "fov") { g_settings.fov = atof(val.c_str()); }
 			else if (key == "zfar") { g_settings.zfar = atof(val.c_str()); }
 			else if (key == "zfarmdl") { g_settings.zFarMdl = atof(val.c_str()); }
@@ -105,7 +108,6 @@ void AppSettings::load() {
 			else if (key == "autoload_layout") { g_settings.autoload_layout = atoi(val.c_str()) != 0; }
 			else if (key == "autoload_layout_width") { g_settings.autoload_layout_width = atoi(val.c_str()); }
 			else if (key == "autoload_layout_height") { g_settings.autoload_layout_height = atoi(val.c_str()); }
-			else if (key == "unicode_font") { g_settings.unicode_font = atoi(val.c_str()); }
 			else if (key == "engine") { 
 				g_settings.engine = clamp(atoi(val.c_str()), 0, 1);
 				g_limits = g_engine_limits[g_settings.engine];
@@ -199,6 +201,7 @@ void AppSettings::save() {
 	file << "texture_filtering=" << g_settings.texture_filtering << endl;
 	file << "confirm_exit=" << g_settings.confirm_exit << endl;
 	file << "unicode_font=" << g_settings.unicode_font << endl;
+	file << "first_load=" << g_settings.first_load << endl;
 	file << "fov=" << g_settings.fov << endl;
 	file << "zfar=" << g_settings.zfar << endl;
 	file << "zfarmdl=" << g_settings.zFarMdl << endl;

@@ -20,6 +20,7 @@ struct AppSettings {
 	bool texture_filtering;
 	bool confirm_exit;
 	bool unicode_font;
+	bool first_load;
 
 	bool debug_open;
 	bool keyvalue_open;

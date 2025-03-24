@@ -109,6 +109,9 @@ public:
 
 	bool forceAngleRotation = false; // force solid entities to respect their angles key, for previewing
 
+	int windowWidth;
+	int windowHeight;
+
 	Renderer();
 	~Renderer();
 
@@ -168,8 +171,6 @@ private:
 	float zFar = 262144.0f;
 	float zFarMdl = 2048.0f;
 	float rotationSpeed = 5.0f;
-	int windowWidth;
-	int windowHeight;
 	mat4x4 model = mat4x4(), view = mat4x4(), projection = mat4x4(), modelView = mat4x4(), modelViewProjection = mat4x4();
 
 	vec2 lastMousePos;

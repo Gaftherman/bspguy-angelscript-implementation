@@ -138,6 +138,7 @@ private:
 	void drawTransformWidget();
 	void drawLog();
 	void drawSettings();
+	void drawWelcomePopup();
 	void drawHelp();
 	void drawAbout();
 	void drawLimits();
