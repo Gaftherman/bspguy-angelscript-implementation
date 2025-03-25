@@ -118,12 +118,12 @@ include_directories(imgui/examples)
 include_directories(imgui/backends)
 include_directories(glew/include)
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} glfw liblzma)
-
 add_definitions(-DGLEW_STATIC)
 
 if(MSVC)
+	add_executable(${PROJECT_NAME} ${SOURCE_FILES} src/data/icons/app_icon.rc)
+	target_link_libraries(${PROJECT_NAME} glfw liblzma)
+
 	# no warnings for release builds
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W0")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W1")
@@ -265,7 +265,8 @@ if(MSVC)
 													src/util/lodepng.cpp)
 
 else()
-	target_link_libraries(${PROJECT_NAME} GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
+	add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+	target_link_libraries(${PROJECT_NAME} glfw liblzma GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
 	set(CMAKE_CXX_FLAGS "-Wall -std=c++11")
 	set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 	set(CMAKE_CXX_FLAGS_RELEASE "-Os -fno-exceptions -w -Wfatal-errors")

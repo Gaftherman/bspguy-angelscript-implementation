@@ -22,6 +22,10 @@
 #include "SprRenderer.h"
 #include <unordered_set>
 #include "tinyfiledialogs.h"
+#include <lodepng.h>
+
+#include "icons/app.h"
+#include "icons/app2.h"
 
 // everything except VIS, ENTITIES, MARKSURFS
 #define EDIT_MODEL_LUMPS (PLANES | TEXTURES | VERTICES | NODES | TEXINFO | FACES | LIGHTING | CLIPNODES | LEAVES | EDGES | SURFEDGES | MODELS)
@@ -151,7 +155,24 @@ Renderer::Renderer() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
 	window = glfwCreateWindow(g_settings.windowWidth, g_settings.windowHeight, "bspguy", NULL, NULL);
-	
+
+	byte* icon_data = NULL;
+	uint w, h;
+	lodepng_decode32(&icon_data, &w, &h, app_icon, sizeof(app_icon));
+
+	byte* icon_data2 = NULL;
+	uint w2, h2;
+	lodepng_decode32(&icon_data2, &w2, &h2, app_icon2, sizeof(app_icon2));
+
+	GLFWimage images[2];
+	images[0].pixels = icon_data;
+	images[0].width = w;
+	images[0].height = h;
+	images[1].pixels = icon_data2;
+	images[1].width = w2;
+	images[1].height = h2;
+	glfwSetWindowIcon(window, 2, images);
+
 	glfwSetWindowSizeLimits(window, 640, 480, GLFW_DONT_CARE, GLFW_DONT_CARE);
 
 	if (g_settings.valid) {
