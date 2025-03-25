@@ -186,12 +186,12 @@ WADTEX * Wad::readTexture( const string& texname )
 
 	return tex;
 }
-bool Wad::write(WADTEX** textures, int numTex)
+bool Wad::write(WADTEX* textures, int numTex)
 {
 	return write(filename, textures, numTex);
 }
 
-bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
+bool Wad::write( std::string filename, WADTEX* textures, int numTex )
 {
 	ofstream myFile(filename, ios::out | ios::binary | ios::trunc);
 
@@ -204,8 +204,8 @@ bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
 	int tSize = sizeof(BSPMIPTEX)*numTex;
 	for (int i = 0; i < numTex; i++)
 	{
-		int w = textures[i]->nWidth;
-		int h = textures[i]->nHeight;
+		int w = textures[i].nWidth;
+		int h = textures[i].nHeight;
 		int sz = w*h;	   // miptex 0
 		int sz2 = sz / 4;  // miptex 1
 		int sz3 = sz2 / 4; // miptex 2
@@ -221,10 +221,10 @@ bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
 	{
 		BSPMIPTEX miptex;
 		for (int k = 0; k < MAXTEXTURENAME; k++)
-			miptex.szName[k] = textures[i]->szName[k];
+			miptex.szName[k] = textures[i].szName[k];
 
-		int w = textures[i]->nWidth;
-		int h = textures[i]->nHeight;
+		int w = textures[i].nWidth;
+		int h = textures[i].nHeight;
 		int sz = w*h;	   // miptex 0
 		int sz2 = sz / 4;  // miptex 1
 		int sz3 = sz2 / 4; // miptex 2
@@ -238,7 +238,7 @@ bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
 		miptex.nOffsets[3] = sizeof(BSPMIPTEX) + sz + sz2 + sz3;
 
 		myFile.write ((char*)&miptex, sizeof(BSPMIPTEX));
-		myFile.write ((char*)textures[i]->data, szAll);
+		myFile.write ((char*)textures[i].data, szAll);
 	}
 
 	int offset = 12;
@@ -246,8 +246,8 @@ bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
 	{
 		WADDIRENTRY entry;
 		entry.nFilePos = offset;
-		int w = textures[i]->nWidth;
-		int h = textures[i]->nHeight;
+		int w = textures[i].nWidth;
+		int h = textures[i].nHeight;
 		int sz = w*h;	   // miptex 0
 		int sz2 = sz / 4;  // miptex 1
 		int sz3 = sz2 / 4; // miptex 2
@@ -259,7 +259,7 @@ bool Wad::write( std::string filename, WADTEX ** textures, int numTex )
 		entry.bCompression = false;
 		entry.nDummy = 0;
 		for (int k = 0; k < MAXTEXTURENAME; k++)
-			entry.szName[k] = textures[i]->szName[k];
+			entry.szName[k] = textures[i].szName[k];
 		offset += szAll + sizeof(BSPMIPTEX);
 
 		myFile.write ((char*)&entry, sizeof(WADDIRENTRY));

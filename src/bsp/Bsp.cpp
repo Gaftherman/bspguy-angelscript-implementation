@@ -3489,7 +3489,7 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 	return embedded;
 }
 
-bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads) {
+bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
@@ -3525,7 +3525,7 @@ bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads) {
 			break;
 		}
 	}
-	if (!isInWad) {
+	if (!isInWad && !force) {
 		logf("Aborted unembed of %s. No WAD contains this texture. Data would be lost.\n", tex.szName);
 		return false;
 	}

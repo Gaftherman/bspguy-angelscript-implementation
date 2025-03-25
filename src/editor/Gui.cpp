@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <lzma_util.h>
 #include "BaseRenderer.h"
+#include <unordered_set>
+#include "Wad.h"
 
 // embedded binary data
 #include "fonts/notosans.h"
@@ -26,7 +28,6 @@
 #include "fonts/notosans_unicode.h"
 #include "icons/object.h"
 #include "icons/face.h"
-#include <unordered_set>
 
 // TODO: hack to keep size consistent with bspguy v4. Is there something wrong with the font?
 // "22" should have the same height regardless of font. Maybe FontForge was misused.
@@ -38,6 +39,7 @@ string iniPath = getConfigDir() + "imgui.ini";
 
 char const* bspFilterPatterns[1] = { "*.bsp" };
 char const* entFilterPatterns[1] = { "*.ent" };
+char const* wadFilterPatterns[1] = { "*.wad" };
 
 void tooltip(ImGuiContext& g, const char* text) {
 	if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
@@ -841,14 +843,13 @@ void Gui::drawMenuBar() {
 
 		if (ImGui::BeginMenu("Export"))
 		{
-			if (ImGui::MenuItem("Entities (.ent)", "")) {
-				string defaultPath = map->path;
-				int lastDot = defaultPath.find_last_of(".");
-				if (lastDot != -1) {
-					defaultPath = defaultPath.substr(0, lastDot);
-				}
-				defaultPath = defaultPath + ".ent";
+			string defaultPath = map->path;
+			int lastDot = defaultPath.find_last_of(".");
+			if (lastDot != -1) {
+				defaultPath = defaultPath.substr(0, lastDot);
+			}
 
+			if (ImGui::MenuItem("Entities (.ent)", "")) {
 				char* fname = tinyfd_saveFileDialog("Export Entities", defaultPath.c_str(),
 					1, entFilterPatterns, "Entity File (*.ent)");
 
@@ -860,6 +861,40 @@ void Gui::drawMenuBar() {
 				}
 			}
 			tooltip(g, "Save entity definitions to a file.");
+
+			if (ImGui::MenuItem("Embedded Textures (.wad)", "")) {
+				char* fname = tinyfd_saveFileDialog("Export Embedded Textures", defaultPath.c_str(),
+					1, wadFilterPatterns, "Half-Life Package (*.wad)");
+
+				if (fname) {					
+					vector<WADTEX> wadTextures;
+					for (int i = 0; i < map->textureCount; i++) {
+						int32_t offset = ((int32_t*)map->textures)[i + 1];
+						BSPMIPTEX* tex = (BSPMIPTEX*)(map->textures + offset);
+
+						if (tex->nOffsets[0] == 0) {
+							continue; // not embedded
+						}
+
+						WADTEX copy;
+						memcpy(&copy, tex, sizeof(BSPMIPTEX)); // copy name, offset, dimenions
+						int dataSz = copy.getDataSize();
+						copy.data = new byte[dataSz];
+						memcpy(copy.data, (byte*)tex + tex->nOffsets[0], dataSz);
+
+						wadTextures.push_back(copy);
+					}
+
+					Wad outWad = Wad();
+					outWad.write(fname, &wadTextures[0], wadTextures.size());
+					logf("Exported %d embedded textures to: %s\n", wadTextures.size(), fname);
+
+					for (WADTEX& tex : wadTextures) {
+						delete[] tex.data;
+					}
+				}
+			}
+			tooltip(g, "Saves embedded textures to a WAD file. This does not unembed any textures.");
 
 			ImGui::EndMenu();
 		}
@@ -1308,14 +1343,14 @@ void Gui::drawMenuBar() {
 				g_settings.mapsize_max = 32768;
 				g_settings.mapsize_auto = false;
 			}
-			tooltip(g, "The safe maximum map size for Sven Co-op maps.");
+			tooltip(g, "The practical map size for Sven Co-op.");
 			
 			if (ImGui::MenuItem("+/-131072 (Sven Co-op)", 0, !g_settings.mapsize_auto && g_settings.mapsize_min == -131072 && g_settings.mapsize_max == 131072)) {
 				g_settings.mapsize_min = -131072;
 				g_settings.mapsize_max = 131072;
 				g_settings.mapsize_auto = false;
 			}
-			tooltip(g, "Players can technically run around in this giant area but the game may become buggy mess once you pass the +/-32768 boundary.");
+			tooltip(g, "The technically correct map size for Sven Co-op. Players can run around in this giant area but the game becomes a buggy mess once you pass the +/-32768 boundary.");
 			
 			for (int i = 0; i < g_app->fgds.size(); i++) {
 				Fgd* fgd = g_app->fgds[i];
@@ -1414,7 +1449,7 @@ void Gui::drawMenuBar() {
 			createCommand->execute();
 			app->pushUndoCommand(createCommand);
 		}
-		tooltip(g, "Create a point entity for use with the culling tool. 2 of these define the bounding box for structure culling operations.\n");
+		tooltip(g, "Create a point entity for use with the culling tool. 2 of these define the bounding box for deleting BSP data.\n");
 
 		ImGui::EndDisabled();
 		ImGui::EndMenu();
@@ -1429,85 +1464,7 @@ void Gui::drawMenuBar() {
 		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
 		BspRenderer* renderer = app->mapRenderer;
 
-		ImGui::MenuItem("Delete", 0, false, false);
-		if (ImGui::MenuItem("Clean", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Clean " + map->name);
-			
-			logf("Cleaning %s\n", map->name.c_str());
-			map->remove_unused_model_structures().print_delete_stats(1);
-
-			command->pushUndoState();
-		}
-		tooltip(g, "Removes unreferenced structures in the BSP data.\n\nWhen you edit BSP models or delete"
-			" references to them, the data is not deleted until you run this command. "
-			"If you are close exceeding engine limits, you may need to run this regularly while creating "
-			"and editing models. Watch the Limits and Messages widgets to see how many structures were removed.");
-
-		if (ImGui::MenuItem("Optimize", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Optimize " + map->name);
-
-			logf("Optimizing %s\n", map->name.c_str());
-			if (!map->has_hull2_ents()) {
-				logf("    Redirecting hull 2 to hull 1 because there are no large monsters/pushables\n");
-				map->delete_hull(2, 1);
-			}
-
-			bool oldVerbose = g_verbose;
-			g_verbose = true;
-			map->delete_unused_hulls(true).print_delete_stats(1);
-			g_verbose = oldVerbose;
-
-			command->pushUndoState();
-		}
-		tooltip(g, "Removes unnecesary structures in the BSP data. Useful as a pre-processing step for "
-			"merging maps together without exceeding engine limits.\n\n"
-
-			"An example of commonly deleted structures would be the visible hull 0 for entities like "
-			"trigger_once, which are invisible and so don't need textured faces. Entities "
-			"like func_illusionary also don't need any clipnodes because they're not meant to be collidable.\n\n"
-		
-			"The drawback to using this command is that it's possible for entities to change state in "
-			"such a way that the deleted hulls are needed later. In those cases it is possible that "
-			"the game crashes or has broken collision.\n\n"
-			
-			"Check the Log widget to see which entities had their hulls deleted. You may want to delete "
-			"them manually by yourself if you run into problems with the Optimize command.");
-
 		bool hasAnyCollision = anyHullValid[1] || anyHullValid[2] || anyHullValid[3];
-
-		if (ImGui::BeginMenu("Redirect Hull", hasAnyCollision && !app->isLoading)) {
-			for (int i = 1; i < MAX_MAP_HULLS; i++) {
-				if (ImGui::BeginMenu(("Hull " + to_string(i)).c_str())) {
-					for (int k = 1; k < MAX_MAP_HULLS; k++) {
-						if (i == k)
-							continue;
-						if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), "", false, anyHullValid[k])) {
-							LumpReplaceCommand* command = new LumpReplaceCommand("Redirect Hull " + to_string(i));
-							
-							Bsp* map = app->mapRenderer->map;
-							map->delete_hull(i, k);
-							logf("Redirected hull %d to hull %d in map %s\n", i, k, map->name.c_str());
-							checkValidHulls();
-
-							logf("Cleaning %s\n", map->name.c_str());
-							map->remove_unused_model_structures().print_delete_stats(1);
-
-							command->pushUndoState();
-						}
-					}
-					ImGui::EndMenu();
-				}
-			}
-			ImGui::EndMenu();
-		}
-		tooltip(g, "Redirects a BSP hull in all models including worldspawn. This frees up a large "
-			"amount of clipnodes but reduces collision accuracy for entities that use the removed hulls.\n\n"
-			"Use this if the Optimize command refused to remove/redirect a hull, and you're ok with the side effects of forcing its removal. "
-			"Some entities may clip into walls, hover above the ground, be able/unable to enter certain areas.\n\n"
-			"A common use case for this is redirecting Hull 2 -> Hull 1 (Large monsters hull -> Normal monsters hull). "
-			"If the map doesn't have any large monsters or pushable objects then there are no side effects for removing the hull. "
-			"Removing Hull 1 or Hull 3 always causes noticeable problems because players and most monsters use these hulls."
-		);
 
 		/*
 		if (ImGui::BeginMenu("Delete Hull", hasAnyCollision && !app->isLoading)) {
@@ -1535,25 +1492,130 @@ void Gui::drawMenuBar() {
 
 			command->pushUndoState();
 		}
-		tooltip(g, "Scans for duplicated BSP models and updates entity model keys to reference only one model in set of duplicated models. "
+		tooltip(g, "Scans for duplicated BSP models and updates entity model keys to reference only one model from set of duplicated models. "
 			"This lowers the model count and allows more game models to be precached. Lightmaps are ignored during the scan, so this might "
 			"make some entities appear too bright in dark areas, or too dark in lit areas.\n\n"
-			"This does not delete BSP data structures unless you run the Clean command afterward. Cut/copy problematic entities before "
+			"This does not delete BSP data unless you run the Clean command afterward. Cut/copy problematic entities before "
 			"deduplicating if you don't want their models swapped.");
 
-		if (ImGui::BeginMenu("Delete OOB Data", !app->isLoading)) {
+		if (ImGui::BeginMenu("Delete BSP Data", !app->isLoading)) {
+			if (ImGui::MenuItem("Clean", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Clean " + map->name);
 
-			static const char* optionNames[10] = {
-				"All Axes",
-				"X Axis",
-				"X Axis (positive only)",
-				"X Axis (negative only)",
-				"Y Axis",
-				"Y Axis (positive only)",
-				"Y Axis (negative only)",
-				"Z Axis",
-				"Z Axis (positive only)",
-				"Z Axis (negative only)",
+				logf("Cleaning %s\n", map->name.c_str());
+				map->remove_unused_model_structures().print_delete_stats(1);
+
+				command->pushUndoState();
+			}
+			tooltip(g, "Removes unreferenced structures in the BSP data. Run this after editing BSP models.\n\nWhen you edit BSP models or delete"
+				" references to them, the data is not deleted until you run this command. "
+				"If you are close exceeding engine limits, you may need to run this regularly while creating "
+				"and editing models. Watch the Limits and Messages widgets to see how many structures were removed.");
+
+			if (ImGui::MenuItem("Optimize", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Optimize " + map->name);
+
+				logf("Optimizing %s\n", map->name.c_str());
+				if (!map->has_hull2_ents()) {
+					logf("    Redirecting hull 2 to hull 1 because there are no large monsters/pushables\n");
+					map->delete_hull(2, 1);
+				}
+
+				bool oldVerbose = g_verbose;
+				g_verbose = true;
+				map->delete_unused_hulls(true).print_delete_stats(1);
+				g_verbose = oldVerbose;
+
+				command->pushUndoState();
+			}
+			tooltip(g, "Removes \"unnecesary\" structures in the BSP data. Potentially unsafe.\n\n"
+
+				"What the program considers unnecesary for Half-Life may become a fatal error for another game."
+				"In most cases mods do not significantly change default entity behavior, but there is a risk.\n\n"
+
+				"An example of commonly deleted structures would be the visible hull 0 for entities like "
+				"trigger_once, which are invisible and so don't need textured faces. Entities "
+				"like func_illusionary also don't need any clipnodes because they're not meant to be collidable.\n\n"
+
+				"Check the Messages widget to see which entities had their hulls deleted. You may want to selectively "
+				"delete hulls yourself if you run into problems.");
+
+			ImGui::Separator();
+
+			if (ImGui::BeginMenu("Clipnode Hull", hasAnyCollision && !app->isLoading)) {
+				for (int i = 1; i < MAX_MAP_HULLS; i++) {
+					for (int k = 1; k < MAX_MAP_HULLS; k++) {
+						if (i == k)
+							continue;
+						if (ImGui::MenuItem(("Hull " + to_string(i) + " --> Hull " + to_string(k)).c_str(), "", false, anyHullValid[k])) {
+							LumpReplaceCommand* command = new LumpReplaceCommand("Redirect Hull " + to_string(i));
+
+							Bsp* map = app->mapRenderer->map;
+							map->delete_hull(i, k);
+							logf("Redirected hull %d to hull %d in map %s\n", i, k, map->name.c_str());
+							checkValidHulls();
+
+							logf("Cleaning %s\n", map->name.c_str());
+							map->remove_unused_model_structures().print_delete_stats(1);
+
+							command->pushUndoState();
+						}
+						tooltip(g, "Redirects a clipnode hull in all models including worldspawn. This frees up a large "
+							"amount of clipnodes but reduces collision accuracy for entities that use the removed hulls.\n\n"
+							"Use this if the Optimize command refused to remove/redirect a hull, and you're ok with the side effects of forcing its removal. "
+							"Some entities may clip into walls, hover above the ground, be able/unable to enter certain areas.\n\n"
+							"A common use case for this is redirecting Hull 2 -> Hull 1 (Large monsters hull -> Normal monsters hull). "
+							"If the map doesn't have any large monsters or pushable objects then there are no side effects for removing the hull. "
+							"Removing Hull 1 or Hull 3 always causes noticeable problems because players and most monsters use these hulls."
+						);
+					}
+					if (i != MAX_MAP_HULLS-1)
+						ImGui::Separator();
+				}
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::MenuItem("Cull Box", 0, false, !app->isLoading)) {
+				if (!g_app->hasCullbox) {
+					logf("Create at least 2 entities with \"cull\" as a classname first!\n");
+				}
+				else {
+					LumpReplaceCommand* command = new LumpReplaceCommand("Delete Boxed Data");
+					map->delete_box_data(g_app->cullMins, g_app->cullMaxs);
+					command->pushUndoState();
+				}
+			}
+			tooltip(g, "Deletes BSP data and entities inside of a box defined by 2 \"cull\" entities "
+				"(for the min and max extent of the box). Works best with fully enclosed areas. "
+				"Partially deleting features in a room will likely result in holes and broken clipnodes.\n\n"
+				"Create 2 cull entities to define the culling box. "
+				"A transparent red box will form between them.");
+
+			ImGui::Separator();
+
+			static const char* optionNames[7] = {
+				"OOB All Axes",
+				//"OOB X Axis",
+				"OOB X+ Axis",
+				"OOB X- Axis",
+				//"OOB Y Axis",
+				"OOB Y+ Axis",
+				"OOB Y- Axis",
+				//"OOB Z Axis",
+				"OOB Z+ Axis",
+				"OOB Z- Axis",
+			};
+			static const char* optionDesc[7] = {
+				"on all axes",
+				//"on the X axis",
+				"on the positive X axis",
+				"on the negative X axis",
+				//"on the Y axis"
+				"on the negative Y axis",
+				"on the positive Y Axis",
+				//"on the Y Axis",
+				"on the negative Z Axis",
+				"on the positive Z Axis",
 			};
 
 			static int clipFlags[10] = {
@@ -1569,7 +1631,7 @@ void Gui::drawMenuBar() {
 				OOB_CLIP_Z_NEG,
 			};
 
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < 7; i++) {
 				if (ImGui::MenuItem(optionNames[i], 0, false, !app->isLoading)) {
 					LumpReplaceCommand* command = new LumpReplaceCommand("Delete OOB Data");
 
@@ -1584,100 +1646,49 @@ void Gui::drawMenuBar() {
 					map->delete_oob_data(clipFlags[i]);
 					command->pushUndoState();
 				}
-				tooltip(g, "Deletes out-of-bounds BSP data and entities.\n\n"
-					"This is useful for splitting maps to run in an engine with stricter map limits.");
+				tooltip(g, ("Deletes out-of-bounds BSP structures and entities " + string(optionDesc[i]) + ".\n\n"
+					"Enable the Map Boundary setting in the View menu to see what will be deleted.").c_str());
 			}
 
 			ImGui::EndMenu();
 		}
-		tooltip(g, "Deletes out-of-bounds BSP data and entities.\n\n"
-			"This is useful for splitting maps to run in an engine with stricter map limits.");
 
-		if (ImGui::MenuItem("Delete Boxed Data", 0, false, !app->isLoading)) {
-			if (!g_app->hasCullbox) {
-				logf("Create at least 2 entities with \"cull\" as a classname first!\n");
-			}
-			else {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Delete Boxed Data");
-				map->delete_box_data(g_app->cullMins, g_app->cullMaxs);
-				command->pushUndoState();
-			}
-		}
-		tooltip(g, "Deletes BSP data and entities inside of a box defined by 2 \"cull\" entities "
-			"(for the min and max extent of the box). This is useful for getting maps to run in an "
-			"engine with stricter map limits. Works best with enclosed areas. Trying to partially "
-			"delete features in a room will likely result in holes and broken clipnodes.\n\n"
-			"Create 2 cull entities to define the culling box. "
-			"A transparent red box will form between them.");
-
-		if (ImGui::MenuItem("Remove unused WADs", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Remove unused WADs", true);
-			map->remove_unused_wads(wads);
-			command->pushUndoState();
-		}
-		tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue and strips folder paths.\n\nIn Half-Life, unused WADs cause crashes if they don't exist.\nIn Sven Co-op, missing WADs are ignored.\n");
-
-		ImGui::Separator();
-
-		ImGui::MenuItem("Porting", 0, false, false);
-		if (ImGui::MenuItem("AllocBlock Reduction", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("AllocBlock Reduction");
-			if (map->allocblock_reduction() == 0) {
-				delete command;
-			}
-			else {
-				command->pushUndoState();
-			}
-		}
-		tooltip(g, "Scales up textures on invisible models, if any exist. Manually increase texture scales or downscale large textures to reduce AllocBlocks further.\n");
-
-		if (ImGui::MenuItem("Downscale Invalid Textures", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Invalid Textures");
-			if (map->downscale_invalid_textures(wads) == 0) {
-				delete command;
-			}
-			else {
-				command->pushUndoState();
-			}
-		}
-		tooltip(g, "Shrinks textures that exceed the max texture size and adjusts texture coordinates accordingly.\n\nIf a texture is stored in a WAD, it is first embedded into the BSP before being downscaled.\n");
-
-		if (ImGui::BeginMenu("Fix Bad Surface Extents", !app->isLoading)) {
-			if (ImGui::MenuItem("Shrink Textures (512)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (512)");
+		if (ImGui::BeginMenu("Fix Bad Extents", !app->isLoading)) {
+			if (ImGui::MenuItem("Downscale Textures (512)", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (512)");
 				map->fix_bad_surface_extents(false, true, 512);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on bad faces to a max resolution of 512x512 pixels. "
-				"This alone will likely not be enough to fix all faces with bad surface extents."
-				"You may also have to apply the Subdivide or Scale methods.");
+			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 512x512 pixels. "
+				"This alone will likely not be enough to fix all surface extent errors. "
+				"You may also have to Subdivide or Scale faces.");
 
-			if (ImGui::MenuItem("Shrink Textures (256)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (256)");
+			if (ImGui::MenuItem("Downscale Textures (256)", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (256)");
 				map->fix_bad_surface_extents(false, true, 256);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on bad faces to a max resolution of 256x256 pixels. "
-				"This alone will likely not be enough to fix all faces with bad surface extents."
-				"You may also have to apply the Subdivide or Scale methods.");
+			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 256x256 pixels. "
+				"This alone will likely not be enough to fix all surface extent errors. "
+				"You may also have to Subdivide or Scale faces.");
 
-			if (ImGui::MenuItem("Shrink Textures (128)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (128)");
+			if (ImGui::MenuItem("Downscale Textures (128)", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (128)");
 				map->fix_bad_surface_extents(false, true, 128);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on bad faces to a max resolution of 128x128 pixels. "
-				"This alone will likely not be enough to fix all faces with bad surface extents."
-				"You may also have to apply the Subdivide or Scale methods.");
+			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 128x128 pixels. "
+				"This alone will likely not be enough to fix all surface extent errors. "
+				"You may also have to Subdivide or Scale faces.");
 
-			if (ImGui::MenuItem("Shrink Textures (64)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Shrink textures (64)");
+			if (ImGui::MenuItem("Downscale Textures (64)", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (64)");
 				map->fix_bad_surface_extents(false, true, 64);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures to a max resolution of 64x64 pixels. "
-				"This alone will likely not be enough to fix all faces with bad surface extents."
-				"You may also have to apply the Subdivide or Scale methods.");
+			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 64x64 pixels. "
+				"This alone will likely not be enough to fix all surface extent errors. "
+				"You may also have to Subdivide or Scale faces.");
 
 			ImGui::Separator();
 
@@ -1697,9 +1708,98 @@ void Gui::drawMenuBar() {
 
 			ImGui::EndMenu();
 		}
-		tooltip(g, "Anything you choose here will break lightmaps. "
-			"Run the map through a RAD compiler to fix, and pray that the mapper didn't "
-			"customize compile settings much.");
+
+		if (ImGui::MenuItem("Scale Invisible Faces", 0, false, !app->isLoading)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("AllocBlock Reduction");
+			if (map->allocblock_reduction() == 0) {
+				delete command;
+			}
+			else {
+				command->pushUndoState();
+			}
+		}
+		tooltip(g, "Scales up textures on invisible model faces to reduce AllocBlock size. "
+			"Manually increase texture scales or downscale large textures to reduce "
+			"AllocBlocks further.\n");
+
+		if (ImGui::BeginMenu("Textures")) {
+			if (ImGui::MenuItem("Embed All", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Embed Textures");
+
+				vector<Wad*> wads = g_app->mapRenderer ? g_app->mapRenderer->wads : vector<Wad*>();
+
+				int count = 0;
+				int fail = 0;
+				for (int i = 0; i < map->textureCount; i++) {
+					int32_t texOffset = ((int32_t*)map->textures)[i + 1];
+					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+
+					if (tex.nOffsets[0] != 0) {
+						continue;
+					}
+
+					if (map->embed_texture(i, wads)) {
+						count++;
+					}
+					else {
+						fail++;
+					}
+				}
+				logf("Embedded %d textures\n", count);
+
+				command->pushUndoState();
+			}
+			tooltip(g, "Embeds all externally referenced textures, forcing them to be loaded from the BSP instead of WADs.");
+
+			if (ImGui::MenuItem("Unembed All", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Unembed Textures");
+
+				vector<Wad*> wads = g_app->mapRenderer ? g_app->mapRenderer->wads : vector<Wad*>();
+
+				int count = 0;
+				int fail = 0;
+				for (int i = 0; i < map->textureCount; i++) {
+					int32_t texOffset = ((int32_t*)map->textures)[i + 1];
+					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+
+					if (tex.nOffsets[0] == 0) {
+						continue;
+					}
+
+					if (map->unembed_texture(i, wads, true)) {
+						count++;
+					}
+				}
+				logf("Unembedded %d textures\n", count);
+
+				command->pushUndoState();
+			}
+			tooltip(g, "Deletes all embedded texture data, forcing textures to be loaded from WADs referenced "
+				"in the worldspawn entity.\n\nIf an embedded texture cannot be found in a WAD, it will become "
+				"a missing texture. You may want to export embedded textures first to avoid losing data.");
+
+			if (ImGui::MenuItem("Remove Unused WADs", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Remove Unused WADs", true);
+				map->remove_unused_wads(wads);
+				command->pushUndoState();
+			}
+			tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue and strips folder paths.");
+
+			if (ImGui::MenuItem("Downscale Invalid", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
+				if (map->downscale_invalid_textures(wads) == 0) {
+					delete command;
+				}
+				else {
+					command->pushUndoState();
+				}
+			}
+			tooltip(g, "Downscales textures that exceed the max texture size for the selected engine "
+				"and adjusts texture coordinates accordingly.\n\nIf a texture is stored in a WAD, "
+				"it is first embedded into the BSP before being downscaled.\n");
+
+			ImGui::EndMenu();
+		}
 
 		if (ImGui::MenuItem("Zero Entity Origins", 0, false, !app->isLoading)) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("Zero Entity Origins");
@@ -3993,7 +4093,6 @@ void Gui::loadFonts() {
 	builder.AddRanges(&allLatinRange[0]);
 	builder.BuildRanges(&ranges);
 	
-
 	static bool loggedAlready = true;
 	if (!loggedAlready) {
 		bool activeChars[IM_UNICODE_CODEPOINT_MAX + 1];
@@ -4455,6 +4554,44 @@ void Gui::drawHelp() {
 				ImGuiIO& io = ImGui::GetIO();
 				ImGui::BulletText("Press F to split a face while 2 edges are selected.");
 				ImGui::Unindent();
+
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem("Optimizing BSP data")) {
+				ImGui::Dummy(ImVec2(0, 10));
+
+				ImGuiIO& io = ImGui::GetIO();
+				ImGui::TextWrapped("Optimizing BSP data is essential for merging and porting maps. "
+					"The Optimize Tool tries to reduce every data type, but you may need to make manual edits "
+					"if it doesn't remove enough. Below are tips on how to reduce the most problematic data types.\n\n");
+
+				ImGui::BulletText("AllocBlock\n");
+				ImGui::Indent();
+				ImGui::BulletText("Downscale textures\n");
+				ImGui::BulletText("Scale up textures\n");
+				ImGui::Unindent();
+				ImGui::BulletText("Clipnodes\n");
+				ImGui::Indent();
+				ImGui::BulletText("Redirect Hull 2 --> Hull 1\n");
+				ImGui::BulletText("Selectively simplify hulls per model (right click solid entities)\n");
+				ImGui::Indent();
+				ImGui::BulletText("You will need to address problems with large monster/pushables\n");
+				ImGui::Unindent();
+				ImGui::Unindent();
+				ImGui::BulletText("Models\n");
+				ImGui::Indent();
+				ImGui::BulletText("Deduplicate Models Tool\n");
+				ImGui::BulletText("Merge adjacent models (coming soon)\n");
+				ImGui::Unindent();
+				ImGui::BulletText("Lightstyles\n");
+				ImGui::Indent();
+				ImGui::BulletText("Delete light entities which don't need to be toggled.\n");
+				ImGui::Unindent();
+
+				ImGui::TextWrapped("\nIn most cases you need to run the Clean command to remove data "
+					"after a manual edit. The Map Limits widget has tabs for finding which "
+					"entities/faces are contributing the most toward map limits.");
 
 				ImGui::EndTabItem();
 			}
@@ -4923,7 +5060,8 @@ void Gui::drawEntityReport() {
 	static vector<ReportEnt> filteredEnts;
 
 	Bsp* map = app->mapRenderer->map;
-	string title = "Entity Report  (" + to_string(filteredEnts.size()) + " results)";
+	string plural = filteredEnts.size() == 1 ? "" : "s";
+	string title = "Entity Report  (" + to_string(filteredEnts.size()) + " result" + plural + ")";
 
 	if (ImGui::Begin((title + "###entreport").c_str(), &showEntityReport)) {
 		if (map == NULL) {
@@ -5204,16 +5342,26 @@ void Gui::drawEntityReport() {
 				if (ImGui::InputText(("##Key" + to_string(i)).c_str(), keyFilter[i], 64)) {
 					entityReportFilterNeeded = true;
 				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Filter entities by key name. Leave blank to include all key names.");
+				}
+
 				ImGui::SameLine();
 				ImGui::Text(" = "); ImGui::SameLine();
 				ImGui::SetNextItemWidth(inputWidth);
 				if (ImGui::InputText(("##Value" + to_string(i)).c_str(), valueFilter[i], 64)) {
 					entityReportFilterNeeded = true;
 				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Filter entities by key value. Leave blank to include all values.");
+				}
 			}
 
 			if (ImGui::Checkbox("Partial Matching", &partialMatches)) {
 				entityReportFilterNeeded = true;
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Include entity if your filter text is found anywhere in its key names/values.");
 			}
 
 			ImGui::EndChild();

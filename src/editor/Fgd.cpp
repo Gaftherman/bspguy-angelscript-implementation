@@ -94,11 +94,12 @@ bool Fgd::parse() {
 
 	const char* whitespace = " \t\n\r";
 	int readPos = 0;
-	char* fullFileData = new char[fullText.length()];
+	char* fullFileData = new char[fullText.length()+1];
 	startFileData = fullFileData;
-	endFileData = fullFileData + fullText.length();
+	endFileData = fullFileData + fullText.length()+1;
 	char* readPtr = fullFileData;
 	memcpy(fullFileData, &fullText[0], fullText.length());
+	fullFileData[fullText.length()] = 0;
 
 	while (true) {
 		// skip over comments

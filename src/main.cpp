@@ -9,6 +9,7 @@
 // tooltips for entity report filters
 // test settings migration v4 to v5
 // alt instead of ctrl for slow movement, then can use hotkeys
+// iconsprites not shown if models not enabled
 
 // v5 new:
 // import/export: embedded textures, wad textures, .ent file
