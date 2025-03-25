@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "util.h"
+#include <algorithm>
 
 TextureNode::TextureNode( int offX, int offY, int mapW, int mapH )
 {

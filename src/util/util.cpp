@@ -947,7 +947,11 @@ vector<string> getAssetPaths() {
 
 		char end = path[path.size() - 1];
 		if (end != '\\' && end != '/') {
+#ifdef WIN32
+			path += "\\";
+#else
 			path += "/";
+#endif
 		}
 
 		tryPaths.push_back(path);
@@ -969,12 +973,20 @@ string findAsset(string asset) {
 	for (string path : tryPaths) {
 		string testPath = path + asset;
 		if (fileExists(testPath)) {
+			normalizePath(testPath);
 			return testPath;
 		}
 	}
 
 	return "";
 }
+
+void normalizePath(string& path) {
+#ifdef WIN32
+	replace(path.begin(), path.end(), '/', '\\'); // convert to windows slashes
+#endif
+}
+
 
 float rayTriangleIntersect(const vec3& rayOrigin, const vec3& rayDir, const vec3& v0, const vec3& v1, const vec3& v2) {
 	// Möller–Trumbore algorithm

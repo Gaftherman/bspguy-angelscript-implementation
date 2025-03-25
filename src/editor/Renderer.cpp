@@ -2656,6 +2656,9 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 }
 
 bool Renderer::drawModelsAndSprites() {
+	if (!(g_render_flags & RENDER_POINT_ENTS))
+		return false;
+
 	if (mapRenderer->map->ents.empty()) {
 		return false;
 	}
@@ -2731,7 +2734,7 @@ bool Renderer::drawModelsAndSprites() {
 				sent.mdl->upload();
 				const char* typ = sent.mdl->isSprite() ? "SPR" : "MDL";
 				if (sent.mdl->loadState != MODEL_LOAD_UPLOAD)
-					logf("Loaded %s: %s\n", typ, sent.mdl->fpath.c_str());
+					debugf("Loaded %s: %s\n", typ, sent.mdl->fpath.c_str());
 			}
 		}
 
@@ -4355,7 +4358,7 @@ void Renderer::pushEntityUndoState(string actionDesc) {
 	}
 
 	if (g_app->pickInfo.ents.size() != undoEntityState.size()) {
-		logf("Pushed undo state with bad size\n");
+		debugf("Pushed undo state with bad size\n");
 		return;
 	}
 
@@ -4601,7 +4604,7 @@ bool Renderer::confirmMapExit() {
 			}
 		}
 		else {
-			logf("lumps not changed\n");
+			debugf("lumps not changed\n");
 		}
 	}
 

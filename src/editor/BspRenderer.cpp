@@ -1805,6 +1805,9 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 }
 
 void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
+	if (!(g_render_flags & RENDER_ENTS))
+		return;
+
 	if (renderModels[modelIdx].wireframeBuffer) {
 		if (highlight)
 			glUniform4f(g_app->u_vec3color, 1.0f, 1.0f, 0.00f, 1);
@@ -1892,7 +1895,7 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 
 	colorShader->bind();
 
-	if (highlightedEnts.empty() && !(g_render_flags & RENDER_STUDIO_MDL)) {
+	if (highlightedEnts.empty() && !(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
 		if (pointEnts->numVerts > 0)
 			pointEnts->draw(GL_TRIANGLES);
 		return;

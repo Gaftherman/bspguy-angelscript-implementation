@@ -505,49 +505,68 @@ void Gui::draw3dContextMenus() {
 					"This also prevents model edits from affecting multiple entities at once.");
 			
 				/*
-				if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading)) {
-					int idxA = 940;
-					int idxB = 941;
-
-					int numIdxA = 0;
-					int numIdxB = 0;
-					for (Entity* ent : map->ents) {
-						int idx = ent->getBspModelIdx();
-						if (idx == idxA) {
-							numIdxA++;
+				if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
+					int numPoint = 0;
+					int numSolids = 0;
+					for (Entity* ent : app->pickInfo.getEnts()) {
+						if (ent->getBspModelIdx() != -1) {
+							numSolids++;
 						}
-						else if (idx == idxB) {
-							numIdxB++;
+						else {
+							numPoint++;
 						}
 					}
-
-					if (numIdxA > 1 || numIdxB > 1) {
-						logf("Merge aborted. Model(s) are shared by multiple entities.");
+					if (numSolids != 2 || numPoint > 0) {
+						logf("Exactly 2 solid entities must be selected for merging\n");
 					}
 					else {
-						int newIndex = map->merge_models(idxA, idxB);
-						logf("Created merged model *%d\n", newIndex);
+						int idxA = map->ents[app->pickInfo.ents[0]]->getBspModelIdx();
+						int idxB = map->ents[app->pickInfo.ents[1]]->getBspModelIdx();
 
-						for (int i = 0; i < map->ents.size(); i++) {
-							Entity* ent = map->ents[i];
+						int numIdxA = 0;
+						int numIdxB = 0;
+						for (Entity* ent : map->ents) {
 							int idx = ent->getBspModelIdx();
 							if (idx == idxA) {
-								ent->setOrAddKeyvalue("model", "*" + to_string(newIndex));
+								numIdxA++;
 							}
 							else if (idx == idxB) {
-								delete ent;
-								map->ents.erase(map->ents.begin() + i);
-								i--;
+								numIdxB++;
 							}
 						}
 
-						map->remove_unused_model_structures();
+						if (numIdxA > 1) {
+							logf("Merge aborted. Model %d is shared by multiple entities.", idxA);
+						}
+						else if (numIdxB > 1) {
+							logf("Merge aborted. Model %d is shared by multiple entities.", idxB);
+						}
+						else {
+							LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
 
-						g_app->deselectObject();
-						g_app->mapRenderers[0]->reload();
-						refresh();
-					}
+							int newIndex = map->merge_models(idxA, idxB);
+							logf("Merged models %d and %d into new model *%d\n", newIndex);
+
+							for (int i = 0; i < map->ents.size(); i++) {
+								Entity* ent = map->ents[i];
+								int idx = ent->getBspModelIdx();
+								if (idx == idxA) {
+									ent->setOrAddKeyvalue("model", "*" + to_string(newIndex));
+								}
+								else if (idx == idxB) {
+									delete ent;
+									map->ents.erase(map->ents.begin() + i);
+									i--;
+								}
+							}
+
+							map->remove_unused_model_structures();
+
+							command->pushUndoState();
+						}
+					}					
 				}
+				tooltip(g, "Merge solid entity models together.");
 				*/
 			}
 
@@ -775,7 +794,6 @@ void Gui::drawMenuBar() {
 
 	if (ImGui::BeginMenu("File"))
 	{
-		Bsp* map = app->mapRenderer->map;
 
 		if (ImGui::MenuItem("Open", "Ctrl+O", false, !app->isLoading)) {
 			g_app->openMap(NULL);
@@ -809,6 +827,8 @@ void Gui::drawMenuBar() {
 
 			ImGui::EndMenu();
 		}
+
+		Bsp* map = app->mapRenderer->map;
 
 		ImGui::BeginDisabled(app->emptyMapLoaded);
 		if (ImGui::MenuItem("Save", NULL)) {
@@ -1449,7 +1469,7 @@ void Gui::drawMenuBar() {
 			createCommand->execute();
 			app->pushUndoCommand(createCommand);
 		}
-		tooltip(g, "Create a point entity for use with the culling tool. 2 of these define the bounding box for deleting BSP data.\n");
+		tooltip(g, "Create a point entity for use with the culling tool. 2 of these define the bounding box for the Cull Box deletion tool.\n");
 
 		ImGui::EndDisabled();
 		ImGui::EndMenu();
@@ -2393,7 +2413,7 @@ void Gui::drawDebugWidget() {
 			int modelIndex = app->pickInfo.getModelIndex();
 			if (ImGui::CollapsingHeader("Selection", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::Text("Entity ID: %d", modelIndex);
+				ImGui::Text("Entity ID: %d", app->pickInfo.getEntIndex());
 
 				if (modelIndex > 0) {
 					ImGui::Checkbox("Debug clipnodes", &app->debugClipnodes);
@@ -4138,6 +4158,9 @@ void Gui::loadFonts() {
 		largeFontData = new byte[notosans_sz];
 		memcpy(largeFontData, &decompressed[0], notosans_sz);
 	}
+	else {
+		logf("Failed to decompress font! Crash imminent.\n");
+	}
 
 	decompressed.clear();
 	byte* consoleFontData = NULL;
@@ -4149,6 +4172,9 @@ void Gui::loadFonts() {
 		consoleFontLargeData = new byte[notosans_mono_sz];
 		memcpy(consoleFontData, &decompressed[0], notosans_mono_sz);
 		memcpy(consoleFontLargeData, &decompressed[0], notosans_mono_sz);
+	}
+	else {
+		logf("Failed to decompress font! Crash imminent.\n");
 	}
 
 	// TODO: ImGui is getting updates to font scaling, so there won't be a need for a separate
@@ -4166,6 +4192,9 @@ void Gui::loadFonts() {
 			smallFontData = new byte[notosans_unicode_sz];
 			memcpy(smallFontData, &decompressed[0], notosans_unicode_sz);
 		}
+		else {
+			logf("Failed to decompress font! Crash imminent.\n");
+		}
 
 		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_unicode_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
 	}
@@ -4174,6 +4203,9 @@ void Gui::loadFonts() {
 			notosans_sz = decompressed.size();
 			smallFontData = new byte[notosans_sz];
 			memcpy(smallFontData, &decompressed[0], notosans_sz);
+		}
+		else {
+			logf("Failed to decompress font! Crash imminent.\n");
 		}
 
 		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
@@ -4574,15 +4606,15 @@ void Gui::drawHelp() {
 				ImGui::BulletText("Clipnodes\n");
 				ImGui::Indent();
 				ImGui::BulletText("Redirect Hull 2 --> Hull 1\n");
-				ImGui::BulletText("Selectively simplify hulls per model (right click solid entities)\n");
 				ImGui::Indent();
 				ImGui::BulletText("You will need to address problems with large monster/pushables\n");
+				ImGui::BulletText("Selectively simplify hulls per model (right click solid entities)\n");
 				ImGui::Unindent();
 				ImGui::Unindent();
 				ImGui::BulletText("Models\n");
 				ImGui::Indent();
 				ImGui::BulletText("Deduplicate Models Tool\n");
-				ImGui::BulletText("Merge adjacent models (coming soon)\n");
+				ImGui::BulletText("Merge BSP Models (select 2 solid entities)\n");
 				ImGui::Unindent();
 				ImGui::BulletText("Lightstyles\n");
 				ImGui::Indent();
@@ -5191,6 +5223,14 @@ void Gui::drawEntityReport() {
 					if (ImGui::Selectable((cname + "##ent" + to_string(i)).c_str(), filteredEnts[i].selected, ImGuiSelectableFlags_AllowDoubleClick)) {
 						lastKeyboardNavSelect = i;
 
+						if (app->pickMode == PICK_FACE) {
+							for (int faceIdx : app->pickInfo.faces) {
+								g_app->mapRenderer->highlightFace(faceIdx, false);
+							}
+							app->pickInfo.deselect();
+							app->pickMode = PICK_OBJECT;
+						}
+
 						if (expected_key_mod_flags & ImGuiMod_Ctrl) {
 							filteredEnts[i].selected = !filteredEnts[i].selected;
 							lastSelect = i;
@@ -5361,7 +5401,7 @@ void Gui::drawEntityReport() {
 				entityReportFilterNeeded = true;
 			}
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Include entity if your filter text is found anywhere in its key names/values.");
+				ImGui::SetTooltip("Do not force entity keys/values to match your input exactly.");
 			}
 
 			ImGui::EndChild();

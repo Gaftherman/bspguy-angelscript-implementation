@@ -5,38 +5,28 @@
 #include "Renderer.h"
 #include "globals.h"
 
-// v5 fix:
-// tooltips for entity report filters
-// test settings migration v4 to v5
-// alt instead of ctrl for slow movement, then can use hotkeys
-// iconsprites not shown if models not enabled
-
-// v5 new:
-// import/export: embedded textures, wad textures, .ent file
-// ripent saftey warning
-// embed / unembed all textures
-// hold click to select behind
-// gradually selected more ents in report for lightstyle with shift, now cant right click(was in face mode oops)
+// FIX v5:
+// unrecognized props field intensity fgd
+// lightmaps only rendering broken
 
 // v5 todo low prio:
+// ripent saftey warning
+// hold click to select behind
 // skybox rendering
-// max world boundary config
 // orient turrets based on key
 // dialogs for errors / warnings
 // ignorable popups for misc messages
 // "pose" key for dead monsters ? (svencoop1)
 // render transparent textures with alpha
 // ent links should be animated.people ask what each color means
-// refactor tooltips
 // expand input text for multiline
-// import / export ent files(select all excludes worldspawn)
 // speed up clipnode gen ?
 // box selection for entities
-// hold click to select ents behind
 // add glew to a repo somewhere so fresh building is easier
 // scale axes in wrong place for rotated solids
 
 // todo:
+// alt instead of ctrl for slow movement, then can use hotkeys
 // figure out mdl asan corruption. maybe a false positive it doesn't really make sense. disabling external sequence loads fixes
 // invalid solid undo not reverting plane vertex positions sometimes
 // dbm_14 invisible triggers not showing clipndoes.

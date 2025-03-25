@@ -6440,6 +6440,7 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 	// a lazy way to make the faces contiguous, but this can cause overflows for big models
 	modelIdxA = duplicate_model(modelIdxA);
 	modelIdxB = duplicate_model(modelIdxB);
+	int newIndex = create_model();
 
 	BSPMODEL& modelA = models[modelIdxA];
 	BSPMODEL& modelB = models[modelIdxB];
@@ -6456,7 +6457,6 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 	vec3 bmin = modelB.nMins;
 	vec3 bmax = modelB.nMaxs;
 
-	int newIndex = create_model();
 	BSPMODEL& mergedModel = models[newIndex];
 	mergedModel.nMins = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
 	mergedModel.nMaxs = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
@@ -6503,10 +6503,9 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 		BSPNODE* newThisNodes = new BSPNODE[nodeCount + 1];
 		memcpy(newThisNodes, nodes, nodeCount * sizeof(BSPNODE));
 		newThisNodes[nodeCount] = headNode;
-
-		replace_lump(LUMP_NODES, newThisNodes, (nodeCount + 1) * sizeof(BSPNODE));
-
 		mergedModel.iHeadnodes[0] = nodeCount;
+
+		replace_lump(LUMP_NODES, newThisNodes, (nodeCount + 1) * sizeof(BSPNODE));		
 	}
 
 	return newIndex;

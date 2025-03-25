@@ -167,7 +167,7 @@ void TextureArray::upload() {
 		if (buckets[i].count) {
 			bucketCount++;
 			textureCount += buckets[i].count;
-			debugf("%d textures in bucket %dx%d\n", buckets[i].count, sizeX, sizeY);
+			//debugf("%d textures in bucket %dx%d\n", buckets[i].count, sizeX, sizeY);
 
 			glBindTexture(GL_TEXTURE_2D_ARRAY, buckets[i].glArrayId);
 			glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB, sizeX, sizeY, buckets[i].count, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);

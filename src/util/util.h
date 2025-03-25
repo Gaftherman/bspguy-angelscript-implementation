@@ -132,6 +132,9 @@ vector<string> getAssetPaths();
 // returns empty string if not found
 string findAsset(string asset);
 
+// converts windows/linux slashes
+void normalizePath(string& path);
+
 // returns distance from starting point or -1 on no intersect
 float rayTriangleIntersect(const vec3& rayOrigin, const vec3& rayDir, const vec3& v0, const vec3& v1, const vec3& v2);
 
