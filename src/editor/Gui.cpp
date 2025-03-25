@@ -1153,24 +1153,92 @@ void Gui::drawMenuBar() {
 		ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
 
 		bool changed = false;
-		ImGui::MenuItem("Engine", 0, false, false);
+		if (ImGui::BeginMenu("Engine")) {
+			if (ImGui::MenuItem("Half-Life", 0, g_settings.engine == ENGINE_HALF_LIFE, !app->isLoading)) {
+				changed = g_settings.engine != ENGINE_HALF_LIFE;
+				g_settings.engine = ENGINE_HALF_LIFE;
+				if (g_settings.mapsize_auto) {
+					g_settings.mapsize_min = -4096;
+					g_settings.mapsize_max = 4096;
+				}
+			}
+			tooltip(g, "The standard GoldSrc engine.\n");
 
-		if (ImGui::MenuItem("Half-Life", 0, g_settings.engine == ENGINE_HALF_LIFE, !app->isLoading)) {
-			changed = g_settings.engine != ENGINE_HALF_LIFE;
-			g_settings.engine = ENGINE_HALF_LIFE;
-		}
-		tooltip(g, "The standard GoldSrc engine. Assumes a +/-4096 map boundary.\n");
+			if (ImGui::MenuItem("Sven Co-op", 0, g_settings.engine == ENGINE_SVEN_COOP, !app->isLoading)) {
+				changed = g_settings.engine != ENGINE_SVEN_COOP;
+				g_settings.engine = ENGINE_SVEN_COOP;
+				if (g_settings.mapsize_auto) {
+					g_settings.mapsize_min = -32768;
+					g_settings.mapsize_max = 32768;
+				}
+			}
+			tooltip(g, "Sven Co-op has higher map limits than Half-Life. Some maps need this selected to display correctly in the editor."
+				"\n\nAttempting to run a "
+				"Sven Co-op map in Half-Life may result in AllocBlock Full errors, Bad Surface Extents, "
+				"crashes caused by large textures, and visual glitches caused by crossing the +/-4096 map boundary. "
+				"See the Porting Tools menu for solutions to these problems.");
 
-		if (ImGui::MenuItem("Sven Co-op", 0, g_settings.engine == ENGINE_SVEN_COOP, !app->isLoading)) {
-			changed = g_settings.engine != ENGINE_SVEN_COOP;
-			g_settings.engine = ENGINE_SVEN_COOP;
+			ImGui::EndMenu();
 		}
-		tooltip(g, "Sven Co-op has higher map limits than Half-Life. Some maps need this selected to display correctly in the editor."
-			"\n\nAttempting to run a "
-			"Sven Co-op map in Half-Life may result in AllocBlock Full errors, Bad Surface Extents, "
-			"crashes caused by large textures, and visual glitches caused by crossing the +/-4096 map boundary. "
-			"See the Porting Tools menu for solutions to these problems.\n\n"
-			"The map boundary for Sven Co-op is effectively +/-32768. Rendering glitches occur beyond that point.");
+
+		if (ImGui::BeginMenu("Map Size")) {
+			if (ImGui::MenuItem("Auto", 0, g_settings.mapsize_auto)) {
+				if (g_settings.engine == ENGINE_HALF_LIFE) {
+					g_settings.mapsize_min = -4096;
+					g_settings.mapsize_max = 4096;
+				}
+				else if (g_settings.engine == ENGINE_SVEN_COOP) {
+					g_settings.mapsize_min = -32768;
+					g_settings.mapsize_max = 32768;
+				}
+				g_settings.mapsize_auto = true;
+			}
+			tooltip(g, "The map size will be set according to the Engine you choose.");
+
+			if (ImGui::MenuItem("+/-4096 (Half-Life)", 0, !g_settings.mapsize_auto && g_settings.mapsize_min == -4096 && g_settings.mapsize_max == 4096)) {
+				g_settings.mapsize_min = -4096;
+				g_settings.mapsize_max = 4096;
+				g_settings.mapsize_auto = false;
+			}
+			tooltip(g, "The default map size for Half-Life and most of its mods.");
+			
+			if (ImGui::MenuItem("+/-32768 (Sven Co-op)", 0, !g_settings.mapsize_auto && g_settings.mapsize_min == -32768 && g_settings.mapsize_max == 32768)) {
+				g_settings.mapsize_min = -32768;
+				g_settings.mapsize_max = 32768;
+				g_settings.mapsize_auto = false;
+			}
+			tooltip(g, "The safe maximum map size for Sven Co-op maps.");
+			
+			if (ImGui::MenuItem("+/-131072 (Sven Co-op)", 0, !g_settings.mapsize_auto && g_settings.mapsize_min == -131072 && g_settings.mapsize_max == 131072)) {
+				g_settings.mapsize_min = -131072;
+				g_settings.mapsize_max = 131072;
+				g_settings.mapsize_auto = false;
+			}
+			tooltip(g, "Players can technically run around in this giant area but the game may become buggy mess once you pass the +/-32768 boundary.");
+			
+			for (int i = 0; i < g_app->fgds.size(); i++) {
+				Fgd* fgd = g_app->fgds[i];
+				int min = fgd->mapSizeMin;
+				int max = fgd->mapSizeMax;
+
+				if (min == 0 && max == 0) {
+					continue;
+				}
+
+				string name;
+				if (min != -max)
+					name = "(" + to_string(min) + ", " + to_string(max) + ") " + fgd->name + ".fgd";
+				else
+					name = "+/-" + to_string(max) + " (" + fgd->name + ".fgd)";
+
+				if (ImGui::MenuItem(name.c_str(), 0, g_settings.mapsize_min == min && g_settings.mapsize_max == max)) {
+					g_settings.mapsize_min = min;
+					g_settings.mapsize_max = max;
+				}
+				tooltip(g, ("The @mapsize loaded from " + fgd->name + ".fgd.").c_str());
+			}
+			ImGui::EndMenu();
+		}
 
 		if (changed) {
 			g_limits = g_engine_limits[g_settings.engine];
@@ -1395,6 +1463,8 @@ void Gui::drawMenuBar() {
 
 			for (int i = 0; i < 10; i++) {
 				if (ImGui::MenuItem(optionNames[i], 0, false, !app->isLoading)) {
+					LumpReplaceCommand* command = new LumpReplaceCommand("Delete OOB Data");
+
 					if (map->ents[0]->hasKey("origin")) {
 						vec3 ori = map->ents[0]->getOrigin();
 						logf("Moved worldspawn origin by %f %f %f\n", ori.x, ori.y, ori.z);
@@ -1403,7 +1473,6 @@ void Gui::drawMenuBar() {
 
 					}
 
-					LumpReplaceCommand* command = new LumpReplaceCommand("Delete OOB Data");
 					map->delete_oob_data(clipFlags[i]);
 					command->pushUndoState();
 				}

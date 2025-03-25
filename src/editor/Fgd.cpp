@@ -102,7 +102,7 @@ bool Fgd::parse() {
 
 	while (true) {
 		// skip over comments
-		readUntil(readPtr, "/@");
+		readUntil(readPtr, "(/@");
 		if (readPtr >= endFileData) { break; }
 
 		if (readPtr[0] == '/' && readPtr[1] == '/') {
@@ -113,12 +113,12 @@ bool Fgd::parse() {
 		// name of the definition
 		readPtr += 1;
 		char* oldReadPtr = readPtr;
-		string defName = readUntil(readPtr, whitespace);
+		string defName = readUntil(readPtr, " \t\n(/@");
 		string defNameLower = toLowerCase(defName);
 		if (readPtr >= endFileData) { break; }
 
 		if (defNameLower == "include") {
-			string fgdName = trimSpaces(readUntil(readPtr, "/@"));
+			string fgdName = trimSpaces(readUntil(readPtr, "(/@"));
 			if (readPtr >= endFileData) { break; }
 
 			replaceAll(fgdName, "\"", "");
@@ -136,7 +136,33 @@ bool Fgd::parse() {
 			}
 
 			delete tmp;
-			continue;
+		}
+		else if (defNameLower == "mapsize") {
+			trimSpaces(readUntil(readPtr, "(/@"));
+			if (readPtr >= endFileData) { break; }
+
+			if (readPtr[0] != '(') {
+				logf("Invalid @MapSize format in %s.fgd\n", name.c_str());
+				continue;
+			}
+			readPtr++;
+
+			string sizeStr = trimSpaces(readUntil(readPtr, ")/@"));
+			if (readPtr >= endFileData) { break; }
+
+			if (readPtr[0] != ')') {
+				logf("Invalid @MapSize format in %s.fgd\n", name.c_str());
+				continue;
+			}
+
+			vector<string> parts = splitString(sizeStr, ",");
+			if (parts.size() != 2) {
+				logf("Invalid @MapSize format '%s' in %s.fgd\n", sizeStr.c_str(), name.c_str());
+				continue;
+			}
+
+			mapSizeMin = atoi(parts[0].c_str());
+			mapSizeMax = atoi(parts[1].c_str());
 		}
 		else if (defNameLower == "baseclass" || defNameLower == "solidclass" || defNameLower == "pointclass") {
 			readPtr = oldReadPtr;

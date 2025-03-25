@@ -109,6 +109,9 @@ public:
 	vector<FgdClass*> classes;
 	unordered_map<string, FgdClass*> classMap;
 
+	int mapSizeMin = 0;
+	int mapSizeMax = 0;
+
 	vector<FgdGroup> pointEntGroups;
 	vector<FgdGroup> solidEntGroups;
 

@@ -21,6 +21,9 @@ struct AppSettings {
 	bool confirm_exit;
 	bool unicode_font;
 	bool first_load;
+	int mapsize_min;
+	int mapsize_max;
+	bool mapsize_auto;
 
 	bool debug_open;
 	bool keyvalue_open;

@@ -726,7 +726,6 @@ void init_limits() {
 	g_engine_limits[ENGINE_HALF_LIFE].max_texinfos = 32767;
 	g_engine_limits[ENGINE_HALF_LIFE].max_allocblocks = 64;
 	g_engine_limits[ENGINE_HALF_LIFE].max_texturepixels = 262144;
-	g_engine_limits[ENGINE_HALF_LIFE].max_mapboundary = 4096;
 
 	g_engine_limits[ENGINE_SVEN_COOP].max_surface_extents = 64;
 	g_engine_limits[ENGINE_SVEN_COOP].max_models = 4096;
@@ -748,7 +747,6 @@ void init_limits() {
 	g_engine_limits[ENGINE_SVEN_COOP].max_texinfos = 32767;
 	g_engine_limits[ENGINE_SVEN_COOP].max_allocblocks = 1024;
 	g_engine_limits[ENGINE_SVEN_COOP].max_texturepixels = 1048576;
-	g_engine_limits[ENGINE_SVEN_COOP].max_mapboundary = 32768;
 
 	g_limits = g_engine_limits[ENGINE_SVEN_COOP];
 }

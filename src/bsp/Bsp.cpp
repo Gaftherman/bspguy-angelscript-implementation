@@ -1796,7 +1796,7 @@ STRUCTCOUNT Bsp::delete_unused_hulls(bool noProgress) {
 void Bsp::delete_oob_nodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& clipOrder, int oobFlags, 
 	bool* oobHistory, bool isFirstPass, int& removedNodes) {
 	BSPNODE& node = nodes[iNode];
-	float oob_coord = g_limits.max_mapboundary;
+	float oob_coord = g_settings.mapsize_max;
 
 	if (node.iPlane < 0) {
 		return;
@@ -1867,7 +1867,7 @@ void Bsp::delete_oob_nodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& c
 void Bsp::delete_oob_clipnodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& clipOrder, int oobFlags, 
 	bool* oobHistory, bool isFirstPass, int& removedNodes)  {
 	BSPCLIPNODE& node = clipnodes[iNode];
-	float oob_coord = g_limits.max_mapboundary;
+	float oob_coord = g_settings.mapsize_max;
 
 	if (node.iPlane < 0) {
 		return;
@@ -1948,7 +1948,7 @@ void Bsp::delete_oob_clipnodes(int iNode, int16_t* parentBranch, vector<BSPPLANE
 }
 
 void Bsp::delete_oob_data(int clipFlags) {
-	float oob_coord = g_limits.max_mapboundary;
+	float oob_coord = g_settings.mapsize_max;
 	BSPMODEL& worldmodel = models[0];
 
 	// remove OOB nodes and clipnodes
@@ -2159,7 +2159,7 @@ void Bsp::delete_oob_data(int clipFlags) {
 void Bsp::delete_box_nodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& clipOrder,
 	vec3 clipMins, vec3 clipMaxs, bool* oobHistory, bool isFirstPass, int& removedNodes) {
 	BSPNODE& node = nodes[iNode];
-	float oob_coord = g_limits.max_mapboundary;
+	float oob_coord = g_settings.mapsize_max;
 
 	if (node.iPlane < 0) {
 		return;
@@ -2223,7 +2223,7 @@ void Bsp::delete_box_nodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& c
 void Bsp::delete_box_clipnodes(int iNode, int16_t* parentBranch, vector<BSPPLANE>& clipOrder,
 	vec3 clipMins, vec3 clipMaxs, bool* oobHistory, bool isFirstPass, int& removedNodes) {
 	BSPCLIPNODE& node = clipnodes[iNode];
-	float oob_coord = g_limits.max_mapboundary;
+	float oob_coord = g_settings.mapsize_max;
 
 	if (node.iPlane < 0) {
 		return;

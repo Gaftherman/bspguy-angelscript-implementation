@@ -35,7 +35,6 @@ struct MapLimits {
 	int max_entdata;
 	int max_allocblocks;
 	int max_texturepixels;
-	int max_mapboundary; // how far from the map origin you can play the game without weird glitches
 };
 
 class Renderer;

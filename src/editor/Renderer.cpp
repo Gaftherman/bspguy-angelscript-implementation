@@ -424,7 +424,11 @@ void Renderer::renderLoop() {
 				}
 				
 				if ((g_render_flags & RENDER_MAP_BOUNDARY) && !emptyMapLoaded) {
-					drawBox(mapRenderer->map->ents[0]->getOrigin() * -1, g_limits.max_mapboundary * 2, COLOR4(0, 255, 0, 64));
+					glDepthFunc(GL_LESS);
+					drawBox(mapRenderer->map->ents[0]->getOrigin() * -1, g_settings.mapsize_max * 2, COLOR4(0, 255, 0, 64));
+					glDepthFunc(GL_LEQUAL); // draw lines in front (still causes some z fighting)
+					drawBoxOutline(mapRenderer->map->ents[0]->getOrigin() * -1, g_settings.mapsize_max * 2, COLOR4(0, 0, 0, 255));
+					glDepthFunc(GL_LESS);
 				}
 
 				if (hasCullbox) {
@@ -2380,6 +2384,44 @@ void Renderer::drawBox(vec3 center, float width, COLOR4 color) {
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &cube, 6 * 6);
 	buffer.upload();
 	buffer.draw(GL_TRIANGLES);
+}
+
+void Renderer::drawBoxOutline(vec3 center, float width, COLOR4 color) {
+	width *= 0.5f;
+	vec3 sz = vec3(width, width, width);
+	vec3 pos = vec3(center.x, center.z, -center.y);
+	vec3 mins = pos - sz;
+	vec3 maxs = pos + sz;
+
+	vec3 corners[8] = {
+		vec3(mins.x, mins.y, mins.z), // 0
+		vec3(maxs.x, mins.y, mins.z), // 1
+		vec3(mins.x, maxs.y, mins.z), // 2
+		vec3(maxs.x, maxs.y, mins.z), // 3
+		vec3(mins.x, mins.y, maxs.z), // 4
+		vec3(maxs.x, mins.y, maxs.z), // 5
+		vec3(mins.x, maxs.y, maxs.z), // 6
+		vec3(maxs.x, maxs.y, maxs.z),  // 7
+	};
+
+	cVert edges[24] = {
+		cVert(corners[0], color), cVert(corners[1], color),
+		cVert(corners[1], color), cVert(corners[3], color),
+		cVert(corners[3], color), cVert(corners[2], color),
+		cVert(corners[2], color), cVert(corners[0], color),
+		cVert(corners[4], color), cVert(corners[5], color),
+		cVert(corners[5], color), cVert(corners[7], color),
+		cVert(corners[7], color), cVert(corners[6], color),
+		cVert(corners[6], color), cVert(corners[4], color),
+		cVert(corners[0], color), cVert(corners[4], color),
+		cVert(corners[1], color), cVert(corners[5], color),
+		cVert(corners[2], color), cVert(corners[6], color),
+		cVert(corners[3], color), cVert(corners[7], color),
+	};
+
+	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &edges, 24);
+	buffer.upload();
+	buffer.draw(GL_LINES);
 }
 
 void Renderer::drawBox(vec3 mins, vec3 maxs, COLOR4 color) {
@@ -4469,7 +4511,7 @@ void Renderer::merge(string fpath) {
 	map2->remove_unused_model_structures().print_delete_stats(2);
 
 	BspMerger merger;
-	mergeResult = merger.merge(maps, vec3(), thismap->name, true, true, true, g_engine_limits->max_mapboundary);
+	mergeResult = merger.merge(maps, vec3(), thismap->name, true, true, true, g_settings.mapsize_max);
 
 	if (!mergeResult.map || !mergeResult.map->valid) {
 		delete map2;
