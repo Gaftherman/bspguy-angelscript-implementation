@@ -37,6 +37,7 @@ float g_tooltip_delay = 0.6f; // time in seconds before showing a tooltip
 string iniPath = getConfigDir() + "imgui.ini";
 
 char const* bspFilterPatterns[1] = { "*.bsp" };
+char const* entFilterPatterns[1] = { "*.ent" };
 
 void tooltip(ImGuiContext& g, const char* text) {
 	if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
@@ -772,13 +773,43 @@ void Gui::drawMenuBar() {
 
 	if (ImGui::BeginMenu("File"))
 	{
+		Bsp* map = app->mapRenderer->map;
+
 		if (ImGui::MenuItem("Open", "Ctrl+O", false, !app->isLoading)) {
 			g_app->openMap(NULL);
 		}
 
+		if (ImGui::BeginMenu("Recent Files")) {
+			if (g_settings.recentFiles.size()) {
+				ImGui::Separator();
+				int idx = 1;
+				for (int i = g_settings.recentFiles.size() - 1; i >= 0; i--) {
+					if (ImGui::MenuItem((to_string(idx++) + ": " + g_settings.recentFiles[i]).c_str(), NULL)) {
+						string path = g_settings.recentFiles[i];
+						if (fileExists(path)) {
+							g_app->openMap(path.c_str());
+						}
+						else {
+							logf("BSP file does not exist: %s\n", path.c_str());
+							g_settings.recentFiles.erase(g_settings.recentFiles.begin() + i);
+							i--;
+						}
+					}
+				}
+
+				ImGui::Separator();				
+			}
+
+			if (ImGui::MenuItem("Clear", NULL, false, g_settings.recentFiles.size())) {
+				g_settings.recentFiles.clear();
+				g_settings.save();
+			}
+
+			ImGui::EndMenu();
+		}
+
 		ImGui::BeginDisabled(app->emptyMapLoaded);
 		if (ImGui::MenuItem("Save", NULL)) {
-			Bsp* map = app->mapRenderer->map;
 			map->update_ent_lump();
 			//map->write("yabma_move.bsp");
 			//map->write("D:/Steam/steamapps/common/Sven Co-op/svencoop_addon/maps/yabma_move.bsp");
@@ -789,8 +820,6 @@ void Gui::drawMenuBar() {
 			saveAs();
 		}
 		if (ImGui::MenuItem("Save a Copy As...", NULL)) {
-			Bsp* map = app->mapRenderer->map;
-
 			char* fname = tinyfd_saveFileDialog("Save a Copy As", map->path.c_str(),
 				1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)");
 
@@ -810,6 +839,103 @@ void Gui::drawMenuBar() {
 
 		ImGui::Separator();
 
+		if (ImGui::BeginMenu("Export"))
+		{
+			if (ImGui::MenuItem("Entities (.ent)", "")) {
+				string defaultPath = map->path;
+				int lastDot = defaultPath.find_last_of(".");
+				if (lastDot != -1) {
+					defaultPath = defaultPath.substr(0, lastDot);
+				}
+				defaultPath = defaultPath + ".ent";
+
+				char* fname = tinyfd_saveFileDialog("Export Entities", defaultPath.c_str(),
+					1, entFilterPatterns, "Entity File (*.ent)");
+
+				if (fname) {
+					map->update_ent_lump();
+					FILE* outfile = fopen(fname, "w");
+					fwrite(map->lumps[LUMP_ENTITIES], map->header.lump[LUMP_ENTITIES].nLength, 1, outfile);
+					fclose(outfile);
+				}
+			}
+			tooltip(g, "Save entity definitions to a file.");
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Import"))
+		{
+			if (ImGui::MenuItem("Entities (.ent)", "")) {
+				string defaultPath = map->path;
+				int lastDot = defaultPath.find_last_of(".");
+				if (lastDot != -1) {
+					defaultPath = defaultPath.substr(0, lastDot);
+				}
+				defaultPath = defaultPath + ".ent";
+
+				char* fname = tinyfd_openFileDialog("Import Entities", defaultPath.c_str(),
+					1, entFilterPatterns, "Entity File (*.ent)", false);
+
+				if (fname) {
+					int len;
+					char* data = loadFile(fname, len);
+					std::string entString = std::string(data, len);
+
+					LumpReplaceCommand* undoCommand = new LumpReplaceCommand("Import Entities");
+
+					CreateEntityFromTextCommand* command =
+						new CreateEntityFromTextCommand("Import Entities", entString);
+
+					map->ents.clear();
+					command->execute();
+
+					logf("Imported %d entities\n", command->createdEnts);
+
+					int worldspawnIdx = -1;
+					int worldspawnCount = 0;
+					for (int i = 0; i < map->ents.size(); i++) {
+						if (map->ents[i]->getClassname() == "worldspawn") {
+							if (worldspawnIdx == -1)
+								worldspawnIdx = i;
+							worldspawnCount++;
+						}
+					}
+
+					if (worldspawnCount > 1) {
+						logf("WARNING: Multiple worldspawn entities were defined. The first definition was used.\n");
+					}
+
+					if (worldspawnIdx == -1) {
+						logf("A worldspawn entity was not defined in the .ent file. A default will be created.\n");
+						Entity* defaultWorldspawn = new Entity();
+						defaultWorldspawn->setOrAddKeyvalue("classname", "worldspawn");
+						defaultWorldspawn->setOrAddKeyvalue("MaxRange", "32768");
+						defaultWorldspawn->setOrAddKeyvalue("skyname", "desert");
+						map->ents.insert(map->ents.begin(), defaultWorldspawn);
+					}
+					else if (worldspawnIdx != 0) {
+						logf("The worldspawn entity was moved to the first entity index.\n");
+						Entity* temp = map->ents[0];
+						map->ents[0] = map->ents[worldspawnIdx];
+						map->ents[worldspawnIdx] = temp;
+					}
+
+					delete command;
+					undoCommand->pushUndoState();
+					entityReportFilterNeeded = true;
+					app->pickInfo.deselect();
+					app->postSelectEnt();
+				}
+			}
+			tooltip(g, "Delete all map entities and load new ones from a file."
+				"\n\nTo add additional entities instead of replacing them, copy entity text from your .ent file and select Paste here.");
+
+			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+
 		if (ImGui::MenuItem("Merge", NULL, false, !app->isLoading)) {
 			char* fname = tinyfd_openFileDialog("Merge Map", "",
 				1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
@@ -817,7 +943,7 @@ void Gui::drawMenuBar() {
 			if (fname)
 				g_app->merge(fname);
 		}
-		Bsp* map = g_app->mapRenderer->map;
+
 		tooltip(g, ("Merge one other BSP into the current file.\n\n"
 			"Equivalent CLI command:\nbspguy merge " + map->name + " -noscript -noripent -maps \""
 			+ map->name + ",other_map\"\n\nUse the CLI for automatic arrangement and optimization of "
@@ -831,7 +957,6 @@ void Gui::drawMenuBar() {
 		tooltip(g, "Discard all changes and reload the map.\n");
 
 		if (ImGui::MenuItem("Validate")) {
-			Bsp* map = app->mapRenderer->map;
 			logf("\n-------- Validating %s --------\n", map->name.c_str());
 			map->validate();
 			logf("-----------------------------------------\n", map->name.c_str());
@@ -840,30 +965,6 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Checks BSP data structures for invalid values and references. Trivial problems are fixed automatically. Results are output to the Messages widget.");
 		ImGui::EndDisabled();
-
-		if (g_settings.recentFiles.size()) {
-			ImGui::Separator();
-			int idx = 1;
-			for (int i = g_settings.recentFiles.size() - 1; i >= 0; i--) {
-				if (ImGui::MenuItem((to_string(idx++) + ": " + g_settings.recentFiles[i]).c_str(), NULL)) {
-					string path = g_settings.recentFiles[i];
-					if (fileExists(path)) {
-						g_app->openMap(path.c_str());
-					}
-					else {
-						logf("BSP file does not exist: %s\n", path.c_str());
-						g_settings.recentFiles.erase(g_settings.recentFiles.begin() + i);
-						i--;
-					}
-				}
-			}
-
-			ImGui::Separator();
-			if (ImGui::MenuItem("Clear Recent Files List", NULL)) {
-				g_settings.recentFiles.clear();
-				g_settings.save();
-			}
-		}
 
 		ImGui::Separator();
 		if (ImGui::MenuItem("Exit", NULL)) {
@@ -884,7 +985,7 @@ void Gui::drawMenuBar() {
 		bool canRedo = redoCmd && (!app->isLoading || redoCmd->allowedDuringLoad);
 		bool entSelected = app->pickInfo.getEnt();
 		bool nonWorldspawnEntSelected = entSelected && app->pickInfo.getEntIndex() != 0;
-		Bsp* map = g_app->mapRenderer->map;
+		Bsp* map = app->mapRenderer->map;
 
 		if (ImGui::MenuItem(undoTitle.c_str(), "Ctrl+Z", false, canUndo)) {
 			app->undo();
@@ -1250,16 +1351,12 @@ void Gui::drawMenuBar() {
 		ImGui::EndMenu();
 	}
 
-	if (ImGui::BeginMenu("Tools"))
+	if (ImGui::BeginMenu("Create"))
 	{
-		ImGui::BeginDisabled(app->emptyMapLoaded);
 		Bsp* map = app->mapRenderer->map;
 
-		static vector<Wad*> emptyWads;
-		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
-		BspRenderer* renderer = app->mapRenderer;
+		ImGui::BeginDisabled(app->emptyMapLoaded);
 
-		ImGui::MenuItem("Create", 0, false, false);
 		if (ImGui::MenuItem("Point Entity", 0, false, true)) {
 			Entity* newEnt = new Entity();
 			vec3 origin = (app->cameraOrigin + app->cameraForward * 100);
@@ -1291,7 +1388,7 @@ void Gui::drawMenuBar() {
 			if (size < 16) {
 				size = 16;
 			}
-			
+
 			int aaatriggerIdx = map->get_default_texture_idx();
 			vec3 mins = vec3(-size, -size, -size);
 			vec3 maxs = vec3(size, size, size);
@@ -1319,7 +1416,18 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Create a point entity for use with the culling tool. 2 of these define the bounding box for structure culling operations.\n");
 
-		ImGui::Separator();
+		ImGui::EndDisabled();
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Tools"))
+	{
+		ImGui::BeginDisabled(app->emptyMapLoaded);
+		Bsp* map = app->mapRenderer->map;
+
+		static vector<Wad*> emptyWads;
+		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
+		BspRenderer* renderer = app->mapRenderer;
 
 		ImGui::MenuItem("Delete", 0, false, false);
 		if (ImGui::MenuItem("Clean", 0, false, !app->isLoading)) {

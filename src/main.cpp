@@ -11,6 +11,7 @@
 // alt instead of ctrl for slow movement, then can use hotkeys
 
 // v5 new:
+// import/export: embedded textures, wad textures, .ent file
 // ripent saftey warning
 // embed / unembed all textures
 // hold click to select behind

@@ -4070,6 +4070,9 @@ void Renderer::pasteEnts(bool noModifyOrigin) {
 		logf("No entity data in clipboard\n");
 		return;
 	}
+	else {
+		logf("Pasted %d entities from clipboard\n", createCommand->createdEnts);
+	}
 
 	logf("Pasted %d entities from clipboard\n", createCommand->createdEnts);
 
