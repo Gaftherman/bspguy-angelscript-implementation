@@ -7,9 +7,18 @@ static int g_active_shader_program;
 
 ShaderProgram::ShaderProgram(const char* vshaderSource, const char* fshaderSource)
 {
+	compiled = false;
 	modelViewID = modelViewProjID = -1;
 	vShader = new Shader(vshaderSource, GL_VERTEX_SHADER);
 	fShader = new Shader(fshaderSource, GL_FRAGMENT_SHADER);
+
+	if (!vShader->compiled) {
+		logf("failed to compile vertex shader\n");
+	}
+	if (!fShader->compiled) {
+		logf("failed to compile fragment shader\n");
+	}
+
 	link();
 }
 
@@ -32,9 +41,13 @@ void ShaderProgram::link()
 		glGetProgramInfoLog(ID, 1024, &len, log);
 		logf("Shader Program Link Failure:\n");
 		logf(log);
+		logf("\n");
 		if (len > 1024)
-			logf("\nLog too big to fit!\n");
+			logf("Log too big to fit!\n");
 		delete[] log;
+	}
+	else {
+		compiled = true;
 	}
 }
 

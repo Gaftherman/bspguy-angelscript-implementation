@@ -207,6 +207,7 @@ const char* g_shader_mdl_fragment =
 
 const char* g_shader_mdl_vertex =
 // transformation matrix
+"#version 130\n"
 "#define STUDIO_NF_CHROME 0x02\n"
 "#define STUDIO_NF_ADDITIVE 0x20\n"
 
@@ -220,7 +221,9 @@ const char* g_shader_mdl_vertex =
 "uniform vec3 ambient; \n"
 
 // skeleton
-"uniform mat4 bones[128]; \n"
+// 3D texture as an array of mat4 (poor man's UBO). Vertex Texture Fetch requires GL 3.0 or 2.1 w/ ARB
+// Can't use UBO without upgrading to GL 3.1. Can't have 256 mat4 uniforms for valid shader code.
+"uniform sampler3D boneMatrixTexture; \n"
 
 // render flags
 "uniform int chromeEnable; \n"
@@ -233,23 +236,34 @@ const char* g_shader_mdl_vertex =
 "uniform vec2 textureST; \n"
 
 // vertex variables
-"attribute vec3 vPosition; \n"
-"attribute vec3 vNormal; \n"
-"attribute vec2 vTex; \n"
-"attribute float vBone; \n"
+"in vec3 vPosition; \n"
+"in vec3 vNormal; \n"
+"in vec2 vTex; \n"
+"in float vBone; \n"
 
 // fragment variables
-"varying vec2 fTex; \n"
-"varying vec4 fColor; \n"
+"out vec2 fTex; \n"
+"out vec4 fColor; \n"
 
 "vec4 lighting(inout vec3 tNormal); \n"
-"vec3 rotateVector(inout vec3 v, inout mat4 mat); \n"
+"vec3 rotateVector(vec3 v, inout mat4 mat); \n"
 "vec3 irotateVector(vec3 v, mat4 mat); \n"
-"vec2 chrome(inout vec3 tNormal, inout mat4 bone);\n"
+"vec2 chrome(vec3 tNormal, inout mat4 bone);\n"
+
+// lookup matrix value from 3D texture
+// shifting quarter of a pixel to prevent picking the wrong value due to low float precision
+"mat4 getBoneMatrix(float boneId) { \n"
+"    vec4 row0 = texture(boneMatrixTexture, vec3(0.0  + (1.0/16.0), 0.0, boneId)); \n"
+"    vec4 row1 = texture(boneMatrixTexture, vec3(0.25 + (1.0/16.0), 0.0, boneId)); \n"
+"    vec4 row2 = texture(boneMatrixTexture, vec3(0.5  + (1.0/16.0), 0.0, boneId)); \n"
+"    vec4 row3 = texture(boneMatrixTexture, vec3(0.75 + (1.0/16.0), 0.0, boneId)); \n"
+
+"   return mat4(row0, row1, row2, row3); \n"
+"} \n"
 
 "void main()\n"
 "{\n"
-"mat4 bone = bones[int(vBone)];"
+"mat4 bone = getBoneMatrix((vBone / 128.0) + (1.0/512.0));" // shift quarter of a pixel
 "vec3 pos = rotateVector(vPosition, bone) + vec3(bone[0][3], bone[2][3], -bone[1][3]); \n"
 "vec3 tNormal = rotateVector(vNormal, bone); \n"
 
@@ -273,7 +287,7 @@ const char* g_shader_mdl_vertex =
 "} \n"
 "}\n"
 
-"vec3 rotateVector(inout vec3 v, inout mat4 mat)\n"
+"vec3 rotateVector(vec3 v, inout mat4 mat)\n"
 "{\n"
 "vec3 vout; \n"
 "vout.x = dot(v, mat[0].xyz); \n"
@@ -291,7 +305,7 @@ const char* g_shader_mdl_vertex =
 "return vout; \n"
 "}\n"
 
-"vec2 chrome(inout vec3 tNormal, inout mat4 bone)\n"
+"vec2 chrome(vec3 tNormal, inout mat4 bone)\n"
 "{\n"
 "vec3 dir = normalize(viewerOrigin + vec3(bone[0][3], bone[2][3], -bone[1][3])); \n"
 

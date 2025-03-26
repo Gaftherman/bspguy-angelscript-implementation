@@ -26,7 +26,7 @@ struct boneVert {
 struct MdlMeshRender {
 	boneVert* verts;
 	short* origVerts; // original mdl vertex used to create the rendered vertex
-	vec3* transformVerts; // duplicate of verts positions that can be edited before buffers upload
+	vec3* transformVerts; // duplicate of verts positions that can be edited before/after buffers upload
 	short* origNorms; // original mdl normals used to create the rendered normal
 	int numVerts;
 	int flags;
@@ -89,6 +89,8 @@ private:
 	uint u_viewerOriginId;
 	uint u_viewerRightId;
 	uint u_textureST;
+	uint u_boneTexture;
+	uint u_boneTextureUniform;
 
 	struct AABB {
 		vec3 mins, maxs;

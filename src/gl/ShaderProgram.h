@@ -14,6 +14,7 @@ class ShaderProgram
 {
 public:
 	uint ID; // OpenGL program ID
+	bool compiled;
 
 	Shader* vShader; // vertex shader
 	Shader* fShader; // fragment shader

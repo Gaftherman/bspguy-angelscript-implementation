@@ -231,6 +231,8 @@ Renderer::Renderer() {
 
 	glewInit();
 
+	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
+
 	// init to black screen instead of white
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glfwSwapBuffers(window);
@@ -238,34 +240,53 @@ Renderer::Renderer() {
 
 	gui = new Gui(this);
 
+	
 	bspShader = new ShaderProgram(g_shader_multitexture_vertex, g_shader_multitexture_fragment);
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
+	if (!bspShader->compiled) {
+		logf("failed to compile BSP shader\n");
+	}
 
 	colorShader = new ShaderProgram(g_shader_cVert_vertex, g_shader_cVert_fragment);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	colorShader->setMatrixNames(NULL, "modelViewProjection");
 	colorShader->setVertexAttributeNames("vPosition", "vColor", NULL, NULL);
+	if (!colorShader->compiled) {
+		logf("failed to compile color shader\n");
+	}
 
 	mdlShader = new ShaderProgram(g_shader_mdl_vertex, g_shader_mdl_fragment);
 	mdlShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	mdlShader->setMatrixNames(NULL, "modelViewProjection");
 	mdlShader->setVertexAttributeNames("vPosition", NULL, "vTex", "vNormal");
+	if (!mdlShader->compiled) {
+		logf("failed to compile MDL shader\n");
+	}
 
 	sprShader = new ShaderProgram(g_shader_spr_vertex, g_shader_spr_fragment);
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprShader->setMatrixNames(NULL, "modelViewProjection");
 	sprShader->setVertexAttributeNames("vPosition", NULL, "vTex", NULL);
-	
+	if (!sprShader->compiled) {
+		logf("failed to compile SPR shader\n");
+	}
+
 	vec3Shader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3_fragment);
 	vec3Shader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	vec3Shader->setMatrixNames(NULL, "modelViewProjection");
 	vec3Shader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
+	if (!vec3Shader->compiled) {
+		logf("failed to compile vec3 shader\n");
+	}
 
 	sprOutlineShader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3depth_fragment);
 	sprOutlineShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprOutlineShader->setMatrixNames(NULL, "modelViewProjection");
 	sprOutlineShader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
+	if (!sprOutlineShader->compiled) {
+		logf("failed to compile SPR outline shader\n");
+	}
 
 	colorShader->bind();
 	u_colorMultId = glGetUniformLocation(colorShader->ID, "colorMult");

@@ -7,7 +7,9 @@
 
 // FIX v5:
 // unrecognized props field intensity fgd
-// lightmaps only rendering broken
+// lightmaps only rendering broken, textures oonly also broken
+// duplicate asset paths shown on linux
+// iconsprite not colored when selected
 
 // v5 todo low prio:
 // ripent saftey warning

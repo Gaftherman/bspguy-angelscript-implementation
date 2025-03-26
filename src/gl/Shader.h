@@ -4,6 +4,7 @@ class Shader
 {
 public:
 	unsigned int ID;
+	bool compiled;
 	
     /*
     	Create and compile a shader from source

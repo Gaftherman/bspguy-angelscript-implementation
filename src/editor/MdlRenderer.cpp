@@ -15,6 +15,7 @@ MdlRenderer::MdlRenderer(ShaderProgram* shaderProgram, string modelPath) {
 	this->fpath = modelPath;
 	this->shaderProgram = shaderProgram;
 	valid = false;
+	u_boneTexture = -1;
 
 	//loadFuture = async(launch::async, &MdlRenderer::loadData, this);
 	//loadData();
@@ -66,6 +67,9 @@ MdlRenderer::~MdlRenderer() {
 
 	delete[] data.getBuffer();
 	header = NULL;
+
+	if (u_boneTexture != -1)
+		glDeleteTextures(1, &u_boneTexture);
 }
 
 bool MdlRenderer::validate() {
@@ -411,6 +415,21 @@ void MdlRenderer::upload() {
 	u_viewerOriginId = glGetUniformLocation(shaderProgram->ID, "viewerOrigin");
 	u_viewerRightId = glGetUniformLocation(shaderProgram->ID, "viewerRight");
 	u_textureST = glGetUniformLocation(shaderProgram->ID, "textureST");
+	u_boneTextureUniform = glGetUniformLocation(shaderProgram->ID, "boneMatrixTexture");
+
+	glGenTextures(1, &u_boneTexture);
+	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
+
+	// disable filtering and mipmaps so the texture can be used as a lookup table
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+
+	glUniform1i(u_boneTextureUniform, 1); // GL_TEXTURE1
+
+	// allocate data so subImage can be used for faster updates
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, 4, 1, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
 
 	loadState = MODEL_LOAD_DONE;
 }
@@ -1358,8 +1377,12 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewer
 	lights[0][1] = opts.rendercolor.toVec(); // diffuse color
 	glUniformMatrix3fv(u_lightsId, 4, false, (float*)lights);
 	
-	// bone transforms
-	glUniformMatrix4fv(u_bonesId, header->numbones, false, (float*)m_bonetransform);
+	// Hack: setup the bone matrices as a 3D texture.
+	// Opengl 3.0 doesn't have uniform buffers and mat4[256] is far too many uniforms for a valid shader.
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
+	glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, 4, 1, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
+	glActiveTexture(GL_TEXTURE0);
 
 	shaderProgram->pushMatrix(MAT_MODEL);
 	shaderProgram->modelMat->loadIdentity();
