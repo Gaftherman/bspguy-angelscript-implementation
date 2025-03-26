@@ -91,6 +91,7 @@ private:
 	uint u_textureST;
 	uint u_boneTexture;
 	uint u_boneTextureUniform;
+	uint u_colorMult;
 
 	struct AABB {
 		vec3 mins, maxs;

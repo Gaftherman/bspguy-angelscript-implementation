@@ -154,7 +154,7 @@ public:
 	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
 		int clipnodeHull, bool transparencyPass, bool wireframePass);
 
-	void drawModel(int modelIdx, bool transparent, bool highlight);
+	void drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight);
 	void drawModelWireframe(int modelIdx, bool highlight);
 	void drawModelClipnodes(int modelIdx, bool highlight, int hullIdx);
 	void drawPointEntities(const vector<int>& highlightedEnts);
@@ -204,6 +204,9 @@ private:
 
 	// opengl uinifors
 	uint colorShaderMultId;
+	uint bspShaderColorMultId;
+	uint bspShaderAlphaTestId;
+	uint bspShaderGammaId;
 
 	LightmapInfo* lightmaps = NULL;
 	RenderEnt* renderEnts = NULL;
@@ -234,11 +237,10 @@ private:
 	Texture** glTextures = NULL;
 	Texture** glLightmapTextures = NULL;
 	Texture* whiteTex = NULL;
+	Texture* whiteTex3D = NULL;
 	Texture* redTex = NULL;
-	Texture* yellowTex = NULL;
 	Texture* greyTex = NULL;
 	Texture* blackTex = NULL;
-	Texture* blueTex = NULL;
 
 	bool lightmapsGenerated = false;
 	bool lightmapsUploaded = false;

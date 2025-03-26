@@ -111,7 +111,7 @@ void TextureArray::add(Texture* tex) {
 	getBucketDimensions(width, height);
 
 	if (width != tex->width || height != tex->height) {
-		COLOR3* newData = new COLOR3[width * height];
+		COLOR4* newData = new COLOR4[width * height];
 
 		float xScale = width / (float)tex->width;
 		float yScale = height / (float)tex->height;
@@ -120,7 +120,7 @@ void TextureArray::add(Texture* tex) {
 			for (int x = 0; x < width; x++) {
 				int srcX = x / xScale;
 				int srcY = y / yScale;
-				newData[y * width + x] = ((COLOR3*)tex->data)[srcY * tex->width + srcX];
+				newData[y * width + x] = ((COLOR4*)tex->data)[srcY * tex->width + srcX];
 			}
 		}
 
@@ -170,13 +170,13 @@ void TextureArray::upload() {
 			//debugf("%d textures in bucket %dx%d\n", buckets[i].count, sizeX, sizeY);
 
 			glBindTexture(GL_TEXTURE_3D, buckets[i].glArrayId);
-			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, buckets[i].count, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, sizeX, sizeY, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
 			texDataSz += buckets[i].count * sizeX * sizeY * 3;
 
 			if (buckets[i].textures) {
 				for (int k = 0; k < buckets[i].count; k++) {
-					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, k, sizeX, sizeY, 1, GL_RGB, GL_UNSIGNED_BYTE, buckets[i].textures[k]->data);
+					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, k, sizeX, sizeY, 1, GL_RGBA, GL_UNSIGNED_BYTE, buckets[i].textures[k]->data);
 
 					delete[] buckets[i].textures[k]->data;
 					buckets[i].textures[k]->data = NULL;

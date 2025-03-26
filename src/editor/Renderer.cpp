@@ -2601,6 +2601,7 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 
 	static vector<ModelKey> tryModelKeys = {
 		{"model", false},
+		{"new_model", false},
 		{"classname", true},
 		{"monstertype", true},
 	};

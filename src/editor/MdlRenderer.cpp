@@ -416,6 +416,7 @@ void MdlRenderer::upload() {
 	u_viewerRightId = glGetUniformLocation(shaderProgram->ID, "viewerRight");
 	u_textureST = glGetUniformLocation(shaderProgram->ID, "textureST");
 	u_boneTextureUniform = glGetUniformLocation(shaderProgram->ID, "boneMatrixTexture");
+	u_colorMult = glGetUniformLocation(shaderProgram->ID, "colorMult");
 
 	glGenTextures(1, &u_boneTexture);
 	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
@@ -1338,10 +1339,38 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewer
 
 	SetUpBones(angles, opts.sequence, drawFrame);
 
-	glDisable(GL_BLEND);
+	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
 
 	shaderProgram->bind();
+
+	switch (opts.rendermode) {
+	default:
+	case RENDER_MODE_NORMAL:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, 1.0f);
+		break;
+	case RENDER_MODE_SOLID:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, 1.0f);
+		break;
+	case RENDER_MODE_COLOR:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(u_colorMult, opts.rendercolor.r / 255.0f, opts.rendercolor.g / 255.0f, opts.rendercolor.b / 255.0f, opts.renderamt / 255.0f);
+		break;
+	case RENDER_MODE_TEXTURE:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		break;
+	case RENDER_MODE_GLOW:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		break;
+	case RENDER_MODE_ADDITIVE:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		break;
+	}
 
 	glUniform1i(u_sTexId, 0);
 	glActiveTexture(GL_TEXTURE0);
@@ -1430,11 +1459,9 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewer
 			}
 
 			if (render.flags & STUDIO_NF_ADDITIVE) {
-				glEnable(GL_BLEND);
 				glUniform1i(u_additiveEnable, 1);
 			}
 			else {
-				glDisable(GL_BLEND);
 				glUniform1i(u_additiveEnable, 0);
 			}
 

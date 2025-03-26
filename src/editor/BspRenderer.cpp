@@ -47,25 +47,22 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	whiteTex = new Texture(1, 1);
 	greyTex = new Texture(1, 1);
 	redTex = new Texture(1, 1);
-	yellowTex = new Texture(1, 1);
 	blackTex = new Texture(1, 1);
-	blueTex = new Texture(1, 1);
+	whiteTex3D = new Texture(1, 1, 1);
 
 	glTextureArray = new TextureArray();
 
 	*((COLOR3*)(whiteTex->data)) = { 255, 255, 255 };
 	*((COLOR3*)(redTex->data)) = { 110, 0, 0 };
-	*((COLOR3*)(yellowTex->data)) = { 255, 255, 0 };
 	*((COLOR3*)(greyTex->data)) = { 64, 64, 64 };
 	*((COLOR3*)(blackTex->data)) = { 0, 0, 0 };
-	*((COLOR3*)(blueTex->data)) = { 0, 0, 200 };
+	*((COLOR3*)(whiteTex3D->data)) = { 255, 255, 255 };
 
 	whiteTex->upload(GL_RGB);
 	redTex->upload(GL_RGB);
-	yellowTex->upload(GL_RGB);
 	greyTex->upload(GL_RGB);
 	blackTex->upload(GL_RGB);
-	blueTex->upload(GL_RGB);
+	whiteTex3D->upload(GL_RGB);
 
 	preloadTextures();
 	//loadTextures();
@@ -86,6 +83,9 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	}
 
 	colorShaderMultId = glGetUniformLocation(colorShader->ID, "colorMult");
+	bspShaderColorMultId = glGetUniformLocation(bspShader->ID, "colorMult");
+	bspShaderAlphaTestId = glGetUniformLocation(bspShader->ID, "alphaTest");
+	bspShaderGammaId = glGetUniformLocation(bspShader->ID, "gamma");
 
 	numRenderClipnodes = map->modelCount;
 	lightmapFuture = async(launch::async, &BspRenderer::loadLightmaps, this);
@@ -121,9 +121,9 @@ void BspRenderer::preloadTextures() {
 Texture* BspRenderer::generateMissingTexture(int width, int height) {
 	Texture* tex = new Texture(width, height);
 
-	static const COLOR3 pink = COLOR3(255, 0, 255);
-	static const COLOR3 black = COLOR3(0, 0, 0);
-	COLOR3* dat = (COLOR3*)tex->data;
+	static const COLOR4 pink = COLOR4(255, 0, 255, 255);
+	static const COLOR4 black = COLOR4(0, 0, 0, 255);
+	COLOR4* dat = (COLOR4*)tex->data;
 
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
@@ -216,12 +216,16 @@ void BspRenderer::loadTextures() {
 			embedCount++;
 		}
 
-		COLOR3* imageData = new COLOR3[tex.nWidth * tex.nHeight];
+		COLOR4* imageData = new COLOR4[tex.nWidth * tex.nHeight];
 
 		int sz = tex.nWidth * tex.nHeight;
-		
+		bool hasAlpha = tex.szName[0] == '{';
+
 		for (int k = 0; k < sz; k++) {
-			imageData[k] = palette[src[k]];
+			imageData[k] = COLOR4(palette[src[k]], 255);
+
+			if (hasAlpha && src[k] == 255)
+				imageData[k].a = 0;
 		}
 
 		if (wadTex) {
@@ -265,7 +269,7 @@ void BspRenderer::reloadTextures(bool reloadNow) {
 		glTextures = glTexturesSwap;
 		for (int i = 0; i < map->textureCount; i++) {
 			if (!glTextures[i]->uploaded)
-				glTextures[i]->upload(GL_RGB);
+				glTextures[i]->upload(GL_RGBA);
 		}
 		glTextureArray->upload();
 		numLoadedTextures = map->textureCount;
@@ -1462,10 +1466,9 @@ BspRenderer::~BspRenderer() {
 	// TODO: share these with all renderers
 	delete whiteTex;
 	delete redTex;
-	delete yellowTex;
 	delete greyTex;
 	delete blackTex;
-	delete blueTex;
+	delete whiteTex3D;
 
 	delete glTextureArray;
 
@@ -1489,9 +1492,10 @@ void BspRenderer::delayLoadData() {
 		
 		glTextures = glTexturesSwap;
 
+		// non-3D version of textures needed for GUI
 		for (int i = 0; i < map->textureCount; i++) {
 			if (!glTextures[i]->uploaded)
-				glTextures[i]->upload(GL_RGB);
+				glTextures[i]->upload(GL_RGBA);
 		}
 
 		glTextureArray->upload();
@@ -1612,16 +1616,16 @@ Texture* BspRenderer::uploadTexture(WADTEX* tex) {
 	COLOR3* palette = (COLOR3*)(tex->data + tex->nOffsets[3] + lastMipSize + 2 - 40);
 	byte* src = tex->data;
 
-	COLOR3* imageData = new COLOR3[tex->nWidth * tex->nHeight];
+	COLOR4* imageData = new COLOR4[tex->nWidth * tex->nHeight];
 
 	int sz = tex->nWidth * tex->nHeight;
 
 	for (int k = 0; k < sz; k++) {
-		imageData[k] = palette[src[k]];
+		imageData[k] = COLOR4(palette[src[k]], 255);
 	}
 
 	Texture* newTex = new Texture(tex->nWidth, tex->nHeight, imageData);
-	newTex->upload(GL_RGB);
+	newTex->upload(GL_RGBA);
 
 	return newTex;
 }
@@ -1671,6 +1675,15 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	if (!wireframePass) {
+		if (g_render_flags & RENDER_LIGHTMAPS) {
+			glUniform1f(bspShaderGammaId, 1.5f);
+		}
+		else {
+			glUniform1f(bspShaderGammaId, 1.0f);
+		}
+	}
+
 	std::unordered_set<int> highlighted;
 	for (int highlightEnt : highlightedEnts) {
 		highlighted.insert(highlightEnt);
@@ -1692,49 +1705,43 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 				if (wireframePass)
 					drawModelWireframe(renderEnts[highlightEnt].modelIdx, true);
 				else
-					drawModel(renderEnts[highlightEnt].modelIdx, false, true);
+					drawModel(ent, renderEnts[highlightEnt].modelIdx, false, true);
 
 				activeShader->popMatrix(MAT_MODEL);
 			}
 		}
 	}
 
-	for (int pass = 0; pass < 2; pass++) {
-		bool drawTransparentFaces = pass == 1;
-		if (drawTransparentFaces != transparencyPass) {
-			continue;
+	if (wireframePass)
+		drawModelWireframe(0, false);
+	else {
+		drawModel(map->ents[0], 0, transparencyPass, false);
+	}
+
+	for (int i = 0, sz = map->ents.size(); i < sz; i++) {
+		if (renderEnts[i].modelIdx >= 0 && renderEnts[i].modelIdx < map->modelCount) {
+			Entity* ent = map->ents[i];
+			if (ent->hidden)
+				continue;
+			bool isHighlighted = highlighted.count(i);
+			activeShader->pushMatrix(MAT_MODEL);
+			*activeShader->modelMat = renderEnts[i].modelMat;
+			activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
+			*activeShader->modelMat = *activeShader->modelMat * map->ents[i]->getRotationMatrix(false);
+			activeShader->updateMatrixes();
+
+			if (wireframePass)
+				drawModelWireframe(renderEnts[i].modelIdx, isHighlighted);
+			else
+				drawModel(ent, renderEnts[i].modelIdx, transparencyPass, isHighlighted);
+
+			activeShader->popMatrix(MAT_MODEL);
 		}
+	}
 
-		if (wireframePass)
-			drawModelWireframe(0, false);
-		else
-			drawModel(0, drawTransparentFaces, false);
-
-		for (int i = 0, sz = map->ents.size(); i < sz; i++) {
-			if (renderEnts[i].modelIdx >= 0 && renderEnts[i].modelIdx < map->modelCount) {
-				Entity* ent = map->ents[i];
-				if (ent->hidden)
-					continue;
-				bool isHighlighted = highlighted.count(i);
-				activeShader->pushMatrix(MAT_MODEL);
-				*activeShader->modelMat = renderEnts[i].modelMat;
-				activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-				*activeShader->modelMat = *activeShader->modelMat * map->ents[i]->getRotationMatrix(false);
-				activeShader->updateMatrixes();
-
-				if (wireframePass)
-					drawModelWireframe(renderEnts[i].modelIdx, isHighlighted);
-				else
-					drawModel(renderEnts[i].modelIdx, drawTransparentFaces, isHighlighted);
-
-				activeShader->popMatrix(MAT_MODEL);
-			}
-		}
-
-		if ((g_render_flags & RENDER_POINT_ENTS) && pass == 0) {
-			drawPointEntities(highlightedEnts);
-			activeShader->bind();
-		}
+	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass) {
+		drawPointEntities(highlightedEnts);
+		activeShader->bind();
 	}
 
 	if (clipnodesLoaded && transparencyPass && !wireframePass) {
@@ -1796,7 +1803,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 				if (wireframePass) 
 					drawModelWireframe(renderEnts[highlightEnt].modelIdx, true);
 				else
-					drawModel(renderEnts[highlightEnt].modelIdx, true, true);
+					drawModel(ent, renderEnts[highlightEnt].modelIdx, true, true);
 				
 				activeShader->popMatrix(MAT_MODEL);
 			}
@@ -1823,11 +1830,65 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 	}
 }
 
-void BspRenderer::drawModel(int modelIdx, bool transparent, bool highlight) {
+void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight) {
+	EntRenderOpts opts = ent->getRenderOpts();
+	bool isTransparent = false;
+	bool useLightmaps = true;
+
+	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+		return;
+	}
+
+	switch (opts.rendermode) {
+	default:
+	case RENDER_MODE_NORMAL:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+		glUniform1f(bspShaderAlphaTestId, 0);
+		isTransparent = false;
+		useLightmaps = true;
+		break;
+	case RENDER_MODE_SOLID:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+		glUniform1f(bspShaderAlphaTestId, 1);
+		isTransparent = true;
+		useLightmaps = true;
+		break;
+	case RENDER_MODE_COLOR:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(bspShaderColorMultId, opts.rendercolor.r / 255.0f, opts.rendercolor.g / 255.0f, opts.rendercolor.b / 255.0f, opts.renderamt / 255.0f);
+		glUniform1f(bspShaderAlphaTestId, 0);
+		isTransparent = opts.renderamt < 255;
+		useLightmaps = false;
+		break;
+	case RENDER_MODE_TEXTURE:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		glUniform1f(bspShaderAlphaTestId, 0);
+		isTransparent = opts.renderamt < 255;
+		useLightmaps = true;
+		break;
+	case RENDER_MODE_GLOW:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		glUniform1f(bspShaderAlphaTestId, 0);
+		isTransparent = opts.renderamt < 255;
+		useLightmaps = false;
+		break;
+	case RENDER_MODE_ADDITIVE:
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		glUniform1f(bspShaderAlphaTestId, 0);
+		isTransparent = opts.renderamt < 255;
+		useLightmaps = false;
+		break;
+	}
+	
 	for (int i = 0; i < renderModels[modelIdx].groupCount; i++) {
 		RenderGroup& rgroup = renderModels[modelIdx].renderGroups[i];
 
-		if (rgroup.transparent != transparent)
+		if ((rgroup.transparent || isTransparent) != transparent)
 			continue;
 
 		if (rgroup.transparent) {
@@ -1844,7 +1905,7 @@ void BspRenderer::drawModel(int modelIdx, bool transparent, bool highlight) {
 		if (texturesLoaded && (g_render_flags & RENDER_TEXTURES))
 			rgroup.texture->bind();
 		else
-			whiteTex->bind();
+			whiteTex3D->bind();
 
 		// bind lightmaps for each style
 		for (int s = 0; s < MAXLIGHTMAPS; s++) {
@@ -1853,8 +1914,13 @@ void BspRenderer::drawModel(int modelIdx, bool transparent, bool highlight) {
 			if (highlight) {
 				redTex->bind();
 			}
-			else if (!(g_render_flags & RENDER_LIGHTMAPS)) {
-				whiteTex->bind();
+			else if (!(g_render_flags & RENDER_LIGHTMAPS) || !useLightmaps) {
+				if (s == 0) {
+					whiteTex->bind();
+				}
+				else {
+					blackTex->bind();
+				}
 			}
 			else if (lightmapsUploaded) {
 				if (showLightFlag != -1) { // lightmap editor disable
@@ -2031,6 +2097,10 @@ void rotateFaceMath(FaceMath& faceMath, mat4x4& rotation) {
 bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int modelIdx, int hullIdx,
 	int testEntidx, int& faceIdx, float& bestDist) {
 	BSPMODEL& model = map->models[modelIdx];
+
+	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+		return false;
+	}
 
 	start -= offset;
 
