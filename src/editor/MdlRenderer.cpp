@@ -340,8 +340,6 @@ void MdlRenderer::loadData() {
 	memset(iController, 127, 4);
 	memset(iBlender, 0, 2);
 	memset(cachedBounds, 0, sizeof(cachedBounds));
-	for (int i = 0; i < MAXSTUDIOANIMATIONS; i++)
-		seqheaders[i] = mstream();
 	iMouth = 0;
 
 	if (!loadTextureData() || !loadSequenceData()) {
@@ -540,8 +538,10 @@ bool MdlRenderer::loadSequenceData() {
 			return false;
 		}
 
-		seqheaders[i] = mstream(buffer, len);
+		seqheaders.push_back(mstream(buffer, len));
 	}
+
+	return true;
 }
 
 bool MdlRenderer::loadMeshes() {
@@ -756,16 +756,17 @@ mstudioanim_t* MdlRenderer::GetAnim(mstudioseqdesc_t* pseqdesc) {
 
 	data.seek(pseqgroup->data + pseqdesc->animindex);
 	mstudioanim_t* anim = (mstudioanim_t*)data.getOffsetBuffer();
+	int externalIdx = pseqdesc->seqgroup - 1;
 
-	if (pseqdesc->seqgroup == 0) {
+	if (externalIdx <= 0 ) {
 		return anim;
 	}
-	else if (pseqdesc->seqgroup >= MAXSTUDIOSEQUENCES) {
+	else if (externalIdx >= seqheaders.size()) {
 		logf("Invalid sequence group %d\n", pseqdesc->seqgroup);
 		return anim;
 	}
 	
-	mstream extdat = seqheaders[pseqdesc->seqgroup];
+	mstream extdat = seqheaders[externalIdx];
 
 	if (!extdat.getBuffer()) {
 		logf("Sequence group %d is invalid or not loaded\n", pseqdesc->seqgroup);

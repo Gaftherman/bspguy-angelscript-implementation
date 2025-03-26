@@ -1639,7 +1639,7 @@ void Gui::drawMenuBar() {
 			};
 
 			static int clipFlags[10] = {
-				0xffffffff,
+				(int)0xffffffff,
 				OOB_CLIP_X | OOB_CLIP_X_NEG,
 				OOB_CLIP_X,
 				OOB_CLIP_X_NEG,

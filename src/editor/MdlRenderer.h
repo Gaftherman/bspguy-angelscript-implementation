@@ -75,7 +75,7 @@ private:
 	studiohdr_t* texheader = NULL; // external texture data
 	mstream data; // TODO: parse structures into class members instead of seeking through the original data
 	mstream texdata;
-	mstream seqheaders[MAXSTUDIOSEQUENCES]; // external sequence model data
+	vector<mstream> seqheaders; // external sequence model data
 
 	// opengl uniforms
 	uint u_sTexId;

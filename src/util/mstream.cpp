@@ -5,31 +5,34 @@
 
 mstream::mstream()
 {
-	currentBit = start = end = pos = 0;
+	start = end = pos = NULL;
+	currentBit = 0;
 	eomFlag = true;
 }
 
 mstream::mstream(char * buf, uint64_t len)
 {
-	start = (uint64_t)buf;
+	start = buf;
 	end = start + len;
 	pos = start;
 	eomFlag = false;
+	currentBit = 0;
 }
 
 mstream::mstream( uint64_t len )
 {
-	start = (uint64_t)new char[len];
+	start = new char[len];
 	end = start + len;
 	pos = start;
 	eomFlag = false;
+	currentBit = 0;
 }
 
 uint64_t mstream::read( void * dest, uint64_t bytes )
 {
 	if (eomFlag)
 		return 0;
-	uint64_t newpos = pos + bytes;
+	char* newpos = pos + bytes;
 	if (newpos > end || newpos < start)
 	{
 		eomFlag = true;
@@ -124,7 +127,7 @@ uint64_t mstream::write( void * src, uint64_t bytes )
 {
 	if (eomFlag)
 		return 0;
-	uint64_t newpos = pos + bytes;
+	char* newpos = pos + bytes;
 	if (newpos > end || newpos < start)
 	{
 		eomFlag = true;
@@ -286,7 +289,7 @@ uint64_t mstream::skip( uint64_t bytes )
 {
 	if (eomFlag)
 		return 0;
-	uint64_t newpos = pos + bytes;
+	char* newpos = pos + bytes;
 	if (newpos >= end || newpos < start)
 	{
 		bytes = end - pos;
@@ -323,7 +326,7 @@ bool mstream::eom()
 void mstream::freeBuf()
 {
 	if (start)
-		delete [] (char*)start;
+		delete[] start;
 	start = 0;
 }
 

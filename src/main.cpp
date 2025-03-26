@@ -15,6 +15,7 @@
 // alient controller model missing svencoop1, also turret and sentry
 // adding asset paths does not find new models
 // mip maps for 3d textures
+// caching for ent matrix
 
 // v5 todo low prio:
 // ripent saftey warning
@@ -24,7 +25,6 @@
 // dialogs for errors / warnings
 // ignorable popups for misc messages
 // "pose" key for dead monsters ? (svencoop1)
-// render transparent textures with alpha
 // ent links should be animated.people ask what each color means
 // expand input text for multiline
 // speed up clipnode gen ?
