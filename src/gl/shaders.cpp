@@ -172,7 +172,7 @@ const char* g_shader_multitexture_fragment =
 "varying vec3 fLightmapTex3;\n"
 "varying vec4 fColor;\n"
 
-"uniform sampler2DArray sTex;\n"
+"uniform sampler3D sTex;\n"
 "uniform sampler2D sLightmapTex0;\n"
 "uniform sampler2D sLightmapTex1;\n"
 "uniform sampler2D sLightmapTex2;\n"
@@ -184,7 +184,7 @@ const char* g_shader_multitexture_fragment =
 "	lightmap += texture2D(sLightmapTex1, fLightmapTex1.xy).rgb * fLightmapTex1.z;\n"
 "	lightmap += texture2D(sLightmapTex2, fLightmapTex2.xy).rgb * fLightmapTex2.z;\n"
 "	lightmap += texture2D(sLightmapTex3, fLightmapTex3.xy).rgb * fLightmapTex3.z;\n"
-"	vec3 color = texture(sTex, fTex).rgb * lightmap * fColor.rgb;\n"
+"	vec3 color = texture3D(sTex, fTex).rgb * lightmap * fColor.rgb;\n"
 
 "	float gamma = 1.5;\n"
 "	gl_FragColor = vec4(pow(color, vec3(1.0/gamma)), fColor.a);\n"

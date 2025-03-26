@@ -74,23 +74,24 @@ void Texture::upload(int format, bool lightmap)
 }
 
 void Texture::bind()
-{
-	int paramTarget = arrayId != -1 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D;
-	if (arrayId != -1)
-		glBindTexture(GL_TEXTURE_2D_ARRAY, arrayId);
-	else
-		glBindTexture(GL_TEXTURE_2D, id);
+{	
+	if (arrayId != -1) {
+		// 3D textures break when using any interpolation or mip-mapping.
+		// A new shader is needed for bilinear filtering without blending the Z axis.
+		glBindTexture(GL_TEXTURE_3D, arrayId);
+		glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		return;
+	}
+
+	glBindTexture(GL_TEXTURE_2D, id);
 
 	if (isLightmap) {
-		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	}
-	else if (g_settings.texture_filtering) {
-		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
 	else {
-		glTexParameteri(paramTarget, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-		glTexParameteri(paramTarget, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	}
 }

@@ -169,29 +169,24 @@ void TextureArray::upload() {
 			textureCount += buckets[i].count;
 			//debugf("%d textures in bucket %dx%d\n", buckets[i].count, sizeX, sizeY);
 
-			glBindTexture(GL_TEXTURE_2D_ARRAY, buckets[i].glArrayId);
-			glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB, sizeX, sizeY, buckets[i].count, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			glBindTexture(GL_TEXTURE_3D, buckets[i].glArrayId);
+			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, sizeX, sizeY, buckets[i].count, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 
 			texDataSz += buckets[i].count * sizeX * sizeY * 3;
 
 			if (buckets[i].textures) {
 				for (int k = 0; k < buckets[i].count; k++) {
-					glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, k, sizeX, sizeY, 1, GL_RGB, GL_UNSIGNED_BYTE, buckets[i].textures[k]->data);
+					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, k, sizeX, sizeY, 1, GL_RGB, GL_UNSIGNED_BYTE, buckets[i].textures[k]->data);
 
 					delete[] buckets[i].textures[k]->data;
 					buckets[i].textures[k]->data = NULL;
 				}
 			}
 
-			if (g_settings.texture_filtering) {
-				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			}
-			else {
-				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			}
-			glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+			// can't have interpolation for 3D textures or else you see crazy UV problems
+			// or totally incorrect textures, especially with mipmaps.
+			glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		}
 	}
 

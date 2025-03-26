@@ -579,6 +579,9 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		BSPFACE& face = map->faces[faceIdx];
 		BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
 		int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
+		TexArrayOffset& texArrayOffset = miptexToTexArray[texinfo.iMiptex];
+		float texArrayIdx = (float)texArrayOffset.layer / (float)glTextureArray->buckets[texArrayOffset.arrayIdx].count;
+		texArrayIdx += 0.00001f; // nudge layer up a bit to prevent GL_NEAREST rounding down to a previous texture
 
 		int texWidth, texHeight;
 		if (texOffset != -1) {
@@ -640,7 +643,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 			float fV = dotProduct(texinfo.vT, vert) + texinfo.shiftT;
 			verts[e].u = fU * tw;
 			verts[e].v = fV * th;
-			verts[e].w = miptexToTexArray[texinfo.iMiptex].layer;
+			verts[e].w = texArrayIdx;
 
 			// lightmap texture coords
 			if (hasLighting && lightmapsGenerated) {

@@ -4368,10 +4368,6 @@ void Gui::drawSettings() {
 			}
 			ImGui::NextColumn();
 
-			ImGui::Checkbox("Texture Filtering", &g_settings.texture_filtering);
-			tooltip(g, "Rubs vaseline on your textures\n");
-			ImGui::NextColumn();
-
 			if (ImGui::Checkbox("VSync", &vsync)) {
 				glfwSwapInterval(vsync ? 1 : 0);
 			}
