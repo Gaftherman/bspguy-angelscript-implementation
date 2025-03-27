@@ -46,6 +46,7 @@ public:
 	vec3 drawOrigin;
 	vec3 drawMin, drawMax; // model bounding box
 	float drawFrame;
+	float lastDrawCall;
 
 	Entity(void);
 	Entity(const std::string& classname);

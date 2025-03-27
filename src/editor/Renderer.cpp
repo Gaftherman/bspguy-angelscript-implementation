@@ -2805,7 +2805,7 @@ bool Renderer::drawModelsAndSprites() {
 			sent.origin = ent->drawOrigin;
 			sent.dist = dotProduct(sent.origin - cameraOrigin, camForward);
 
-			if (sent.mdl->lastDrawCall == 0) {
+			if (sent.ent->lastDrawCall == 0) {
 				// need to draw at least once to know mins/maxs
 				depthSortedMdlEnts.push_back(sent);
 				continue;
@@ -2851,8 +2851,6 @@ bool Renderer::drawModelsAndSprites() {
 		if (skipRender)
 			continue;
 
-		ent->drawFrame = mdl->drawFrame;
-
 		EntCube* entcube = mapRenderer->renderEnts[depthSortedMdlEnts[i].idx].pointEntCube;
 
 		{ // draw the colored transparent cube
@@ -2894,11 +2892,10 @@ bool Renderer::drawModelsAndSprites() {
 		ent->didStudioDraw = true;
 		EntRenderOpts renderOpts = ent->getRenderOpts();
 		vec3 drawOri = ent->drawOrigin + worldOffset;
+		vec3 drawAngles = ent->drawAngles;
 
 		if (mdl->isStudioModel()) {
-			renderOpts.rendercolor = isSelected ? COLOR3(255, 0, 0) : COLOR3(255, 255, 255);
-
-			((MdlRenderer*)mdl)->draw(drawOri, ent->drawAngles, renderOpts, g_app->cameraOrigin, g_app->cameraRight);
+			((MdlRenderer*)mdl)->draw(drawOri, drawAngles, ent, g_app->cameraOrigin, g_app->cameraRight, isSelected);
 		}
 		else if (mdl->isSprite()) {
 			COLOR3 color = COLOR3(255, 255, 255);
@@ -2908,13 +2905,20 @@ bool Renderer::drawModelsAndSprites() {
 				float minDim = min(min(sz.x, sz.y), sz.z);
 				renderOpts.scale = ((SprRenderer*)mdl)->getScaleToFitInsideCube(minDim);
 				color = ent->getFgdTint();
+				
+				if (!ent->canRotate()) {
+					drawAngles = vec3();
+				}
+				if (isSelected) {
+					color = COLOR3(255, 0, 0);
+				}
 			}
 			else if (isSelected) {
 				color = COLOR3(255, 32, 32);
 				outlineColor = COLOR3(255, 255, 0);
 			}
 
-			((SprRenderer*)mdl)->draw(drawOri, ent->drawAngles, renderOpts, color, outlineColor, ent->isIconSprite);
+			((SprRenderer*)mdl)->draw(drawOri, drawAngles, ent, renderOpts, color, outlineColor, ent->isIconSprite);
 		}
 		
 		drawCount++;

@@ -956,7 +956,7 @@ vector<string> getAssetPaths() {
 
 		tryPaths.push_back(path);
 
-		if (!isAbsolutePath(path))
+		if (!isAbsolutePath(path) && g_settings.gamedir.length())
 			tryPaths.push_back(joinPaths(g_settings.gamedir, path));
 	}
 

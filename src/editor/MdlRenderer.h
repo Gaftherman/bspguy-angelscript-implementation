@@ -51,7 +51,7 @@ public:
 	MdlRenderer(ShaderProgram* shaderProgram, string modelPath);
 	~MdlRenderer();
 
-	void draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewerOrigin, vec3 viewerRight);
+	void draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin, vec3 viewerRight, bool isSelected);
 
 	void upload() override; // called by main thread to upload data to gpu
 

@@ -538,6 +538,8 @@ void Fgd::parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey) 
 	readPtr++;
 	if (readPtr >= endFileData) { return; }
 
+	bool isflags = outKey.iType == FGD_KEY_FLAGS;
+
 	KeyvalueChoice choice;
 	int fieldCount = 0;
 	while (true) {
@@ -581,11 +583,21 @@ void Fgd::parseChoices(char*& readPtr, FgdClass& outClass, KeyvalueDef& outKey) 
 				choice.name = field;
 			}
 			else if (fieldCount == 2) {
-				choice.desc = field;
+				if (isflags) {
+					choice.defaultValue = field;
+				}
+				else {
+					choice.desc = field;
+				}
 			}
 			else {
-				logf("WARNING: Unrecognized keyvalue choice prop '%s' in class %s (%s.fgd pos %d)\n",
-					field.c_str(), outClass.name.c_str(), name.c_str(), readPtr - startFileData);
+				if (isflags && fieldCount == 3) {
+					choice.desc = field;
+				}
+				else {
+					logf("WARNING: Unrecognized keyvalue choice prop '%s' in class %s (%s.fgd pos %d)\n",
+						field.c_str(), outClass.name.c_str(), name.c_str(), readPtr - startFileData);
+				}
 			}
 
 			fieldCount++;
@@ -794,6 +806,7 @@ void Fgd::setSpawnflagNames() {
 					}
 					else {
 						classes[i]->spawnFlagNames[bit] = choice.name;
+						classes[i]->spawnFlagDescs[bit] = choice.desc;
 					}
 				}
 			}
@@ -802,6 +815,7 @@ void Fgd::setSpawnflagNames() {
 }
 
 bool sortFgdClasses(FgdClass* a, FgdClass* b) { return a->name < b->name; }
+bool sortFgdGroups(const FgdGroup& a, const FgdGroup& b) { return a.groupName < b.groupName; }
 
 void Fgd::sortClasses() {
 	for (int i = 0; i < solidEntGroups.size(); i++) {
@@ -810,4 +824,7 @@ void Fgd::sortClasses() {
 	for (int i = 0; i < pointEntGroups.size(); i++) {
 		std::sort(pointEntGroups[i].classes.begin(), pointEntGroups[i].classes.end(), sortFgdClasses);
 	}
+
+	std::sort(pointEntGroups.begin(), pointEntGroups.end(), sortFgdGroups);
+	std::sort(solidEntGroups.begin(), solidEntGroups.end(), sortFgdGroups);
 }

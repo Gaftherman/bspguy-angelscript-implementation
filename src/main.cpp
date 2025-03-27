@@ -6,14 +6,6 @@
 #include "globals.h"
 
 // TODO v5:
-// unrecognized props field intensity fgd
-// fgd classes not sorted
-// duplicate asset paths shown on linux
-// iconsprite not colored when selected
-// dont rotate iconsprites if cant rotate
-// medic twitches when far from cam svencoop1
-// alient controller model missing svencoop1, also turret and sentry
-// adding asset paths does not find new models
 // mip maps for 3d textures
 // caching for ent matrix
 

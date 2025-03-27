@@ -3078,8 +3078,10 @@ void Gui::drawKeyvalueEditor_FlagsTab(Fgd* fgd) {
 			ImGui::NextColumn();
 		}
 		string name;
+		string desc;
 		if (fgdClass != NULL) {
 			name = fgdClass->spawnFlagNames[i];
+			desc = fgdClass->spawnFlagDescs[i];
 		}
 
 		bool matchingFlags = true;
@@ -3127,10 +3129,19 @@ void Gui::drawKeyvalueEditor_FlagsTab(Fgd* fgd) {
 
 			app->pushEntityUndoState(checkboxEnabled[i] ? "Enable Flag" : "Disable Flag");
 		}
-		if (ImGui::IsItemHovered() && flagsDiffer) {
-			ImGui::PopStyleColor(1);
-			ImGui::SetTooltip("This flag is not enabled on all selected entities");
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+		if (ImGui::IsItemHovered()) {
+			if (flagsDiffer) {
+				ImGui::PopStyleColor(1);
+				ImGui::SetTooltip("This flag is not enabled on all selected entities");
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+			}
+			else {
+				string tip = to_string(1U << i) + " : " + name;
+				if (desc.length()) {
+					tip += " : " + desc;
+				}
+				ImGui::SetTooltip(tip.c_str());
+			}
 		}
 
 		if (colorChanged) {
@@ -4518,6 +4529,7 @@ void Gui::drawSettings() {
 				app->postLoadFgds();
 				app->mapRenderer->reload();
 				g_settings.save();
+				app->studioModelPaths.clear();
 			}
 			ImGui::EndDisabled();
 		}

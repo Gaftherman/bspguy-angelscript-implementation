@@ -304,7 +304,7 @@ bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 	return false;
 }
 
-void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, COLOR3 tint, COLOR3 outlineColor, bool noOutline) {
+void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, COLOR3 tint, COLOR3 outlineColor, bool noOutline) {
 	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
@@ -347,14 +347,14 @@ void SprRenderer::draw(vec3 ori, vec3 angles, EntRenderOpts opts, COLOR3 tint, C
 	glEnable(GL_BLEND);
 
 	float now = glfwGetTime();
-	if (lastDrawCall == 0) {
-		lastDrawCall = now;
+	if (ent->lastDrawCall == 0) {
+		ent->lastDrawCall = now;
 	}
-	float deltaTime = now - lastDrawCall;
-	lastDrawCall = now;
+	float deltaTime = now - ent->lastDrawCall;
+	ent->lastDrawCall = now;
 
-	drawFrame += opts.framerate * deltaTime;
-	int frame = (int)drawFrame % header->frames;
+	ent->drawFrame += opts.framerate * deltaTime;
+	int frame = (int)ent->drawFrame % header->frames;
 	
 	frameShader->bind();
 

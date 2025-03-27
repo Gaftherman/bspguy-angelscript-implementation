@@ -1319,26 +1319,34 @@ void MdlRenderer::transformVerts() {
 	//logf("Transformed %d verts\n", vertCount);
 }
 
-void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewerOrigin, vec3 viewerRight) {
+void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin, vec3 viewerRight, bool isSelected) {
 	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
 
-	float now = glfwGetTime();
-	if (lastDrawCall == 0) {
-		lastDrawCall = now;
+	EntRenderOpts opts = ent->getRenderOpts();
+
+	if (isSelected)
+		opts.rendercolor = COLOR3(255, 0, 0);
+	else {
+		opts.rendercolor = COLOR3(255, 255, 255);
 	}
-	float deltaTime = now - lastDrawCall;
-	lastDrawCall = now;
+
+	float now = glfwGetTime();
+	if (ent->lastDrawCall == 0) {
+		ent->lastDrawCall = now;
+	}
+	float deltaTime = now - ent->lastDrawCall;
+	ent->lastDrawCall = now;
 
 	opts.sequence = clamp(opts.sequence, 0, header->numseq - 1);
 	mstudioseqdesc_t* seq = getSequence(opts.sequence);
 	if (seq && seq->numframes > 1) {
-		drawFrame += seq->fps * deltaTime;
-		drawFrame = normalizeRangef(drawFrame, 0.0f, seq->numframes - 1);
+		ent->drawFrame += seq->fps * deltaTime;
+		ent->drawFrame = normalizeRangef(ent->drawFrame, 0.0f, seq->numframes - 1);
 	}
 
-	SetUpBones(angles, opts.sequence, drawFrame);
+	SetUpBones(angles, opts.sequence, ent->drawFrame);
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
@@ -1449,7 +1457,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, EntRenderOpts opts, vec3 viewer
 			
 			short remappedSkin = pskinref[skin*header->numskinref + render.skinref];
 			if (remappedSkin < 0 || remappedSkin >= header->numtextures) {
-				continue;
+				remappedSkin = render.skinref;
 			}
 
 			Texture* tex = glTextures[remappedSkin];

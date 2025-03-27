@@ -26,10 +26,6 @@ public:
 	volatile bool valid;
 	volatile int loadState;
 
-	// convenience state for rendering
-	float lastDrawCall = 0;
-	float drawFrame = 0;
-
 	BaseRenderer() { loadState = 0; valid = false; }
 	virtual ~BaseRenderer() {}
 

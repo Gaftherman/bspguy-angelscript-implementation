@@ -31,7 +31,8 @@ enum FGD_KEY_TYPES {
 struct KeyvalueChoice {
 	string name;
 	string svalue;
-	string desc; // if "flags", this is a 0/1 indicating default ticked status
+	string defaultValue; // flags only
+	string desc; // optional
 	int ivalue = 0;
 	bool isInteger = false;
 };
@@ -59,6 +60,7 @@ struct FgdClass {
 	vector<KeyvalueDef> keyvalues;
 	vector<string> baseClasses;
 	string spawnFlagNames[32];
+	string spawnFlagDescs[32];
 	string model;
 	string sprite;
 	string iconSprite;

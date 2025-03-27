@@ -150,13 +150,10 @@ void AppSettings::load() {
 	}
 
 	if (fgdPaths.size() == 0) {
-		fgdPaths.push_back("sven-coop.fgd");
 		fgdPaths.push_back("halflife.fgd");
 	}
 
 	if (resPaths.size() == 0) {
-		resPaths.push_back("svencoop");
-		resPaths.push_back("svencoop_downloads");
 		resPaths.push_back("valve");
 		resPaths.push_back("valve_downloads");
 	}

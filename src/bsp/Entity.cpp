@@ -436,7 +436,7 @@ bool Entity::canRotate() {
 		"momentary_rot_button",
 	};
 
-	if (getBspModelIdx() == -1) {
+	if (!isIconSprite && getBspModelIdx() == -1) {
 		return true;
 	}
 
@@ -873,5 +873,7 @@ void Entity::clearCache() {
 	hasCachedFgdTint = false;
 	hasCachedTargetnames = false;
 	cachedMdl = NULL;
+	lastDrawCall = 0;
+	drawFrame = 0;
 	cachedTargets.clear();
 }
