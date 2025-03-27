@@ -236,7 +236,7 @@ const char* g_shader_mdl_vertex =
 
 // skeleton
 // 3D texture as an array of mat4 (poor man's UBO). Vertex Texture Fetch requires GL 3.0 or 2.1 w/ ARB
-// Can't use UBO without upgrading to GL 3.1. Can't have 256 mat4 uniforms for valid shader code.
+// Can't use UBO without upgrading to GL 3.1. Can't have 128 mat4 uniforms for all GPUs.
 "uniform sampler3D boneMatrixTexture; \n"
 
 // render flags
@@ -264,21 +264,16 @@ const char* g_shader_mdl_vertex =
 "vec3 irotateVector(vec3 v, mat4 mat); \n"
 "vec2 chrome(vec3 tNormal, inout mat4 bone);\n"
 
-// lookup matrix value from 3D texture
-// shifting quarter of a pixel to prevent picking the wrong value due to low float precision
-"mat4 getBoneMatrix(float boneId) { \n"
-"    vec4 row0 = texture(boneMatrixTexture, vec3(0.0  + (1.0/16.0), 0.0, boneId)); \n"
-"    vec4 row1 = texture(boneMatrixTexture, vec3(0.25 + (1.0/16.0), 0.0, boneId)); \n"
-"    vec4 row2 = texture(boneMatrixTexture, vec3(0.5  + (1.0/16.0), 0.0, boneId)); \n"
-"    vec4 row3 = texture(boneMatrixTexture, vec3(0.75 + (1.0/16.0), 0.0, boneId)); \n"
-
-"   return mat4(row0, row1, row2, row3); \n"
-"} \n"
-
 "void main()\n"
 "{\n"
-// shift quarter of a pixel. 128 = MAXSTUDIOBONES
-"mat4 bone = getBoneMatrix((vBone / 128.0) + (1.0/512.0));"
+"mat4 bone; \n"
+"int boneId = int(vBone);"
+"bone[0] = texelFetch(boneMatrixTexture, ivec3(0, 0, boneId), 0); \n"
+"bone[1] = texelFetch(boneMatrixTexture, ivec3(1, 0, boneId), 0); \n"
+"bone[2] = texelFetch(boneMatrixTexture, ivec3(2, 0, boneId), 0); \n"
+"bone[3] = texelFetch(boneMatrixTexture, ivec3(3, 0, boneId), 0); \n"
+
+
 "vec3 pos = rotateVector(vPosition, bone) + vec3(bone[0][3], bone[2][3], -bone[1][3]); \n"
 "vec3 tNormal = rotateVector(vNormal, bone); \n"
 
