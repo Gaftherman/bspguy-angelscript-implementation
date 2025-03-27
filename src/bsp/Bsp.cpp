@@ -5613,7 +5613,7 @@ int Bsp::add_texture(const char* name, byte* data, int width, int height) {
 		int div = 1 << i;
 		int mipWidth = width / div;
 		int mipHeight = height / div;
-		texDataSize += mipWidth * height;
+		texDataSize += mipWidth * mipHeight;
 		mip[i] = new byte[mipWidth * mipHeight];
 
 		src = (COLOR3*)data;
