@@ -11,6 +11,8 @@ extern const char* g_shader_tVert_fragment;
 
 extern const char* g_shader_multitexture_vertex;
 extern const char* g_shader_multitexture_fragment;
+extern const char* g_shader_multitexture_array_fragment;
+extern const char* g_shader_multitexture_3d_fragment;
 
 extern const char* g_shader_mdl_fragment;
 extern const char* g_shader_mdl_vertex;

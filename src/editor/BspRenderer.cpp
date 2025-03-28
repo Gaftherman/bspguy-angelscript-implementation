@@ -48,7 +48,7 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	greyTex = new Texture(1, 1);
 	redTex = new Texture(1, 1);
 	blackTex = new Texture(1, 1);
-	whiteTex3D = new Texture(1, 1, 1);
+	whiteTex3D = new Texture(1, 1, max(1u, min(1024u, g_max_texture_array_layers)));
 
 	glTextureArray = new TextureArray();
 
@@ -57,6 +57,10 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	*((COLOR3*)(greyTex->data)) = { 64, 64, 64 };
 	*((COLOR3*)(blackTex->data)) = { 0, 0, 0 };
 	*((COLOR3*)(whiteTex3D->data)) = { 255, 255, 255 };
+
+	for (int i = 0; i < whiteTex3D->depth; i++) {
+		((COLOR3*)whiteTex3D->data)[i] = COLOR3(255, 255, 255);
+	}
 
 	whiteTex->upload(GL_RGB);
 	redTex->upload(GL_RGB);
@@ -584,8 +588,12 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
 		int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
 		TexArrayOffset& texArrayOffset = miptexToTexArray[texinfo.iMiptex];
-		float texArrayIdx = (float)texArrayOffset.layer / (float)glTextureArray->buckets[texArrayOffset.arrayIdx].count;
-		texArrayIdx += 0.00001f; // nudge layer up a bit to prevent GL_NEAREST rounding down to a previous texture
+		float texArrayIdx = texArrayOffset.layer;
+
+		if (!g_opengl_texture_array_support) {
+			texArrayIdx /= (float)glTextureArray->buckets[texArrayOffset.arrayIdx].count;
+			texArrayIdx += 0.00001f; // nudge layer up a bit to prevent GL_NEAREST rounding down to a previous texture
+		}
 
 		int texWidth, texHeight;
 		if (texOffset != -1) {
@@ -708,7 +716,13 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		bool isTransparent = opacity < 1.0f;
 		int groupIdx = -1;
 		for (int k = 0; k < renderGroups.size(); k++) {
-			bool textureMatch = !texturesLoaded || renderGroups[k].arrayTextureIdx == miptexToTexArray[texinfo.iMiptex].arrayIdx;
+			bool textureMatch = !texturesLoaded || 
+				renderGroups[k].arrayTextureIdx == miptexToTexArray[texinfo.iMiptex].arrayIdx;
+
+			if (!g_opengl_texture_array_support && !g_opengl_3d_texture_support) {
+				textureMatch = !texturesLoaded || renderGroups[k].texture == glTextures[texinfo.iMiptex];
+			}
+
 			if (textureMatch && renderGroups[k].transparent == isTransparent) {
 				bool allMatch = true;
 				for (int s = 0; s < MAXLIGHTMAPS; s++) {
@@ -1904,8 +1918,14 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 		glActiveTexture(GL_TEXTURE0);
 		if (texturesLoaded && (g_render_flags & RENDER_TEXTURES))
 			rgroup.texture->bind();
-		else
-			whiteTex3D->bind();
+		else {
+			if (g_opengl_3d_texture_support || g_opengl_texture_array_support) {
+				whiteTex3D->bind();
+			}
+			else {
+				whiteTex->bind();
+			}
+		}
 
 		// bind lightmaps for each style
 		for (int s = 0; s < MAXLIGHTMAPS; s++) {

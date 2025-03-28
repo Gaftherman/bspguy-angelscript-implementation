@@ -151,8 +151,8 @@ Renderer::Renderer() {
 
 	glfwSetErrorCallback(error_callback);
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
 	window = glfwCreateWindow(g_settings.windowWidth, g_settings.windowHeight, "bspguy", NULL, NULL);
 
@@ -225,13 +225,35 @@ Renderer::Renderer() {
 	glfwSetWindowIconifyCallback(window, window_iconify_callback);
 	glfwSetDropCallback(window, file_drop_callback);
 
-	GLint maxTextureSize;
+	GLint maxTextureSize, texImageUnits, arrayLayers;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &texImageUnits);
+	glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &arrayLayers);
 	g_max_texture_size = maxTextureSize;
-
+	g_max_texture_array_layers = arrayLayers;
+	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
+		
 	glewInit();
 
 	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
+	debugf("OpenGL Extensions: %s\n", openglExts);
+	logf("Texture Units: %d / 5\n", texImageUnits);
+	logf("Texture Array Layers: %d\n", arrayLayers);
+
+	const char* bspFragShader = g_shader_multitexture_fragment;
+
+	if (strstr(openglExts, "GL_EXT_texture_array")) {
+		g_opengl_texture_array_support = true;
+		bspFragShader = g_shader_multitexture_array_fragment;
+	}
+	else if (strstr(openglExts, "GL_EXT_texture3D")) {
+		logf("Texture arrays not supported. 3D textures without filtering will be used instead\n");
+		g_opengl_3d_texture_support = true;
+		bspFragShader = g_shader_multitexture_3d_fragment;
+	}
+	else {
+		logf("Neither texture arrays nor 3D textures are supported. Map rendering will be slow.\n");
+	}
 
 	// init to black screen instead of white
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -239,14 +261,14 @@ Renderer::Renderer() {
 	glfwSwapInterval(1);
 
 	gui = new Gui(this);
-
 	
-	bspShader = new ShaderProgram(g_shader_multitexture_vertex, g_shader_multitexture_fragment);
+	
+	bspShader = new ShaderProgram(g_shader_multitexture_vertex, bspFragShader);
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
 	if (!bspShader->compiled) {
 		logf("failed to compile BSP shader\n");
-	}
+	}	
 
 	colorShader = new ShaderProgram(g_shader_cVert_vertex, g_shader_cVert_fragment);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
@@ -390,7 +412,7 @@ void Renderer::renderLoop() {
 		model.loadIdentity();
 		model.rotateZ(spin);
 		model.rotateX(spin);
-		
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		setupView();
@@ -398,10 +420,10 @@ void Renderer::renderLoop() {
 		glEnable(GL_DEPTH_TEST);
 
 		isLoading = reloading;
-		
+
 		// draw opaque world/entity faces
 		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, false);
-		
+
 		// wireframe pass
 		if (g_render_flags & RENDER_WIREFRAME)
 			mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);

@@ -19,6 +19,7 @@ public:
 	// each index increase represents 16px increase in size, from 16 -> 1024
 	TextureBucket buckets[TEXARRAY_BUCKET_COUNT];
 	int numResize = 0;
+	int maxBucketDepth;
 
 	TextureArray();
 	~TextureArray();

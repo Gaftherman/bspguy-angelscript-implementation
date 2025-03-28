@@ -5,6 +5,7 @@
 // AMD has a stricter GLSL compiler than Nvidia does.
 
 const char* g_shader_vec3_vertex =
+"#version 120\n"
 // object variables
 "uniform mat4 modelViewProjection;\n"
 "uniform vec4 color;\n"
@@ -22,6 +23,7 @@ const char* g_shader_vec3_vertex =
 "}\n";
 
 const char* g_shader_vec3_fragment =
+"#version 120\n"
 "varying vec4 fColor;\n"
 
 "void main()\n"
@@ -31,6 +33,7 @@ const char* g_shader_vec3_fragment =
 "}\n";
 
 const char* g_shader_vec3depth_fragment =
+"#version 120\n"
 "varying vec4 fColor;\n"
 
 "void main()\n"
@@ -40,6 +43,7 @@ const char* g_shader_vec3depth_fragment =
 "}\n";
 
 const char* g_shader_cVert_vertex =
+"#version 120\n"
 // object variables
 "uniform mat4 modelViewProjection;\n"
 "uniform vec4 colorMult;\n"
@@ -59,6 +63,7 @@ const char* g_shader_cVert_vertex =
 
 
 const char* g_shader_cVert_fragment =
+"#version 120\n"
 "varying vec4 fColor;\n"
 
 "void main()\n"
@@ -69,6 +74,7 @@ const char* g_shader_cVert_fragment =
 
 
 const char* g_shader_tVert_vertex =
+"#version 120\n"
 // object variables
 "uniform mat4 modelViewProjection;\n"
 
@@ -87,6 +93,7 @@ const char* g_shader_tVert_vertex =
 
 
 const char* g_shader_tVert_fragment =
+"#version 120\n"
 "varying vec2 fTex;\n"
 
 "uniform sampler2D sTex;\n"
@@ -98,6 +105,7 @@ const char* g_shader_tVert_fragment =
 
 
 const char* g_shader_spr_vertex =
+"#version 120\n"
 // object variables
 "uniform mat4 modelViewProjection;\n"
 "uniform vec4 color;\n"
@@ -119,6 +127,7 @@ const char* g_shader_spr_vertex =
 
 
 const char* g_shader_spr_fragment =
+"#version 120\n"
 "varying vec2 fTex;\n"
 "varying vec4 fColor;\n"
 
@@ -132,6 +141,7 @@ const char* g_shader_spr_fragment =
 
 
 const char* g_shader_multitexture_vertex =
+"#version 120\n"
 // object variables
 "uniform mat4 modelViewProjection;\n"
 "uniform vec4 colorMult;\n"
@@ -164,8 +174,88 @@ const char* g_shader_multitexture_vertex =
 "	fColor = vColor * colorMult;\n"
 "}\n";
 
-
 const char* g_shader_multitexture_fragment =
+"#version 120\n"
+"uniform float alphaTest;\n"
+"uniform float gamma;\n"
+
+"varying vec3 fTex;\n"
+"varying vec3 fLightmapTex0;\n"
+"varying vec3 fLightmapTex1;\n"
+"varying vec3 fLightmapTex2;\n"
+"varying vec3 fLightmapTex3;\n"
+"varying vec4 fColor;\n"
+
+"uniform sampler2D sTex;\n"
+"uniform sampler2D sLightmapTex0;\n"
+"uniform sampler2D sLightmapTex1;\n"
+"uniform sampler2D sLightmapTex2;\n"
+"uniform sampler2D sLightmapTex3;\n"
+
+"void main()\n"
+"{\n"
+"	vec4 texel = texture2D(sTex, fTex.xy);\n"
+"	if (alphaTest != 0.0) {\n"
+"		if (texel.a == 0.0) {\n"
+"			discard;\n"
+"		}\n"
+"	}\n"
+"	else {\n"
+"		texel.a = 1.0;\n"
+"	}\n"
+
+"	vec3 lightmap = texture2D(sLightmapTex0, fLightmapTex0.xy).rgb * fLightmapTex0.z;\n"
+"	lightmap += texture2D(sLightmapTex1, fLightmapTex1.xy).rgb * fLightmapTex1.z;\n"
+"	lightmap += texture2D(sLightmapTex2, fLightmapTex2.xy).rgb * fLightmapTex2.z;\n"
+"	lightmap += texture2D(sLightmapTex3, fLightmapTex3.xy).rgb * fLightmapTex3.z;\n"
+"	vec3 color = texel.rgb * lightmap * fColor.rgb;\n"
+
+"	gl_FragColor = vec4(pow(color, vec3(1.0/gamma)), fColor.a*texel.a);\n"
+"}\n";
+
+const char* g_shader_multitexture_array_fragment =
+"#version 120\n"
+"#extension GL_EXT_texture_array : enable\n"
+"uniform float alphaTest;\n"
+"uniform float gamma;\n"
+
+"varying vec3 fTex;\n"
+"varying vec3 fLightmapTex0;\n"
+"varying vec3 fLightmapTex1;\n"
+"varying vec3 fLightmapTex2;\n"
+"varying vec3 fLightmapTex3;\n"
+"varying vec4 fColor;\n"
+
+"uniform sampler2DArray sTex;\n"
+"uniform sampler2D sLightmapTex0;\n"
+"uniform sampler2D sLightmapTex1;\n"
+"uniform sampler2D sLightmapTex2;\n"
+"uniform sampler2D sLightmapTex3;\n"
+
+"void main()\n"
+"{\n"
+"	vec4 texel = texture2DArray(sTex, fTex);\n"
+"	if (alphaTest != 0.0) {\n"
+"		if (texel.a == 0.0) {\n"
+"			discard;\n"
+"		}\n"
+"	}\n"
+"	else {\n"
+"		texel.a = 1.0;\n"
+"	}\n"
+
+"	vec3 lightmap = texture2D(sLightmapTex0, fLightmapTex0.xy).rgb * fLightmapTex0.z;\n"
+"	lightmap += texture2D(sLightmapTex1, fLightmapTex1.xy).rgb * fLightmapTex1.z;\n"
+"	lightmap += texture2D(sLightmapTex2, fLightmapTex2.xy).rgb * fLightmapTex2.z;\n"
+"	lightmap += texture2D(sLightmapTex3, fLightmapTex3.xy).rgb * fLightmapTex3.z;\n"
+"	vec3 color = texel.rgb * lightmap * fColor.rgb;\n"
+
+"	gl_FragColor = vec4(pow(color, vec3(1.0/gamma)), fColor.a*texel.a);\n"
+"}\n";
+
+const char* g_shader_multitexture_3d_fragment =
+"#version 120\n"
+"#extension GL_EXT_texture3D : enable\n"
 "uniform float alphaTest;\n"
 "uniform float gamma;\n"
 
@@ -193,6 +283,7 @@ const char* g_shader_multitexture_fragment =
 "	else {\n"
 "		texel.a = 1.0;\n"
 "	}\n"
+
 "	vec3 lightmap = texture2D(sLightmapTex0, fLightmapTex0.xy).rgb * fLightmapTex0.z;\n"
 "	lightmap += texture2D(sLightmapTex1, fLightmapTex1.xy).rgb * fLightmapTex1.z;\n"
 "	lightmap += texture2D(sLightmapTex2, fLightmapTex2.xy).rgb * fLightmapTex2.z;\n"
@@ -202,9 +293,8 @@ const char* g_shader_multitexture_fragment =
 "	gl_FragColor = vec4(pow(color, vec3(1.0/gamma)), fColor.a*texel.a);\n"
 "}\n";
 
-
-
 const char* g_shader_mdl_fragment =
+"#version 120\n"
 "varying vec2 fTex;\n"
 "varying vec4 fColor;\n"
 
@@ -221,7 +311,7 @@ const char* g_shader_mdl_fragment =
 
 const char* g_shader_mdl_vertex =
 // transformation matrix
-"#version 130\n"
+"#version 120\n"
 "#define STUDIO_NF_CHROME 0x02\n"
 "#define STUDIO_NF_ADDITIVE 0x20\n"
 
@@ -250,14 +340,14 @@ const char* g_shader_mdl_vertex =
 "uniform vec2 textureST; \n"
 
 // vertex variables
-"in vec3 vPosition; \n"
-"in vec3 vNormal; \n"
-"in vec2 vTex; \n"
-"in float vBone; \n"
+"attribute vec3 vPosition; \n"
+"attribute vec3 vNormal; \n"
+"attribute vec2 vTex; \n"
+"attribute float vBone; \n"
 
 // fragment variables
-"out vec2 fTex; \n"
-"out vec4 fColor; \n"
+"varying vec2 fTex; \n"
+"varying vec4 fColor; \n"
 
 "vec4 lighting(inout vec3 tNormal); \n"
 "vec3 rotateVector(vec3 v, inout mat4 mat); \n"
@@ -267,11 +357,11 @@ const char* g_shader_mdl_vertex =
 "void main()\n"
 "{\n"
 "mat4 bone; \n"
-"int boneId = int(vBone);"
-"bone[0] = texelFetch(boneMatrixTexture, ivec3(0, 0, boneId), 0); \n"
-"bone[1] = texelFetch(boneMatrixTexture, ivec3(1, 0, boneId), 0); \n"
-"bone[2] = texelFetch(boneMatrixTexture, ivec3(2, 0, boneId), 0); \n"
-"bone[3] = texelFetch(boneMatrixTexture, ivec3(3, 0, boneId), 0); \n"
+"float boneCoord = (vBone / 128.0) + (1.0 / 512.0);"
+"bone[0] = texture3D(boneMatrixTexture, vec3(0.00 + (1.0 / 8.0), 0, boneCoord)); \n"
+"bone[1] = texture3D(boneMatrixTexture, vec3(0.25 + (1.0 / 8.0), 0, boneCoord)); \n"
+"bone[2] = texture3D(boneMatrixTexture, vec3(0.50 + (1.0 / 8.0), 0, boneCoord)); \n"
+"bone[3] = texture3D(boneMatrixTexture, vec3(0.75 + (1.0 / 8.0), 0, boneCoord)); \n"
 
 
 "vec3 pos = rotateVector(vPosition, bone) + vec3(bone[0][3], bone[2][3], -bone[1][3]); \n"

@@ -23,6 +23,7 @@ struct AppSettings {
 	int mapsize_min;
 	int mapsize_max;
 	bool mapsize_auto;
+	bool texture_filtering;
 
 	bool debug_open;
 	bool keyvalue_open;

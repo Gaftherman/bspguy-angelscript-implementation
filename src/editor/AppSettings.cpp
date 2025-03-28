@@ -39,6 +39,7 @@ void AppSettings::loadDefault()
 	mapsize_min = -32768;
 	mapsize_max = 32768;
 	mapsize_auto = true;
+	texture_filtering = false;
 	settings_tab = 0;
 	engine = ENGINE_SVEN_COOP;
 
@@ -95,6 +96,7 @@ void AppSettings::load() {
 			else if (key == "unicode_font") { g_settings.unicode_font = atoi(val.c_str()) != 0; }
 			else if (key == "first_load") { g_settings.first_load = atoi(val.c_str()) != 0; }
 			else if (key == "mapsize_auto") { g_settings.mapsize_auto = atoi(val.c_str()) != 0; }
+			else if (key == "texture_filtering") { g_settings.texture_filtering = atoi(val.c_str()) != 0; }
 			else if (key == "fov") { g_settings.fov = atof(val.c_str()); }
 			else if (key == "zfar") { g_settings.zfar = atof(val.c_str()); }
 			else if (key == "zfarmdl") { g_settings.zFarMdl = atof(val.c_str()); }
@@ -202,6 +204,7 @@ void AppSettings::save() {
 	file << "confirm_exit=" << g_settings.confirm_exit << endl;
 	file << "unicode_font=" << g_settings.unicode_font << endl;
 	file << "first_load=" << g_settings.first_load << endl;
+	file << "texture_filtering=" << g_settings.texture_filtering << endl;
 	file << "fov=" << g_settings.fov << endl;
 	file << "zfar=" << g_settings.zfar << endl;
 	file << "zfarmdl=" << g_settings.zFarMdl << endl;

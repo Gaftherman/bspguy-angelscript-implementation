@@ -37,14 +37,14 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 
-static char log_line[4096];
+static char log_line[16384];
 
 void logf(const char* format, ...) {
 	g_log_mutex.lock();
 
 	va_list vl;
 	va_start(vl, format);
-	vsnprintf(log_line, 4096, format, vl);
+	vsnprintf(log_line, 16384, format, vl);
 	va_end(vl);
 
 	printf("%s", log_line);

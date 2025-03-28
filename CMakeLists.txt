@@ -96,7 +96,7 @@ set(SOURCE_FILES
 	imgui/imgui_draw.cpp
 	imgui/imgui_demo.cpp
 	imgui/backends/imgui_impl_glfw.cpp
-	imgui/backends/imgui_impl_opengl3.cpp
+	imgui/backends/imgui_impl_opengl2.cpp
 	src/util/lodepng.h
 	src/util/lodepng.cpp
 	src/util/tinyfiledialogs.c
@@ -261,7 +261,7 @@ if(MSVC)
 													imgui/imgui_draw.cpp
 													imgui/imgui_demo.cpp
 													imgui/backends/imgui_impl_glfw.cpp
-													imgui/backends/imgui_impl_opengl3.cpp
+													imgui/backends/imgui_impl_opengl2.cpp
 													src/util/lodepng.cpp)
 
 else()

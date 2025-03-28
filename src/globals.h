@@ -59,4 +59,9 @@ extern std::set<std::string> g_parsed_fgds;
 extern std::thread::id g_main_thread_id;
 
 extern int g_render_flags;
+
+// opengl compatibility
 extern uint32_t g_max_texture_size;
+extern uint32_t g_max_texture_array_layers;
+extern bool g_opengl_texture_array_support;
+extern bool g_opengl_3d_texture_support;

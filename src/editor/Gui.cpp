@@ -72,8 +72,7 @@ void Gui::init() {
 
 	// Setup Platform/Renderer bindings
 	ImGui_ImplGlfw_InitForOpenGL(app->window, true);
-	const char* glsl_version = "#version 130";
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	ImGui_ImplOpenGL2_Init();
 
 	loadFonts();
 
@@ -95,8 +94,12 @@ void Gui::init() {
 }
 
 void Gui::draw() {
+	glUseProgram(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glActiveTexture(GL_TEXTURE0);
+
 	// Start the Dear ImGui frame
-	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplOpenGL2_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
@@ -173,21 +176,24 @@ void Gui::draw() {
 	drawStatusBar();
 
 	// Rendering
+	glUseProgram(0);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_DEPTH_TEST);
 	ImGui::Render();
 	glViewport(0, 0, app->windowWidth, app->windowHeight);
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
 	if (shouldReloadFonts) {
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		shouldReloadFonts = false;
 
-		ImGui_ImplOpenGL3_DestroyFontsTexture();
+		ImGui_ImplOpenGL2_DestroyFontsTexture();
 		io.Fonts->Clear();
 
 		loadFonts();
 
 		io.Fonts->Build();
-		ImGui_ImplOpenGL3_CreateFontsTexture();
+		ImGui_ImplOpenGL2_CreateFontsTexture();
 	}
 }
 
@@ -4385,6 +4391,14 @@ void Gui::drawSettings() {
 
 			ImGui::NextColumn();
 
+/*
+			ImGui::Checkbox("Texture Filtering", &g_settings.texture_filtering);
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Smooths far-away textures.\n");
+			}
+
+			ImGui::NextColumn();
+*/
 			if (ImGui::Checkbox("Unicode Font", &g_settings.unicode_font)) {
 				shouldReloadFonts = true;
 			}

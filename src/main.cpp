@@ -6,8 +6,10 @@
 #include "globals.h"
 
 // TODO v5:
+// on load attempt to draw vbo before upload
 // mip maps for 3d textures
 // caching for ent matrix
+// asset path beginning with / doesn't work
 
 // v5 todo low prio:
 // ripent saftey warning
