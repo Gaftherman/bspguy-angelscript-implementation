@@ -2,6 +2,12 @@
 #include <string>
 #include <vector>
 
+enum AppRenderers {
+	RENDERER_OPENGL_21, // 2.1 with the assumption that the os is honest about supporting optional extensions
+	RENDERER_OPENGL_21_LEGACY, // 2.1 with the assumption that os is lying about what is supported
+	RENDERER_COUNT,
+};
+
 struct AppSettings {
 	int windowWidth;
 	int windowHeight;
@@ -24,6 +30,7 @@ struct AppSettings {
 	int mapsize_max;
 	bool mapsize_auto;
 	bool texture_filtering;
+	int renderer;
 
 	bool debug_open;
 	bool keyvalue_open;

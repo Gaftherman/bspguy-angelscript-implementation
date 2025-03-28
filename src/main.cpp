@@ -10,6 +10,8 @@
 // mip maps for 3d textures
 // caching for ent matrix
 // asset path beginning with / doesn't work
+// lag on first model pick
+// gui disappears while moving things
 
 // v5 todo low prio:
 // ripent saftey warning

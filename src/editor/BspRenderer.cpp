@@ -28,10 +28,8 @@
 #include "TextureArray.h"
 
 
-BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colorShader, PointEntRenderer* pointEntRenderer) {
+BspRenderer::BspRenderer(Bsp* map, PointEntRenderer* pointEntRenderer) {
 	this->map = map;
-	this->bspShader = bspShader;
-	this->colorShader = colorShader;
 	this->pointEntRenderer = pointEntRenderer;
 
 	// don't get too crazy, lightmap nodes are 16bit, and it takes longer to gen
@@ -48,7 +46,7 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	greyTex = new Texture(1, 1);
 	redTex = new Texture(1, 1);
 	blackTex = new Texture(1, 1);
-	whiteTex3D = new Texture(1, 1, max(1u, min(1024u, g_max_texture_array_layers)));
+	whiteTex3D = new Texture(1, 1, max(1, min(1024, g_max_texture_array_layers)));
 
 	glTextureArray = new TextureArray();
 
@@ -74,22 +72,6 @@ BspRenderer::BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colo
 	calcFaceMaths();
 	preRenderFaces();
 	preRenderEnts();
-
-	bspShader->bind();
-
-	uint sTexId = glGetUniformLocation(bspShader->ID, "sTex");
-	glUniform1i(sTexId, 0);
-	for (int s = 0; s < MAXLIGHTMAPS; s++) {
-		uint sLightmapTexIds = glGetUniformLocation(bspShader->ID, ("sLightmapTex" + to_string(s)).c_str());
-		
-		// assign lightmap texture units (skips the normal texture unit)
-		glUniform1i(sLightmapTexIds, s + 1);
-	}
-
-	colorShaderMultId = glGetUniformLocation(colorShader->ID, "colorMult");
-	bspShaderColorMultId = glGetUniformLocation(bspShader->ID, "colorMult");
-	bspShaderAlphaTestId = glGetUniformLocation(bspShader->ID, "alphaTest");
-	bspShaderGammaId = glGetUniformLocation(bspShader->ID, "gamma");
 
 	numRenderClipnodes = map->modelCount;
 	lightmapFuture = async(launch::async, &BspRenderer::loadLightmaps, this);
@@ -315,7 +297,7 @@ void BspRenderer::addClipnodeModel(int modelIdx) {
 }
 
 void BspRenderer::updateModelShaders() {
-	ShaderProgram* activeShader = bspShader;
+	activeShader = g_app->bspShader;
 
 	for (int i = 0; i < numRenderModels; i++) {
 		RenderModel& model = renderModels[i];
@@ -580,7 +562,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 	vector<vector<lightmapVert>> renderGroupVerts;
 	vector<vec3> modelWireframeVerts;
 
-	ShaderProgram* activeShader = bspShader;
+	activeShader = g_app->bspShader;
 
 	for (int i = 0; i < model.nFaces; i++) {
 		int faceIdx = model.iFirstFace + i;
@@ -1015,10 +997,10 @@ void BspRenderer::generateNavMeshBuffer() {
 		return;
 	}
 
-	renderClip->clipnodeBuffer[hull] = new VertexBuffer(colorShader, COLOR_4B | POS_3F, output, allVerts.size());
+	renderClip->clipnodeBuffer[hull] = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, output, allVerts.size());
 	renderClip->clipnodeBuffer[hull]->ownData = true;
 
-	renderClip->wireframeClipnodeBuffer[hull] = new VertexBuffer(colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
+	renderClip->wireframeClipnodeBuffer[hull] = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
 	renderClip->wireframeClipnodeBuffer[hull]->ownData = true;
 
 	renderClip->faceMaths[hull] = faceMaths;
@@ -1107,8 +1089,8 @@ void BspRenderer::generateSingleLeafNavMeshBuffer(LeafNode* node) {
 		delete node->wireframe_buffer;
 	}
 
-	node->face_buffer = new VertexBuffer(colorShader, COLOR_4B | POS_3F, output, allVerts.size());
-	node->wireframe_buffer = new VertexBuffer(colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
+	node->face_buffer = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, output, allVerts.size());
+	node->wireframe_buffer = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
 
 	node->face_buffer->ownData = true;
 	node->wireframe_buffer->ownData = true;
@@ -1269,10 +1251,10 @@ void BspRenderer::generateClipnodeBuffer(int modelIdx) {
 			continue;
 		}
 
-		renderClip->clipnodeBuffer[i] = new VertexBuffer(colorShader, COLOR_4B | POS_3F, output, allVerts.size());
+		renderClip->clipnodeBuffer[i] = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, output, allVerts.size());
 		renderClip->clipnodeBuffer[i]->ownData = true;
 
-		renderClip->wireframeClipnodeBuffer[i] = new VertexBuffer(colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
+		renderClip->wireframeClipnodeBuffer[i] = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
 		renderClip->wireframeClipnodeBuffer[i]->ownData = true;
 
 		renderClip->faceMaths[i] = faceMaths;
@@ -1331,7 +1313,7 @@ void BspRenderer::preRenderEnts() {
 		}
 	}
 
-	pointEnts = new VertexBuffer(colorShader, COLOR_4B | POS_3F, entCubes, numPointEnts * 6 * 6);
+	pointEnts = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, entCubes, numPointEnts * 6 * 6);
 	pointEnts->ownData = true;
 	pointEnts->upload();
 }
@@ -1676,7 +1658,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 	mapOffset = map->ents.size() ? map->ents[0]->getOrigin() : vec3();
 	vec3 renderOffset = mapOffset.flip();
 
-	ShaderProgram* activeShader = bspShader;
+	activeShader = g_app->bspShader;
 
 	if (wireframePass)
 		activeShader = g_app->vec3Shader;
@@ -1691,10 +1673,10 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 
 	if (!wireframePass) {
 		if (g_render_flags & RENDER_LIGHTMAPS) {
-			glUniform1f(bspShaderGammaId, 1.5f);
+			activeShader->setUniform("gamma", 1.5f);
 		}
 		else {
-			glUniform1f(bspShaderGammaId, 1.0f);
+			activeShader->setUniform("gamma", 1.0f);
 		}
 	}
 
@@ -1759,7 +1741,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 	}
 
 	if (clipnodesLoaded && transparencyPass && !wireframePass) {
-		colorShader->bind();
+		g_app->colorShader->bind();
 
 		if (g_render_flags & RENDER_WORLD_CLIPNODES && clipnodeHull != -1) {
 			drawModelClipnodes(0, false, clipnodeHull);
@@ -1776,23 +1758,23 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 						continue; // skip rendering for models that have faces, if in auto mode
 					}
 					bool isHighlighted = highlighted.count(i);
-					colorShader->pushMatrix(MAT_MODEL);
-					*colorShader->modelMat = renderEnts[i].modelMat;
-					colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-					*colorShader->modelMat = *colorShader->modelMat * map->ents[i]->getRotationMatrix(false);
-					colorShader->updateMatrixes();
+					g_app->colorShader->pushMatrix(MAT_MODEL);
+					*g_app->colorShader->modelMat = renderEnts[i].modelMat;
+					g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
+					*g_app->colorShader->modelMat = *g_app->colorShader->modelMat * map->ents[i]->getRotationMatrix(false);
+					g_app->colorShader->updateMatrixes();
 
 					if (isHighlighted) {
-						glUniform4f(colorShaderMultId, 1, 0.25f, 0.25f, 1);
+						g_app->colorShader->setUniform("colorMult", vec4(1, 0.25f, 0.25f, 1));
 					}
 
 					drawModelClipnodes(renderEnts[i].modelIdx, false, clipnodeHull);
 
 					if (isHighlighted) {
-						glUniform4f(colorShaderMultId, 1, 1, 1, 1);
+						g_app->colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 					}
 
-					colorShader->popMatrix(MAT_MODEL);
+					g_app->colorShader->popMatrix(MAT_MODEL);
 				}
 			}
 		}		
@@ -1834,11 +1816,11 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 
 	if (renderModels[modelIdx].wireframeBuffer) {
 		if (highlight)
-			glUniform4f(g_app->u_vec3color, 1.0f, 1.0f, 0.00f, 1);
+			g_app->vec3Shader->setUniform("color", vec4(1, 1, 0, 1));
 		else if (modelIdx > 0)
-			glUniform4f(g_app->u_vec3color, 0.0f, 0.00f, 0.78f, 1);
+			g_app->vec3Shader->setUniform("color", vec4(0, 0, 0.78f, 0));
 		else
-			glUniform4f(g_app->u_vec3color, 0.25f, 0.25f, 0.25f, 1);
+			g_app->vec3Shader->setUniform("color", vec4(0.25f, 0.25f, 0.25f, 1));
 
 		renderModels[modelIdx].wireframeBuffer->draw(GL_LINES);
 	}
@@ -1857,43 +1839,44 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 	default:
 	case RENDER_MODE_NORMAL:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
-		glUniform1f(bspShaderAlphaTestId, 0);
+		activeShader->setUniform("gamma", 1.5f);
+		activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
+		activeShader->setUniform("alphaTest", 0);
 		isTransparent = false;
 		useLightmaps = true;
 		break;
 	case RENDER_MODE_SOLID:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
-		glUniform1f(bspShaderAlphaTestId, 1);
+		activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
+		activeShader->setUniform("alphaTest", 1);
 		isTransparent = true;
 		useLightmaps = true;
 		break;
 	case RENDER_MODE_COLOR:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(bspShaderColorMultId, opts.rendercolor.r / 255.0f, opts.rendercolor.g / 255.0f, opts.rendercolor.b / 255.0f, opts.renderamt / 255.0f);
-		glUniform1f(bspShaderAlphaTestId, 0);
+		activeShader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
+		activeShader->setUniform("alphaTest", 0);
 		isTransparent = opts.renderamt < 255;
 		useLightmaps = false;
 		break;
 	case RENDER_MODE_TEXTURE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
-		glUniform1f(bspShaderAlphaTestId, 0);
+		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		activeShader->setUniform("alphaTest", 0);
 		isTransparent = opts.renderamt < 255;
 		useLightmaps = true;
 		break;
 	case RENDER_MODE_GLOW:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
-		glUniform1f(bspShaderAlphaTestId, 0);
+		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		activeShader->setUniform("alphaTest", 0);
 		isTransparent = opts.renderamt < 255;
 		useLightmaps = false;
 		break;
 	case RENDER_MODE_ADDITIVE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		glUniform4f(bspShaderColorMultId, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
-		glUniform1f(bspShaderAlphaTestId, 0);
+		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		activeShader->setUniform("alphaTest", 0);
 		isTransparent = opts.renderamt < 255;
 		useLightmaps = false;
 		break;
@@ -1982,7 +1965,8 @@ void BspRenderer::drawModelClipnodes(int modelIdx, bool highlight, int hullIdx) 
 void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 	vec3 renderOffset = mapOffset.flip();
 
-	colorShader->bind();
+	g_app->colorShader->bind();
+	g_app->colorShader->updateMatrixes();
 
 	if (highlightedEnts.empty() && !(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
 		if (pointEnts->numVerts > 0)
@@ -2013,16 +1997,16 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 			nextRangeDrawIdx = pointEntIdx+1;
 
 			if (!map->ents[i]->didStudioDraw) {
-				colorShader->pushMatrix(MAT_MODEL);
-				*colorShader->modelMat = renderEnts[i].modelMat;
-				colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-				colorShader->updateMatrixes();
+				g_app->colorShader->pushMatrix(MAT_MODEL);
+				*g_app->colorShader->modelMat = renderEnts[i].modelMat;
+				g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
+				g_app->colorShader->updateMatrixes();
 
 				renderEnts[i].pointEntCube->selectBuffer->draw(GL_TRIANGLES);
 				renderEnts[i].pointEntCube->buffer->draw(GL_TRIANGLES);
 				renderEnts[i].pointEntCube->wireframeBuffer->draw(GL_LINES);
 
-				colorShader->popMatrix(MAT_MODEL);
+				g_app->colorShader->popMatrix(MAT_MODEL);
 			}
 		}
 

@@ -7,17 +7,9 @@
 #include "Renderer.h"
 #include "globals.h"
 
-SprRenderer::SprRenderer(ShaderProgram* frameShader, ShaderProgram* outlineShader, string sprPath) {
+SprRenderer::SprRenderer(string sprPath) {
 	this->fpath = sprPath;
-	this->frameShader = frameShader;
-	this->outlineShader = outlineShader;
 	valid = false;
-
-	frameShader->bind();
-	u_color_frame = glGetUniformLocation(frameShader->ID, "color");
-
-	outlineShader->bind();
-	u_color_outline = glGetUniformLocation(outlineShader->ID, "color");
 
 	loadState = MODEL_LOAD_WAITING;
 }
@@ -199,8 +191,8 @@ void SprRenderer::loadData() {
 		frameOffset += sizeof(FrameHeader) + (frame->width * frame->height);
 	}
 
-	frameBuffer = new VertexBuffer(frameShader, TEX_2F | POS_3F, frameVerts, framesVertCount);
-	outlineBuffer = new VertexBuffer(outlineShader, POS_3F, outlineVerts, linesVertCount);
+	frameBuffer = new VertexBuffer(g_app->sprShader, TEX_2F | POS_3F, frameVerts, framesVertCount);
+	outlineBuffer = new VertexBuffer(g_app->sprOutlineShader, POS_3F, outlineVerts, linesVertCount);
 
 	delete[] palette;
 
@@ -356,17 +348,17 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 	ent->drawFrame += opts.framerate * deltaTime;
 	int frame = (int)ent->drawFrame % header->frames;
 	
-	frameShader->bind();
+	g_app->sprShader->bind();
 
 	glActiveTexture(GL_TEXTURE0);
-	glUniform4f(u_color_frame, color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f);
+	g_app->sprShader->setUniform("color", color.toVec());
 
 	glTextures[frame]->bind();
 
-	frameShader->pushMatrix(MAT_MODEL);
-	frameShader->modelMat->loadIdentity();
-	frameShader->modelMat->translate(ori.x, ori.z, -ori.y);
-	frameShader->modelMat->scale(scale, scale, scale);
+	g_app->sprShader->pushMatrix(MAT_MODEL);
+	g_app->sprShader->modelMat->loadIdentity();
+	g_app->sprShader->modelMat->translate(ori.x, ori.z, -ori.y);
+	g_app->sprShader->modelMat->scale(scale, scale, scale);
 
 	vec3 camAngles = vec3(0, -90 - g_app->cameraAngles.z, g_app->cameraAngles.x) * (PI / 180.0f);
 	vec3 entAngles = angles * (PI / 180.0f);
@@ -386,18 +378,18 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 	default:
 	case VP_PARALLEL:
 	case VP_PARALLEL_ORIENTED:
-		frameShader->modelMat->rotateY(camAngles.y);
-		frameShader->modelMat->rotateZ(camAngles.z);
-		frameShader->modelMat->rotateX(entAngles.y);
+		g_app->sprShader->modelMat->rotateY(camAngles.y);
+		g_app->sprShader->modelMat->rotateZ(camAngles.z);
+		g_app->sprShader->modelMat->rotateX(entAngles.y);
 		break;
 	case VP_PARALLEL_UPRIGHT:
 	case FACING_UPRIGHT: // it's broken in-game, but it sort of looks like parallel_upright
-		frameShader->modelMat->rotateY(camAngles.y);
+		g_app->sprShader->modelMat->rotateY(camAngles.y);
 		break;
 	case ORIENTED:
-		frameShader->modelMat->rotateY(entAngles.y);
-		frameShader->modelMat->rotateZ(entAngles.x);
-		frameShader->modelMat->rotateX(-entAngles.z);
+		g_app->sprShader->modelMat->rotateY(entAngles.y);
+		g_app->sprShader->modelMat->rotateZ(entAngles.x);
+		g_app->sprShader->modelMat->rotateX(-entAngles.z);
 		break;
 	}
 
@@ -406,7 +398,7 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 		glAlphaFunc(GL_GREATER, 0.5f);
 	}
 
-	frameShader->updateMatrixes();
+	g_app->sprShader->updateMatrixes();
 	frameBuffer->drawRange(GL_TRIANGLE_FAN, frame * 4, frame * 4 + 4);
 
 	if (header->format == SPR_ALPHATEST) {
@@ -416,18 +408,18 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 	if (opts.rendermode == RENDER_MODE_GLOW) {
 		glEnable(GL_DEPTH_TEST);
 		scale = 1.0f / scale; // the growing sprite borders are distracting
-		frameShader->modelMat->scale(scale, scale, scale);
+		g_app->sprShader->modelMat->scale(scale, scale, scale);
 	}
 
 	if ((g_render_flags & RENDER_WIREFRAME) && !noOutline) {
-		outlineShader->bind();
-		*outlineShader->modelMat = *frameShader->modelMat;
-		outlineShader->updateMatrixes();
-		glUniform4f(u_color_outline, outlineColor.r, outlineColor.g, outlineColor.b, 1);
+		g_app->sprOutlineShader->bind();
+		*g_app->sprOutlineShader->modelMat = *g_app->sprShader->modelMat;
+		g_app->sprOutlineShader->updateMatrixes();
+		g_app->sprOutlineShader->setUniform("color", vec4(outlineColor.toVec(), 1));
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		outlineBuffer->drawRange(GL_LINE_STRIP, frame * 5, frame * 5 + 5);
 	}
 
-	frameShader->popMatrix(MAT_MODEL);
+	g_app->sprShader->popMatrix(MAT_MODEL);
 }

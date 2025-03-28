@@ -137,10 +137,6 @@ private:
 	ShaderProgram* sprShader;
 	ShaderProgram* vec3Shader;
 	ShaderProgram* sprOutlineShader;
-	
-	// opengl uniforms
-	uint u_colorMultId;
-	uint u_vec3color;
 
 	PointEntRenderer* pointEntRenderer;
 	PointEntRenderer* swapPointEntRenderer = NULL;
@@ -257,6 +253,8 @@ private:
 
 	bool anyHiddenEnts = false;
 
+	bool createWindow();
+	void compileShaders();
 	vec3 getMoveDir();
 	void controls();
 	void cameraPickingControls();

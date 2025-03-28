@@ -42,6 +42,7 @@ void AppSettings::loadDefault()
 	texture_filtering = false;
 	settings_tab = 0;
 	engine = ENGINE_SVEN_COOP;
+	renderer = RENDERER_OPENGL_21;
 
 	render_flags = g_render_flags = RENDER_TEXTURES | RENDER_LIGHTMAPS | RENDER_SPECIAL
 		| RENDER_ENTS | RENDER_SPECIAL_ENTS | RENDER_POINT_ENTS | RENDER_WIREFRAME
@@ -114,6 +115,7 @@ void AppSettings::load() {
 			else if (key == "autoload_layout_height") { g_settings.autoload_layout_height = atoi(val.c_str()); }
 			else if (key == "mapsize_min") { g_settings.mapsize_min = atoi(val.c_str()); }
 			else if (key == "mapsize_max") { g_settings.mapsize_max = atoi(val.c_str()); }
+			else if (key == "renderer") { g_settings.renderer = atoi(val.c_str()); }
 			else if (key == "engine") { 
 				g_settings.engine = clamp(atoi(val.c_str()), 0, 1);
 				g_limits = g_engine_limits[g_settings.engine];
@@ -218,6 +220,7 @@ void AppSettings::save() {
 	file << "autoload_layout_height=" << g_settings.autoload_layout_height << endl;
 	file << "mapsize_min=" << g_settings.mapsize_min << endl;
 	file << "mapsize_max=" << g_settings.mapsize_max << endl;
+	file << "renderer=" << g_settings.renderer << endl;
 	file << "mapsize_auto=" << g_settings.mapsize_auto << endl;
 	file << "engine=" << g_settings.engine << endl;
 }

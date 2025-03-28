@@ -11,11 +11,9 @@
 #include "globals.h"
 #include "Renderer.h"
 
-MdlRenderer::MdlRenderer(ShaderProgram* shaderProgram, string modelPath) {
+MdlRenderer::MdlRenderer(string modelPath) {
 	this->fpath = modelPath;
-	this->shaderProgram = shaderProgram;
 	valid = false;
-	u_boneTexture = -1;
 
 	//loadFuture = async(launch::async, &MdlRenderer::loadData, this);
 	//loadData();
@@ -401,20 +399,7 @@ void MdlRenderer::upload() {
 		}
 	}
 
-	shaderProgram->bind();
-	u_sTexId = glGetUniformLocation(shaderProgram->ID, "sTex");
-	u_elights = glGetUniformLocation(shaderProgram->ID, "elights");
-	u_ambient = glGetUniformLocation(shaderProgram->ID, "ambient");
-	u_lightsId = glGetUniformLocation(shaderProgram->ID, "lights");
-	u_bonesId = glGetUniformLocation(shaderProgram->ID, "bones");
-	u_additiveEnable = glGetUniformLocation(shaderProgram->ID, "additiveEnable");
-	u_chromeEnable = glGetUniformLocation(shaderProgram->ID, "chromeEnable");
-	u_flatshadeEnable = glGetUniformLocation(shaderProgram->ID, "flatshadeEnable");
-	u_viewerOriginId = glGetUniformLocation(shaderProgram->ID, "viewerOrigin");
-	u_viewerRightId = glGetUniformLocation(shaderProgram->ID, "viewerRight");
-	u_textureST = glGetUniformLocation(shaderProgram->ID, "textureST");
-	u_boneTextureUniform = glGetUniformLocation(shaderProgram->ID, "boneMatrixTexture");
-	u_colorMult = glGetUniformLocation(shaderProgram->ID, "colorMult");
+	g_app->mdlShader->bind();
 
 	glGenTextures(1, &u_boneTexture);
 	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
@@ -425,7 +410,7 @@ void MdlRenderer::upload() {
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
 
-	glUniform1i(u_boneTextureUniform, 1); // GL_TEXTURE1
+	g_app->mdlShader->setUniform("boneMatrixTexture", 1);
 
 	// allocate data so subImage can be used for faster updates
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F, 4, 1, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
@@ -736,7 +721,7 @@ bool MdlRenderer::loadMeshes() {
 				meshBuffers[b][m][k].verts = new boneVert[totalElements];
 				meshBuffers[b][m][k].numVerts = totalElements;
 				memcpy(meshBuffers[b][m][k].verts, &allVerts[0], totalElements * sizeof(boneVert));
-				meshBuffers[b][m][k].buffer = new VertexBuffer(shaderProgram, NORM_3F | TEX_2F | POS_3F, meshBuffers[b][m][k].verts, meshBuffers[b][m][k].numVerts);
+				meshBuffers[b][m][k].buffer = new VertexBuffer(g_app->mdlShader, NORM_3F | TEX_2F | POS_3F, meshBuffers[b][m][k].verts, meshBuffers[b][m][k].numVerts);
 				meshBuffers[b][m][k].buffer->addAttribute(1, GL_FLOAT, GL_FALSE, "vBone");
 				//meshBuffers[b][m][k].buffer->upload();
 
@@ -1351,45 +1336,44 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
 
-	shaderProgram->bind();
+	g_app->mdlShader->bind();
 
 	switch (opts.rendermode) {
 	default:
 	case RENDER_MODE_NORMAL:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, 1.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(1,1,1,1));
 		break;
 	case RENDER_MODE_SOLID:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, 1.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 		break;
 	case RENDER_MODE_COLOR:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(u_colorMult, opts.rendercolor.r / 255.0f, opts.rendercolor.g / 255.0f, opts.rendercolor.b / 255.0f, opts.renderamt / 255.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_TEXTURE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_GLOW:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_ADDITIVE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		glUniform4f(u_colorMult, 1.0f, 1.0f, 1.0f, opts.renderamt / 255.0f);
+		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	}
 
-	glUniform1i(u_sTexId, 0);
+	g_app->mdlShader->setUniform("sTex", 0);
 	glActiveTexture(GL_TEXTURE0);
 
 	// number of active lights
-	glUniform1i(u_elights, 1);
+	g_app->mdlShader->setUniform("elights", 1);
 
 	// ambient lighting
-	vec3 ambientColor = opts.rendercolor.toVec() * 0.4f;
-	glUniform3f(u_ambient, ambientColor.x, ambientColor.y, ambientColor.z);
+	g_app->mdlShader->setUniform("ambient", opts.rendercolor.toVec() * 0.4f);
 
 	/*
 	// lighting matrices
@@ -1413,7 +1397,8 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	}
 	lights[0][0] = vec3(1024, 1024, 1024); // light position
 	lights[0][1] = opts.rendercolor.toVec(); // diffuse color
-	glUniformMatrix3fv(u_lightsId, 4, false, (float*)lights);
+	g_app->mdlShader->setUniform("lights", (float*)lights, 4*3*3);
+	//glUniformMatrix3fv(u_lightsId, 4, false, (float*)lights);
 	
 	// Hack: setup the bone matrices as a 3D texture.
 	// Opengl 3.0 doesn't have uniform buffers and mat4[128] is far too many uniforms for a valid shader.
@@ -1422,17 +1407,17 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, 4, 1, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
 	glActiveTexture(GL_TEXTURE0);
 
-	shaderProgram->pushMatrix(MAT_MODEL);
-	shaderProgram->modelMat->loadIdentity();
-	shaderProgram->modelMat->translate(origin.x, origin.z, -origin.y);
+	g_app->mdlShader->pushMatrix(MAT_MODEL);
+	g_app->mdlShader->modelMat->loadIdentity();
+	g_app->mdlShader->modelMat->translate(origin.x, origin.z, -origin.y);
 	// Don't rotate the scene because it messes up chrome effect.
-	shaderProgram->updateMatrixes();
+	g_app->mdlShader->updateMatrixes();
 
 	vec3 uploadOrigin = viewerOrigin - origin; // world coordinates
 	vec3 uploadRight = viewerRight;
 
-	glUniform3f(u_viewerOriginId, uploadOrigin.x, uploadOrigin.y, uploadOrigin.z);
-	glUniform3f(u_viewerRightId, viewerRight.x, viewerRight.y, viewerRight.z);
+	g_app->mdlShader->setUniform("viewerOrigin", uploadOrigin);
+	g_app->mdlShader->setUniform("viewerRight", viewerRight);
 
 	data.seek(header->skinindex);
 	
@@ -1468,10 +1453,10 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 			}
 
 			if (render.flags & STUDIO_NF_ADDITIVE) {
-				glUniform1i(u_additiveEnable, 1);
+				g_app->mdlShader->setUniform("additiveEnable", 1);
 			}
 			else {
-				glUniform1i(u_additiveEnable, 0);
+				g_app->mdlShader->setUniform("additiveEnable", 0);
 			}
 
 			int flatShade = 0;
@@ -1481,17 +1466,17 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 				flatShade = 1;
 			}
 
-			glUniform1i(u_flatshadeEnable, flatShade);
+			g_app->mdlShader->setUniform("flatshadeEnable", flatShade);
 
 			if (render.flags & STUDIO_NF_CHROME) {
 				const float s = 1.0 / (float)tex->width;
 				const float t = 1.0 / (float)tex->height;
 					
-				glUniform1i(u_chromeEnable, 1);
-				glUniform2f(u_textureST, s, t);
+				g_app->mdlShader->setUniform("chromeEnable", 1);
+				g_app->mdlShader->setUniform("textureST", vec2(s, t));
 			}
 			else {
-				glUniform1i(u_chromeEnable, 0);
+				g_app->mdlShader->setUniform("chromeEnable", 0);
 			}
 
 			render.buffer->draw(GL_TRIANGLES);
@@ -1500,7 +1485,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 
 	//logf("Draw %d meshes\n", meshCount);
 
-	shaderProgram->popMatrix(MAT_MODEL);
+	g_app->mdlShader->popMatrix(MAT_MODEL);
 }
 
 // get a AABB containing all model vertices at the given angles and animation frame

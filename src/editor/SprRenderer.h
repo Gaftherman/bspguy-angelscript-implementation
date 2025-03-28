@@ -57,7 +57,7 @@ struct FrameHeader
 
 class SprRenderer : public BaseRenderer {
 public:
-	SprRenderer(ShaderProgram* frameShader, ShaderProgram* outlineShader, string sprPath);
+	SprRenderer(string sprPath);
 	~SprRenderer();
 
 	void upload() override;
@@ -75,15 +75,9 @@ public:
 private:
 	SpriteHeader* header;
 
-	ShaderProgram* frameShader;
-	ShaderProgram* outlineShader;
 	Texture** glTextures;
 	VertexBuffer* frameBuffer;
 	VertexBuffer* outlineBuffer;
-
-	// shader uniforms
-	uint u_color_frame;
-	uint u_color_outline;
 
 	mstream data;
 

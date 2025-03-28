@@ -36,6 +36,25 @@ int glGetErrorDebug() {
 	return glGetError();
 }
 
+void glCheckError(const char* checkMessage) {
+	static int lastError = 0;
+	int glerror = glGetError();
+	if (glerror != GL_NO_ERROR) {
+		if (lastError != glerror)
+			logf("Got OpenGL Error %d after %s\n", glerror, checkMessage);
+		else
+			debugf("Got OpenGL Error %d after %s\n", glerror, checkMessage);
+		lastError = glerror;
+	}
+}
+
+void glClearError() {
+	int error = glGetError();
+	if (error) {
+		logf("Cleared error %d\n", error);
+	}
+}
+
 void error_callback(int error, const char* description)
 {
 	logf("GLFW Error: %s\n", description);
@@ -142,19 +161,78 @@ Renderer::Renderer() {
 	programStartTime = glfwGetTime();
 	g_settings.loadDefault();
 	g_settings.load();
+	g_settings.renderer = clamp(g_settings.renderer, 0, RENDERER_COUNT - 1);
 
+	if (!createWindow()) {
+		logf("Window creation failed. Does your graphics driver support OpenGL 2.1?\n");
+		return;
+	}
+
+	GLint texImageUnits;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &g_max_texture_size);
+	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &texImageUnits);
+	glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &g_max_texture_array_layers);
+	glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &g_max_vtf_units);
+	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
+
+	glewInit();
+
+	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
+	logf("    Texture Units: %d / 5\n", texImageUnits);
+	logf("    Texture Array Layers: %d\n", g_max_texture_array_layers);
+	logf("    Vertex Texture Fetch Units: %d\n", g_max_vtf_units);
+	debugf("OpenGL Extensions:\n%s\n", openglExts);
+
+	// init to black screen instead of white
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glfwSwapBuffers(window);
+	glfwSwapInterval(1);
+
+	gui = new Gui(this);
+
+	compileShaders();
+
+	oldLeftMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+	oldRightMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
+
+	g_app = this;
+
+	g_progress.simpleMode = true;
+
+	pointEntRenderer = new PointEntRenderer(NULL, vector<Fgd*>(), colorShader);
+
+	loadSettings();
+
+	reloading = true;
+	fgdFuture = async(launch::async, &Renderer::loadFgds, this);
+
+	memset(&undoLumpState, 0, sizeof(LumpState));
+	memset(&initialLumpState, 0, sizeof(LumpState));
+
+	glCheckError("Initializing context");
+
+	//cameraOrigin = vec3(0, 0, 0);
+	//cameraAngles = vec3(0, 0, 0);
+}
+
+bool Renderer::createWindow() {
 	if (!glfwInit())
 	{
 		logf("GLFW initialization failed\n");
-		return;
+		return false;
 	}
 
 	glfwSetErrorCallback(error_callback);
 
+	//glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
 	window = glfwCreateWindow(g_settings.windowWidth, g_settings.windowHeight, "bspguy", NULL, NULL);
+
+	if (!window) {
+		return false;
+	}
 
 	byte* icon_data = NULL;
 	uint w, h;
@@ -177,7 +255,7 @@ Renderer::Renderer() {
 
 	if (g_settings.valid) {
 		glfwSetWindowPos(window, g_settings.windowX, g_settings.windowY);
-		
+
 		// setting size again to fix issue where window is too small because it was
 		// moved to a monitor with a different DPI than the one it was created for
 		glfwSetWindowSize(window, g_settings.windowWidth, g_settings.windowHeight);
@@ -207,12 +285,6 @@ Renderer::Renderer() {
 		}
 	}
 
-	if (!window)
-	{
-		logf("Window creation failed. Maybe your PC doesn't support OpenGL 3.0\n");
-		return;
-	}
-
 	glfwMakeContextCurrent(window);
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetScrollCallback(window, scroll_callback);
@@ -225,24 +297,20 @@ Renderer::Renderer() {
 	glfwSetWindowIconifyCallback(window, window_iconify_callback);
 	glfwSetDropCallback(window, file_drop_callback);
 
-	GLint maxTextureSize, texImageUnits, arrayLayers;
-	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &texImageUnits);
-	glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &arrayLayers);
-	g_max_texture_size = maxTextureSize;
-	g_max_texture_array_layers = arrayLayers;
-	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
-		
-	glewInit();
+	return true;
+}
 
-	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
-	debugf("OpenGL Extensions: %s\n", openglExts);
-	logf("Texture Units: %d / 5\n", texImageUnits);
-	logf("Texture Array Layers: %d\n", arrayLayers);
+void Renderer::compileShaders() {
+	glClearError();
+
+	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
 	const char* bspFragShader = g_shader_multitexture_fragment;
 
-	if (strstr(openglExts, "GL_EXT_texture_array")) {
+	if (g_settings.renderer == RENDERER_OPENGL_21_LEGACY) {
+		logf("Legacy renderer selected. Not checking extension support.\n");
+	}
+	else if (strstr(openglExts, "GL_EXT_texture_array")) {
 		g_opengl_texture_array_support = true;
 		bspFragShader = g_shader_multitexture_array_fragment;
 	}
@@ -255,88 +323,64 @@ Renderer::Renderer() {
 		logf("Neither texture arrays nor 3D textures are supported. Map rendering will be slow.\n");
 	}
 
-	// init to black screen instead of white
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glfwSwapBuffers(window);
-	glfwSwapInterval(1);
-
-	gui = new Gui(this);
-	
-	
-	bspShader = new ShaderProgram(g_shader_multitexture_vertex, bspFragShader);
+	bspShader = new ShaderProgram("BSP", g_shader_multitexture_vertex, bspFragShader);
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
-	if (!bspShader->compiled) {
-		logf("failed to compile BSP shader\n");
-	}	
+	bspShader->addUniform("sTex", UNIFORM_INT);
+	bspShader->addUniform("colorMult", UNIFORM_VEC4);
+	bspShader->addUniform("alphaTest", UNIFORM_FLOAT);
+	bspShader->addUniform("gamma", UNIFORM_FLOAT);
+	bspShader->setUniform("sTex", 0);
+	for (int s = 0; s < MAXLIGHTMAPS; s++) {
+		string name = "sLightmapTex" + to_string(s);
+		bspShader->addUniform(name, UNIFORM_INT);
+		bspShader->setUniform(name, s + 1);
+	}
 
-	colorShader = new ShaderProgram(g_shader_cVert_vertex, g_shader_cVert_fragment);
+	colorShader = new ShaderProgram("Color", g_shader_cVert_vertex, g_shader_cVert_fragment);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	colorShader->setMatrixNames(NULL, "modelViewProjection");
 	colorShader->setVertexAttributeNames("vPosition", "vColor", NULL, NULL);
-	if (!colorShader->compiled) {
-		logf("failed to compile color shader\n");
-	}
+	colorShader->addUniform("colorMult", UNIFORM_VEC4);
+	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 
-	mdlShader = new ShaderProgram(g_shader_mdl_vertex, g_shader_mdl_fragment);
+	mdlShader = new ShaderProgram("MDL", g_shader_mdl_vertex, g_shader_mdl_fragment);
 	mdlShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	mdlShader->setMatrixNames(NULL, "modelViewProjection");
 	mdlShader->setVertexAttributeNames("vPosition", NULL, "vTex", "vNormal");
-	if (!mdlShader->compiled) {
-		logf("failed to compile MDL shader\n");
-	}
+	mdlShader->addUniform("sTex", UNIFORM_INT);
+	mdlShader->addUniform("elights", UNIFORM_INT);
+	mdlShader->addUniform("ambient", UNIFORM_VEC3);
+	mdlShader->addUniform("lights", UNIFORM_MAT3);
+	mdlShader->addUniform("additiveEnable", UNIFORM_INT);
+	mdlShader->addUniform("chromeEnable", UNIFORM_INT);
+	mdlShader->addUniform("flatshadeEnable", UNIFORM_INT);
+	mdlShader->addUniform("viewerOrigin", UNIFORM_VEC3);
+	mdlShader->addUniform("viewerRight", UNIFORM_VEC3);
+	mdlShader->addUniform("textureST", UNIFORM_VEC2);
+	mdlShader->addUniform("boneMatrixTexture", UNIFORM_INT);
+	mdlShader->addUniform("colorMult", UNIFORM_VEC4);
 
-	sprShader = new ShaderProgram(g_shader_spr_vertex, g_shader_spr_fragment);
+	sprShader = new ShaderProgram("SPR", g_shader_spr_vertex, g_shader_spr_fragment);
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprShader->setMatrixNames(NULL, "modelViewProjection");
 	sprShader->setVertexAttributeNames("vPosition", NULL, "vTex", NULL);
-	if (!sprShader->compiled) {
-		logf("failed to compile SPR shader\n");
-	}
+	sprShader->addUniform("color", UNIFORM_VEC4);
 
-	vec3Shader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3_fragment);
+	vec3Shader = new ShaderProgram("vec3", g_shader_vec3_vertex, g_shader_vec3_fragment);
 	vec3Shader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	vec3Shader->setMatrixNames(NULL, "modelViewProjection");
 	vec3Shader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
-	if (!vec3Shader->compiled) {
-		logf("failed to compile vec3 shader\n");
-	}
+	vec3Shader->addUniform("color", UNIFORM_VEC4);
+	vec3Shader->setUniform("color", vec4(1, 1, 1, 1));
 
-	sprOutlineShader = new ShaderProgram(g_shader_vec3_vertex, g_shader_vec3depth_fragment);
+	sprOutlineShader = new ShaderProgram("SPR outline", g_shader_vec3_vertex, g_shader_vec3depth_fragment);
 	sprOutlineShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprOutlineShader->setMatrixNames(NULL, "modelViewProjection");
 	sprOutlineShader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
-	if (!sprOutlineShader->compiled) {
-		logf("failed to compile SPR outline shader\n");
-	}
+	sprOutlineShader->addUniform("color", UNIFORM_VEC4);
 
-	colorShader->bind();
-	u_colorMultId = glGetUniformLocation(colorShader->ID, "colorMult");
-	glUniform4f(u_colorMultId, 1, 1, 1, 1);
-
-	vec3Shader->bind();
-	u_vec3color = glGetUniformLocation(vec3Shader->ID, "color");
-	glUniform4f(u_vec3color, 1, 1, 1, 1);
-
-	oldLeftMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-	oldRightMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
-
-	g_app = this;
-
-	g_progress.simpleMode = true;
-
-	pointEntRenderer = new PointEntRenderer(NULL, vector<Fgd*>(), colorShader);
-
-	loadSettings();
-
-	reloading = true;
-	fgdFuture = async(launch::async, &Renderer::loadFgds, this);
-
-	memset(&undoLumpState, 0, sizeof(LumpState));
-	memset(&initialLumpState, 0, sizeof(LumpState));
-
-	//cameraOrigin = vec3(0, 0, 0);
-	//cameraAngles = vec3(0, 0, 0);
+	glCheckError("compiling shaders");
 }
 
 Renderer::~Renderer() {
@@ -394,6 +438,8 @@ void Renderer::renderLoop() {
 	cCube vertCube(vec3(-s, -s, -s), vec3(s, s, s), { 0, 128, 255, 255 });
 	VertexBuffer vertCubeBuffer(colorShader, COLOR_4B | POS_3F, &vertCube, 6 * 6);
 
+	glCheckError("Before render loop");
+
 	float lastFrameTime = glfwGetTime();
 	while (!glfwWindowShouldClose(window))
 	{
@@ -421,33 +467,42 @@ void Renderer::renderLoop() {
 
 		isLoading = reloading;
 
+		glCheckError("Setting up view");
+
 		// draw opaque world/entity faces
 		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, false);
 
+		glCheckError("Rendering BSP (opaque pass)");
+
 		// wireframe pass
-		if (g_render_flags & RENDER_WIREFRAME)
+		if (g_render_flags & RENDER_WIREFRAME) {
 			mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);
+			glCheckError("Rendering BSP (wireframe pass)");
+		}
 		
 		// studio models have transparent boxes that need to draw over the world but behind transparent
 		// brushes like a trigger_once which is rendered using the clipnode model
 		if (drawModelsAndSprites()) {
 			isLoading = true;
 		}
+		glCheckError("Rendering models and sprites");
 		
 		// draw transparent entity faces
 		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
+		glCheckError("Rendering BSP (transparency pass)");
 
 		if (!mapRenderer->isFinishedLoading()) {
 			isLoading = true;
 		}
 
 		model.loadIdentity();
-		colorShader->bind();
 
 		colorShader->bind();
 		drawEntDirectionVectors(); // draws over world faces
-		drawEntConnections();
+		glCheckError("Rendering entity vectors");
+
 		drawTextureAxes();
+		glCheckError("Rendering texture axes");
 
 		int modelIdx = pickInfo.getModelIndex();
 
@@ -469,6 +524,8 @@ void Renderer::renderLoop() {
 				debugNodeMax = currentPlane - 1;
 				glEnable(GL_CULL_FACE);
 			}
+
+			glCheckError("Rendering debug clipnodes");
 
 			if ((g_render_flags & (RENDER_ORIGIN | RENDER_MAP_BOUNDARY)) || hasCullbox) {
 				colorShader->bind();
@@ -502,8 +559,11 @@ void Renderer::renderLoop() {
 				glEnable(GL_CULL_FACE);
 				colorShader->popMatrix(MAT_MODEL);
 			}
+
+			glCheckError("Rendering cull box");
 		}
 
+		drawEntConnections();
 		if (entConnectionPoints && (g_render_flags & RENDER_ENT_CONNECTIONS)) {
 			model.loadIdentity();
 			colorShader->updateMatrixes();
@@ -511,6 +571,8 @@ void Renderer::renderLoop() {
 			entConnectionPoints->draw(GL_TRIANGLES);
 			glEnable(GL_DEPTH_TEST);
 		}
+
+		glCheckError("Rendering entity connections");
 
 		bool isScalingObject = transformMode == TRANSFORM_SCALE && transformTarget == TRANSFORM_OBJECT;
 		bool isMovingOrigin = transformMode == TRANSFORM_MOVE && transformTarget == TRANSFORM_ORIGIN && originSelected;
@@ -520,12 +582,16 @@ void Renderer::renderLoop() {
 			drawTransformAxes();
 		}
 
+		glCheckError("Rendering transform axes");
+
 		if (modelIdx > 0 && pickMode == PICK_OBJECT) {
 			if (transformTarget == TRANSFORM_VERTEX && isTransformableSolid) {
 				drawModelVerts();
+				glCheckError("Rendering model verts");
 			}
 			if (transformTarget == TRANSFORM_ORIGIN) {
 				drawModelOrigin();
+				glCheckError("Rendering model origin");
 			}
 		}
 
@@ -536,6 +602,8 @@ void Renderer::renderLoop() {
 			drawLine(debugLine2, debugLine3, { 0, 255, 0, 255 });
 			drawLine(debugLine4, debugLine5, { 255, 128, 0, 255 });
 		}
+
+		glCheckError("Rendering debug polys");
 
 		const bool navmeshwipcode = false;
 		if (navmeshwipcode) {
@@ -891,6 +959,8 @@ void Renderer::renderLoop() {
 			glLineWidth(1);
 		}
 
+		glCheckError("Rendering nav mesh");
+
 		vec3 forward, right, up;
 		makeVectors(cameraAngles, forward, right, up);
 		//logf("DRAW %.1f %.1f %.1f -> %.1f %.1f %.1f\n", pickStart.x, pickStart.y, pickStart.z, pickDir.x, pickDir.y, pickDir.z);
@@ -900,25 +970,19 @@ void Renderer::renderLoop() {
 
 		if (!isLoading && openMapAfterLoad.size()) {
 			openMap(openMapAfterLoad.c_str());
+			glCheckError("Opening map");
 		}
 
 		controls();
 
 		glfwSwapBuffers(window);
 
+		glCheckError("Swap buffers and controls");
+
 		if (reloading && fgdFuture.wait_for(chrono::milliseconds(0)) == future_status::ready) {
 			postLoadFgds();
 			reloading = reloadingGameDir = false;
-		}
-
-		static int lastError = 0;
-		int glerror = glGetError();
-		if (glerror != GL_NO_ERROR) {
-			if (lastError != glerror)
-				logf("Got OpenGL Error: %d\n", glerror);
-			else
-				debugf("Got OpenGL Error: %d\n", glerror);
-			lastError = glerror;
+			glCheckError("FGD post load");
 		}
 
 		if (!isFocused && !isHovered) {
@@ -2373,7 +2437,7 @@ void Renderer::addMap(Bsp* map) {
 		debugLeafNavMesh = NULL;
 	}
 
-	mapRenderer = new BspRenderer(map, bspShader, colorShader, pointEntRenderer);
+	mapRenderer = new BspRenderer(map, pointEntRenderer);
 
 	gui->checkValidHulls();
 
@@ -2702,10 +2766,10 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 	if (mdl == studioModels.end()) {
 		BaseRenderer* newModel = NULL;
 		if (isMdlNotSpr) {
-			newModel = new MdlRenderer(g_app->mdlShader, modelPath);
+			newModel = new MdlRenderer(modelPath);
 		}
 		else {
-			newModel = new SprRenderer(g_app->sprShader, g_app->sprOutlineShader, modelPath);
+			newModel = new SprRenderer(modelPath);
 		}
 		
 		studioModels[modelPath] = newModel;
@@ -2731,7 +2795,7 @@ bool Renderer::drawModelsAndSprites() {
 	vec3 worldOffset = mapRenderer->map->ents[0]->getOrigin();
 	
 	colorShader->bind();
-	glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 
 	if (!(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES)))
 		return false;
@@ -2860,6 +2924,8 @@ bool Renderer::drawModelsAndSprites() {
 		return a.dist > b.dist;
 	});
 
+	glCheckError("Model/sprite rendering setup");
+
 	for (int i = 0; i < depthSortedMdlEnts.size(); i++) {
 		Entity* ent = depthSortedMdlEnts[i].ent;
 		BaseRenderer* mdl = depthSortedMdlEnts[i].mdl;
@@ -2874,6 +2940,8 @@ bool Renderer::drawModelsAndSprites() {
 			continue;
 
 		EntCube* entcube = mapRenderer->renderEnts[depthSortedMdlEnts[i].idx].pointEntCube;
+		if (!entcube->buffer->isUploaded())
+			continue;
 
 		{ // draw the colored transparent cube
 			glEnable(GL_BLEND);
@@ -2888,26 +2956,28 @@ bool Renderer::drawModelsAndSprites() {
 
 			if (isSelected) {
 				//glDepthFunc(GL_ALWAYS); // ignore depth testing for the world but not for the model
-				glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+				colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 				entcube->wireframeBuffer->draw(GL_LINES);
 				//glDepthFunc(GL_LESS);
 
 				glDepthMask(GL_FALSE); // let model draw over this
-				glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 0.5f);
+				colorShader->setUniform("colorMult", vec4(1, 1, 1, 0.5f));
 				entcube->selectBuffer->draw(GL_TRIANGLES);
 				glDepthMask(GL_TRUE);
 			}
 			else {
 				glDepthMask(GL_FALSE);
-				glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 0.5f);
+				colorShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 0.5f));
 				entcube->buffer->draw(GL_TRIANGLES);
 				glDepthMask(GL_TRUE);
 				
-				glUniform4f(u_colorMultId, 0.0f, 0.0f, 0.0f, 1.0f);
+				colorShader->setUniform("colorMult", vec4(0.0f, 0.0f, 0.0f, 1.0f));
 				entcube->wireframeBuffer->draw(GL_LINES);
 			}
 
 			colorShader->popMatrix(MAT_MODEL);
+
+			glCheckError("Rendering model/sprite cube");
 		}
 
 		// draw the model
@@ -2918,6 +2988,7 @@ bool Renderer::drawModelsAndSprites() {
 
 		if (mdl->isStudioModel()) {
 			((MdlRenderer*)mdl)->draw(drawOri, drawAngles, ent, g_app->cameraOrigin, g_app->cameraRight, isSelected);
+			glCheckError("Rendering MDL");
 		}
 		else if (mdl->isSprite()) {
 			COLOR3 color = COLOR3(255, 255, 255);
@@ -2941,6 +3012,7 @@ bool Renderer::drawModelsAndSprites() {
 			}
 
 			((SprRenderer*)mdl)->draw(drawOri, drawAngles, ent, renderOpts, color, outlineColor, ent->isIconSprite);
+			glCheckError("Rendering SPR");
 		}
 		
 		drawCount++;
@@ -2953,8 +3025,9 @@ bool Renderer::drawModelsAndSprites() {
 			maxs += ent->drawOrigin;
 
 			colorShader->bind();
-			glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+			colorShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
 			drawBox(mins, maxs, COLOR4(255, 255, 0, 255));
+			glCheckError("Rendering debug MDL");
 		}
 	}
 
@@ -2965,7 +3038,9 @@ bool Renderer::drawModelsAndSprites() {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	colorShader->bind();
-	glUniform4f(u_colorMultId, 1.0f, 1.0f, 1.0f, 1.0f);
+	colorShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+	glCheckError("Model/sprite rendering cleanup");
 
 	return modelsLoading;
 }

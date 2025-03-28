@@ -2,6 +2,8 @@
 #include "Shader.h"
 #include <vector>
 #include "mat4x4.h"
+#include <unordered_map>
+#include <unordered_set>
 
 enum mat_types
 {
@@ -10,9 +12,34 @@ enum mat_types
 	MAT_PROJECTION = 4,
 };
 
+// GLSL 1.20 uniform types
+enum uniform_type {
+	UNIFORM_FLOAT,
+	UNIFORM_INT,
+
+	UNIFORM_VEC2,
+	UNIFORM_VEC3,
+	UNIFORM_VEC4,
+
+	UNIFORM_IVEC2,
+	UNIFORM_IVEC3,
+	UNIFORM_IVEC4,
+
+	UNIFORM_MAT2,
+	UNIFORM_MAT3,
+	UNIFORM_MAT4,
+	UNIFORM_TYPES
+};
+
+struct ShaderUniform {
+	uint32_t location;
+	uniform_type type;
+};
+
 class ShaderProgram
 {
 public:
+	string name;
 	uint ID; // OpenGL program ID
 	bool compiled;
 
@@ -29,8 +56,11 @@ public:
 	mat4x4* viewMat;
 	mat4x4* modelMat;
 
+	unordered_map<string, ShaderUniform> uniforms; // custom uniforms
+	unordered_set<string> loggedErrors; // prevent error spam
+
 	// Creates a shader program to replace the fixed-function pipeline
-	ShaderProgram(const char* vshaderFile, const char* fshaderFile);
+	ShaderProgram(string name, const char* vshaderFile, const char* fshaderFile);
 	~ShaderProgram(void);
 
 	// use this shader program instead of the fixed function pipeline.
@@ -48,6 +78,24 @@ public:
 
 	// Find the IDs for the common vertex attributes (position, color, texture coords, normals)
 	void setVertexAttributeNames(const char* posAtt, const char* colorAtt, const char* texAtt, const char* normAtt);
+
+	// get the location of a uniform in a linked program
+	void addUniform(string uniformName, uniform_type type);
+
+	void setUniform(string uniformName, float value);
+	void setUniform(string uniformName, vec2 value);
+	void setUniform(string uniformName, vec3 values);
+	void setUniform(string uniformName, vec4 values);
+	void setUniform(string uniformName, int value);
+	void setUniform(string uniformName, int value0, int value1);
+	void setUniform(string uniformName, int value0, int value1, int value2);
+	void setUniform(string uniformName, int value0, int value1, int value2, int value3);
+
+	// upload float/vec/mat uniform value(s)
+	void setUniform(string uniformName, float* values, int count=1);
+
+	// upload int/ivec uniform value(s)
+	void setUniform(string uniformName, int* values, int count=1);
 
 	// upload the model, view, and projection matrices to the shader (or fixed-funcion pipe)
 	void updateMatrixes();
@@ -69,4 +117,6 @@ private:
 	std::vector<mat4x4> matStack[3];
 
 	void link();
+
+	ShaderUniform getUniform(string name);
 };

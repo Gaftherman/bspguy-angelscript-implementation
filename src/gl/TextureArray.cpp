@@ -86,6 +86,9 @@ TexArrayOffset TextureArray::tally(int width, int height) {
 		logf("Texture array got invalid texture size\n");
 		return offset;
 	}
+	if (!g_opengl_3d_texture_support && !g_opengl_texture_array_support) {
+		return offset;
+	}
 
 	getBucketDimensions(width, height);
 
@@ -112,6 +115,9 @@ void TextureArray::add(Texture* tex) {
 	}
 	if (tex->width > 1024 || tex->height > 1024 || tex->width < 16 || tex->height < 16) {
 		logf("Texture array got invalid texture size\n");
+		return;
+	}
+	if (!g_opengl_3d_texture_support && !g_opengl_texture_array_support) {
 		return;
 	}
 

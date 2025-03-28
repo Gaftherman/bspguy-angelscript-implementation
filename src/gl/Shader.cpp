@@ -10,6 +10,17 @@ Shader::Shader( const char * sourceCode, int shaderType )
 	glShaderSource(ID, 1, &sourceCode, NULL);
 	glCompileShader(ID);
 
+	const char* shaderTypeName = "<unknown type>";
+
+	switch (shaderType) {
+	case GL_VERTEX_SHADER:
+		shaderTypeName = "Vertex";
+		break;
+	case GL_FRAGMENT_SHADER:
+		shaderTypeName = "Fragment";
+		break;
+	}
+
 	int success;
 	glGetShaderiv(ID, GL_COMPILE_STATUS, &success);
 	if (success != GL_TRUE)
@@ -17,7 +28,7 @@ Shader::Shader( const char * sourceCode, int shaderType )
 		char* log = new char[512];
 		int len;
 		glGetShaderInfoLog(ID, 512, &len, log);
-		logf("Shader Compilation Failed (type %d)\n", shaderType);
+		logf("Failed to compile %s shader\n", shaderTypeName);
 		logf(log);
 		logf("\n");
 		if (len > 512)

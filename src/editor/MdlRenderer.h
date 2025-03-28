@@ -48,7 +48,7 @@ public:
 	vec3 drawOrigin;
 	int drawBody;
 
-	MdlRenderer(ShaderProgram* shaderProgram, string modelPath);
+	MdlRenderer(string modelPath);
 	~MdlRenderer();
 
 	void draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin, vec3 viewerRight, bool isSelected);
@@ -66,7 +66,6 @@ public:
 	void loadData() override;
 
 private:
-	ShaderProgram* shaderProgram;
 	Texture** glTextures = NULL;
 	MdlMeshRender*** meshBuffers = NULL;
 	int numTextures;
@@ -77,21 +76,7 @@ private:
 	mstream texdata;
 	vector<mstream> seqheaders; // external sequence model data
 
-	// opengl uniforms
-	uint u_sTexId;
-	uint u_elights;
-	uint u_ambient;
-	uint u_lightsId;
-	uint u_bonesId;
-	uint u_additiveEnable;
-	uint u_chromeEnable;
-	uint u_flatshadeEnable;
-	uint u_viewerOriginId;
-	uint u_viewerRightId;
-	uint u_textureST;
 	uint u_boneTexture;
-	uint u_boneTextureUniform;
-	uint u_colorMult;
 
 	struct AABB {
 		vec3 mins, maxs;

@@ -177,6 +177,8 @@ void Gui::draw() {
 
 	// Rendering
 	glUseProgram(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glActiveTexture(GL_TEXTURE0);
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_DEPTH_TEST);
 	ImGui::Render();
@@ -4362,6 +4364,31 @@ void Gui::drawSettings() {
 
 		ImGui::BeginChild("right pane content");
 		if (settingsTab == 0) {
+			static const char* renderers[RENDERER_COUNT] = {
+				"OpenGL",
+				"OpenGL (Legacy)",
+			};
+
+			if (ImGui::BeginCombo("Renderer", renderers[g_settings.renderer]))
+			{
+				if (ImGui::Selectable(renderers[0], g_settings.renderer == RENDERER_OPENGL_21)) {
+					g_settings.renderer = RENDERER_OPENGL_21;
+					g_app->mapRenderer->reload();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("This renderer asks your OpenGL driver what it supports and conditionally enables faster rendering features.\n\nFor hardware supporting OpenGL 2.1 and up.\n");
+				}
+
+				if (ImGui::Selectable(renderers[1], g_settings.renderer == RENDERER_OPENGL_21_LEGACY)) {
+					g_settings.renderer = RENDERER_OPENGL_21_LEGACY;
+					g_app->mapRenderer->reload();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("This renderer forces use of the most compatible/slowest rendering methods. Sometimes graphics drivers lie about which features they support.\n\nChoose this if textures/objects are black or completely missing.\n");
+				}
+				ImGui::EndCombo();
+			}
+
 			ImGui::DragFloat("Movement Speed", &app->moveSpeed, 0.1f, 0.1f, 1000, "%.1f");
 			ImGui::DragFloat("Rotation Speed", &app->rotationSpeed, 0.01f, 0.1f, 100, "%.1f");
 			if (ImGui::DragInt("Font Size", &fontSize, 0.1f, 8, 48, "%d pixels")) {

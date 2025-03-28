@@ -148,7 +148,7 @@ public:
 	int showLightFlag = -1;
 	vector<Wad*> wads;
 
-	BspRenderer(Bsp* map, ShaderProgram* bspShader, ShaderProgram* colorShader, PointEntRenderer* fgd);
+	BspRenderer(Bsp* map, PointEntRenderer* fgd);
 	~BspRenderer();
 
 	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
@@ -199,14 +199,7 @@ public:
 	void generateSingleLeafNavMeshBuffer(LeafNode* node);
 
 private:
-	ShaderProgram* bspShader;
-	ShaderProgram* colorShader;
-
-	// opengl uinifors
-	uint colorShaderMultId;
-	uint bspShaderColorMultId;
-	uint bspShaderAlphaTestId;
-	uint bspShaderGammaId;
+	ShaderProgram* activeShader;
 
 	LightmapInfo* lightmaps = NULL;
 	RenderEnt* renderEnts = NULL;
