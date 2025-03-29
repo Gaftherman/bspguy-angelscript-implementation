@@ -5,11 +5,14 @@
 
 static int g_active_shader_program;
 
-ShaderProgram::ShaderProgram(string name, const char* vshaderSource, const char* fshaderSource)
+ShaderProgram::ShaderProgram(string name)
 {
 	this->name = name;
 	compiled = false;
 	modelViewID = modelViewProjID = -1;
+}
+
+void ShaderProgram::compile(const char* vshaderSource, const char* fshaderSource) {
 	vShader = new Shader(vshaderSource, GL_VERTEX_SHADER);
 	fShader = new Shader(fshaderSource, GL_FRAGMENT_SHADER);
 	link();

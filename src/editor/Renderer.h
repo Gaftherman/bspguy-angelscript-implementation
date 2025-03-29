@@ -131,12 +131,12 @@ public:
 
 private:
 	GLFWwindow* window;
-	ShaderProgram* bspShader;
-	ShaderProgram* colorShader;
-	ShaderProgram* mdlShader;
-	ShaderProgram* sprShader;
-	ShaderProgram* vec3Shader;
-	ShaderProgram* sprOutlineShader;
+	ShaderProgram* bspShader = NULL;
+	ShaderProgram* colorShader = NULL;
+	ShaderProgram* mdlShader = NULL;
+	ShaderProgram* sprShader = NULL;
+	ShaderProgram* vec3Shader = NULL;
+	ShaderProgram* sprOutlineShader = NULL;
 
 	PointEntRenderer* pointEntRenderer;
 	PointEntRenderer* swapPointEntRenderer = NULL;

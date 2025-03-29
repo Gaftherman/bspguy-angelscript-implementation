@@ -316,6 +316,9 @@ void Renderer::compileShaders() {
 	const char* bspFragShader = bsp_legacy_frag_glsl;
 	const char* mdl_vert = mdl_vert_glsl;
 
+	g_opengl_texture_array_support = false;
+	g_opengl_3d_texture_support = false;
+
 	if (g_settings.renderer == RENDERER_OPENGL_21_LEGACY) {
 		logf("Legacy renderer selected. Not checking extension support.\n");
 		mdl_vert = mdl_legacy_vert_glsl;
@@ -333,7 +336,19 @@ void Renderer::compileShaders() {
 		logf("Neither texture arrays nor 3D textures are supported. Map rendering will be slow.\n");
 	}
 
-	bspShader = new ShaderProgram("BSP", bsp_vert_glsl, bspFragShader);
+	if (!bspShader) {
+		bspShader = new ShaderProgram("BSP");
+		colorShader = new ShaderProgram("Color");
+		mdlShader = new ShaderProgram("MDL");
+		sprShader = new ShaderProgram("SPR");
+		vec3Shader = new ShaderProgram("vec3");
+		sprOutlineShader = new ShaderProgram("SPR outline");
+	}
+	else {
+		logf("Recompiling shaders\n");
+	}
+
+	bspShader->compile(bsp_vert_glsl, bspFragShader);
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
 	bspShader->addUniform("sTex", UNIFORM_INT);
@@ -346,15 +361,15 @@ void Renderer::compileShaders() {
 		bspShader->addUniform(name, UNIFORM_INT);
 		bspShader->setUniform(name, s + 1);
 	}
-
-	colorShader = new ShaderProgram("Color", cvert_vert_glsl, cvert_frag_glsl);
+	
+	colorShader->compile(cvert_vert_glsl, cvert_frag_glsl);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	colorShader->setMatrixNames(NULL, "modelViewProjection");
 	colorShader->setVertexAttributeNames("vPosition", "vColor", NULL, NULL);
 	colorShader->addUniform("colorMult", UNIFORM_VEC4);
 	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
-
-	mdlShader = new ShaderProgram("MDL", mdl_vert, mdl_frag_glsl);
+	
+	mdlShader->compile(mdl_vert, mdl_frag_glsl);
 	mdlShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	mdlShader->setMatrixNames(NULL, "modelViewProjection");
 	mdlShader->setVertexAttributeNames("vPosition", NULL, "vTex", "vNormal");
@@ -373,20 +388,20 @@ void Renderer::compileShaders() {
 		mdlShader->addUniform("boneMatrixTexture", UNIFORM_INT);
 	}
 
-	sprShader = new ShaderProgram("SPR", spr_vert_glsl, spr_frag_glsl);
+	sprShader->compile(spr_vert_glsl, spr_frag_glsl);
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprShader->setMatrixNames(NULL, "modelViewProjection");
 	sprShader->setVertexAttributeNames("vPosition", NULL, "vTex", NULL);
 	sprShader->addUniform("color", UNIFORM_VEC4);
 
-	vec3Shader = new ShaderProgram("vec3", vec3_vert_glsl, vec3_frag_glsl);
+	vec3Shader->compile(vec3_vert_glsl, vec3_frag_glsl);
 	vec3Shader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	vec3Shader->setMatrixNames(NULL, "modelViewProjection");
 	vec3Shader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
 	vec3Shader->addUniform("color", UNIFORM_VEC4);
 	vec3Shader->setUniform("color", vec4(1, 1, 1, 1));
 
-	sprOutlineShader = new ShaderProgram("SPR outline", vec3_vert_glsl, vec3_depth_frag_glsl);
+	sprOutlineShader->compile(vec3_vert_glsl, vec3_depth_frag_glsl);
 	sprOutlineShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprOutlineShader->setMatrixNames(NULL, "modelViewProjection");
 	sprOutlineShader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);

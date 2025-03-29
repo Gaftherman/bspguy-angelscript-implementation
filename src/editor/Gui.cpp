@@ -4410,6 +4410,8 @@ void Gui::drawSettings() {
 			{
 				if (ImGui::Selectable(renderers[0], g_settings.renderer == RENDERER_OPENGL_21)) {
 					g_settings.renderer = RENDERER_OPENGL_21;
+					app->deselectObject();
+					g_app->compileShaders();
 					g_app->mapRenderer->reload();
 				}
 				if (ImGui::IsItemHovered()) {
@@ -4418,6 +4420,8 @@ void Gui::drawSettings() {
 
 				if (ImGui::Selectable(renderers[1], g_settings.renderer == RENDERER_OPENGL_21_LEGACY)) {
 					g_settings.renderer = RENDERER_OPENGL_21_LEGACY;
+					app->deselectObject();
+					g_app->compileShaders();
 					g_app->mapRenderer->reload();
 				}
 				if (ImGui::IsItemHovered()) {

@@ -16,7 +16,7 @@ MdlRenderer::MdlRenderer(string modelPath) {
 	valid = false;
 	needTransform = true;
 	u_boneTexture = -1;
-	legacyMode = g_max_vtf_units == 0 || g_settings.renderer == RENDERER_OPENGL_21_LEGACY;
+	oldLegacyMode = false;
 
 	shader = g_app->mdlShader;
 
@@ -410,25 +410,21 @@ void MdlRenderer::upload() {
 
 	glCheckError("MDL body mesh uploads");
 
-	if (!legacyMode) {
-		shader->bind();
+	shader->bind();
 
-		glGenTextures(1, &u_boneTexture);
-		glBindTexture(GL_TEXTURE_2D, u_boneTexture);
+	glGenTextures(1, &u_boneTexture);
+	glBindTexture(GL_TEXTURE_2D, u_boneTexture);
 
-		// disable filtering and mipmaps so the texture can be used as a lookup table
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	// disable filtering and mipmaps so the texture can be used as a lookup table
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
-		shader->setUniform("boneMatrixTexture", 1);
+	// allocate data so subImage can be used for faster updates
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
 
-		// allocate data so subImage can be used for faster updates
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
-
-		glCheckError("MDL bone texture creation");
-	}
+	glCheckError("MDL bone texture creation");
 
 	loadState = MODEL_LOAD_DONE;
 }
@@ -1263,6 +1259,49 @@ void MdlRenderer::SetUpBones(vec3 angles, int sequence, float frame, int gaitseq
 	}
 }
 
+void MdlRenderer::untransformVerts() {
+	for (int b = 0; b < header->numbodyparts; b++) {
+		data.seek(header->bodypartindex + b * sizeof(mstudiobodyparts_t));
+		mstudiobodyparts_t* bod = (mstudiobodyparts_t*)data.getOffsetBuffer();
+
+		for (int i = 0; i < bod->nummodels; i++) {
+			data.seek(bod->modelindex + i * sizeof(mstudiomodel_t));
+			mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
+
+			data.seek(mod->vertindex);
+			vec3* pstudioverts = (vec3*)data.getOffsetBuffer();
+
+			data.seek(mod->normindex);
+			vec3* pstudionorms = (vec3*)data.getOffsetBuffer();
+
+			data.seek(mod->vertinfoindex);
+			uint8_t* pvertbone = (uint8_t*)data.getOffsetBuffer();
+
+			data.seek(mod->norminfoindex);
+			uint8_t* pnormbone = (uint8_t*)data.getOffsetBuffer();
+
+			for (int k = 0; k < mod->numverts; k++) {
+				transformedVerts[k] = pstudioverts[k];
+			}
+			for (int k = 0; k < mod->numnorms; k++) {
+				transformedNormals[k] = pstudionorms[k];
+			}
+
+			for (int k = 0; k < mod->nummesh; k++) {
+				MdlMeshRender& buffer = meshBuffers[b][i][k];
+
+				for (int v = 0; v < buffer.numVerts; v++) {
+					short oldVertIdx = buffer.origVerts[v];
+					short oldNormIdx = buffer.origNorms[v];
+					buffer.verts[v].pos = transformedVerts[oldVertIdx];
+					buffer.verts[v].normal = transformedNormals[oldNormIdx];
+				}
+				buffer.buffer->upload();
+			}
+		}
+	}
+}
+
 void MdlRenderer::transformVerts(int body, bool forRender, vec3 viewerOrigin, vec3 viewerRight) {
 	int modelIdx = 0;
 
@@ -1312,7 +1351,7 @@ void MdlRenderer::transformVerts(int body, bool forRender, vec3 viewerOrigin, ve
 						short oldVertIdx = buffer.origVerts[v];
 						short oldNormIdx = buffer.origNorms[v];
 						buffer.verts[v].pos = transformedVerts[oldVertIdx];
-						buffer.verts[v].normal = transformedNormals[oldNormIdx];
+						buffer.verts[v].normal = transformedNormals[oldNormIdx].flip();
 					}
 
 					if ((buffer.flags & STUDIO_NF_CHROME) && buffer.skinref < header->numtextures) {
@@ -1369,6 +1408,15 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	}
 
 	EntRenderOpts opts = ent->getRenderOpts();
+
+	bool legacyMode = g_max_vtf_units == 0 || g_settings.renderer == RENDERER_OPENGL_21_LEGACY;
+
+	if (legacyMode != oldLegacyMode && !legacyMode) {
+		SetUpBones(vec3(), opts.sequence, 0);
+		untransformVerts();
+		needTransform = true;
+	}
+	oldLegacyMode = legacyMode;
 
 	if (isSelected)
 		opts.rendercolor = COLOR3(255, 0, 0);
@@ -1460,8 +1508,11 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, u_boneTexture);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
+		shader->setUniform("boneMatrixTexture", 1);
 	}
 	else {
+		shader->setUniform("chromeEnable", 0);
+
 		if (g_settings.animate_models) {
 			// no way to upload bone data. Do transforms on the CPU (slow!!)
 			SetUpBones(angles, opts.sequence, ent->drawFrame);

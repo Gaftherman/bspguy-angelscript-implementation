@@ -77,7 +77,7 @@ private:
 	mstream texdata;
 	vector<mstream> seqheaders; // external sequence model data
 
-	bool legacyMode;
+	bool oldLegacyMode;
 	bool needTransform;
 
 	uint u_boneTexture;
@@ -111,6 +111,7 @@ private:
 	bool hasExternalTextures();
 	bool hasExternalSequences();
 	void transformVerts(int body, bool forRender, vec3 viewerOrigin=vec3(), vec3 viewerRight=vec3(1,0,0));
+	void untransformVerts();
 
 	// frame values = 0 - 1.0 (0-100%)
 	// angles = rotation for the entire model (y = pitch, z = yaw)

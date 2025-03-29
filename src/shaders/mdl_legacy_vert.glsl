@@ -38,14 +38,10 @@ void main()
 	gl_Position = modelViewProjection * vec4(vPosition, 1);
 
 	if (chromeEnable != 0) {
-		fTex = vTex; //chrome(vNormal, bone);
+		fTex.x = vBone; // just keeping the var active to stop error spam
 	} else {
 		fTex = vTex;
 	}
-	
-	// just keeping the var active to stop error spam
-	if (vBone == 99999999)
-		fTex.x += 0.0000001f;
 
 	// TODO: compile multiple shaders and control this if #ifdef
 	if (additiveEnable != 0) {

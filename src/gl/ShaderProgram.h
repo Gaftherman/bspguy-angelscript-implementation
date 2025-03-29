@@ -60,8 +60,10 @@ public:
 	unordered_set<string> loggedErrors; // prevent error spam
 
 	// Creates a shader program to replace the fixed-function pipeline
-	ShaderProgram(string name, const char* vshaderFile, const char* fshaderFile);
+	ShaderProgram(string name);
 	~ShaderProgram(void);
+
+	void compile(const char* vshaderSource, const char* fshaderSource);
 
 	// use this shader program instead of the fixed function pipeline.
 	// to go back to normal opengl rendering, use this:
