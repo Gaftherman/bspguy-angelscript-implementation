@@ -14,6 +14,11 @@
 MdlRenderer::MdlRenderer(string modelPath) {
 	this->fpath = modelPath;
 	valid = false;
+	needTransform = true;
+	u_boneTexture = -1;
+	legacyMode = g_max_vtf_units == 0 || g_settings.renderer == RENDERER_OPENGL_21_LEGACY;
+
+	shader = g_app->mdlShader;
 
 	//loadFuture = async(launch::async, &MdlRenderer::loadData, this);
 	//loadData();
@@ -405,23 +410,25 @@ void MdlRenderer::upload() {
 
 	glCheckError("MDL body mesh uploads");
 
-	g_app->mdlShader->bind();
+	if (!legacyMode) {
+		shader->bind();
 
-	glGenTextures(1, &u_boneTexture);
-	glBindTexture(GL_TEXTURE_2D, u_boneTexture);
+		glGenTextures(1, &u_boneTexture);
+		glBindTexture(GL_TEXTURE_2D, u_boneTexture);
 
-	// disable filtering and mipmaps so the texture can be used as a lookup table
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		// disable filtering and mipmaps so the texture can be used as a lookup table
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
-	g_app->mdlShader->setUniform("boneMatrixTexture", 1);
+		shader->setUniform("boneMatrixTexture", 1);
 
-	// allocate data so subImage can be used for faster updates
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
+		// allocate data so subImage can be used for faster updates
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
 
-	glCheckError("MDL bone texture creation");
+		glCheckError("MDL bone texture creation");
+	}
 
 	loadState = MODEL_LOAD_DONE;
 }
@@ -751,7 +758,7 @@ mstudioanim_t* MdlRenderer::GetAnim(mstudioseqdesc_t* pseqdesc) {
 	mstudioanim_t* anim = (mstudioanim_t*)data.getOffsetBuffer();
 	int externalIdx = pseqdesc->seqgroup - 1;
 
-	if (externalIdx <= 0 ) {
+	if (externalIdx < 0) {
 		return anim;
 	}
 	else if (externalIdx >= seqheaders.size()) {
@@ -927,6 +934,13 @@ void VectorRotate(const vec3& in1, float in2[3][4], vec3& out) {
 }
 
 void VectorIRotate(vec3& vector, float matrix[3][4], vec3& outResult)
+{
+	outResult.x = vector.x * matrix[0][0] + vector.y * matrix[1][0] + vector.z * matrix[2][0];
+	outResult.y = vector.x * matrix[0][1] + vector.y * matrix[1][1] + vector.z * matrix[2][1];
+	outResult.z = vector.x * matrix[0][2] + vector.y * matrix[1][2] + vector.z * matrix[2][2];
+}
+
+void VectorIRotate(vec3& vector, float** matrix, vec3& outResult)
 {
 	outResult.x = vector.x * matrix[0][0] + vector.y * matrix[1][0] + vector.z * matrix[2][0];
 	outResult.y = vector.x * matrix[0][1] + vector.y * matrix[1][1] + vector.z * matrix[2][1];
@@ -1249,13 +1263,20 @@ void MdlRenderer::SetUpBones(vec3 angles, int sequence, float frame, int gaitseq
 	}
 }
 
-void MdlRenderer::transformVerts() {
+void MdlRenderer::transformVerts(int body, bool forRender, vec3 viewerOrigin, vec3 viewerRight) {
 	int modelIdx = 0;
-	int vertCount = 0;
+
+	int bodyValue = clamp(body, 0, 255);
 
 	for (int b = 0; b < header->numbodyparts; b++) {
 		data.seek(header->bodypartindex + b * sizeof(mstudiobodyparts_t));
 		mstudiobodyparts_t* bod = (mstudiobodyparts_t*)data.getOffsetBuffer();
+
+		int activeModel = (bodyValue / bod->base) % bod->nummodels;
+		bodyValue -= activeModel * bod->base;
+
+		//data.seek(bod->modelindex + activeModel * sizeof(mstudiomodel_t));
+		//mstudiomodel_t* mod = (mstudiomodel_t*)data.getOffsetBuffer();
 
 		for (int i = 0; i < bod->nummodels; i++) {
 			data.seek(bod->modelindex + i * sizeof(mstudiomodel_t));
@@ -1264,52 +1285,80 @@ void MdlRenderer::transformVerts() {
 			data.seek(mod->vertindex);
 			vec3* pstudioverts = (vec3*)data.getOffsetBuffer();
 
-			//data.seek(mod->normindex);
-			//vec3* pstudionorms = (vec3*)data.getOffsetBuffer();
+			data.seek(mod->normindex);
+			vec3* pstudionorms = (vec3*)data.getOffsetBuffer();
 
 			data.seek(mod->vertinfoindex);
 			uint8_t* pvertbone = (uint8_t*)data.getOffsetBuffer();
 
-			//data.seek(mod->norminfoindex);
-			//uint8_t* pnormbone = (uint8_t*)data.getOffsetBuffer();
-
-			//static vec3 transformedNormals[MAXSTUDIOVERTS];
+			data.seek(mod->norminfoindex);
+			uint8_t* pnormbone = (uint8_t*)data.getOffsetBuffer();
 
 			for (int k = 0; k < mod->numverts; k++) {
 				VectorTransform(pstudioverts[k], m_bonetransform[pvertbone[k]], transformedVerts[k]);
 			}
 
-			/*
-			for (int k = 0; k < mod->numnorms; k++) {
-				VectorRotate(pstudionorms[k], m_bonetransform[pnormbone[k]], transformedNormals[k]);
+			if (forRender) {
+				for (int k = 0; k < mod->numnorms; k++) {
+					VectorRotate(pstudionorms[k], m_bonetransform[pnormbone[k]], transformedNormals[k]);
+				}
 			}
-			*/
 
 			for (int k = 0; k < mod->nummesh; k++) {
 				MdlMeshRender& buffer = meshBuffers[b][i][k];
 
-				// TODO: this does more transformations than necessary.
-				// Only transform the original verts then update the GL_TRIANGLES verts by copying data,
-				// or maybe that's not much faster?
-				for (int v = 0; v < buffer.numVerts; v++) {
-					short oldVertIdx = buffer.origVerts[v];
-					short oldNormIdx = buffer.origNorms[v];
+				if (forRender && loadState == MODEL_LOAD_DONE) {
+					for (int v = 0; v < buffer.numVerts; v++) {
+						short oldVertIdx = buffer.origVerts[v];
+						short oldNormIdx = buffer.origNorms[v];
+						buffer.verts[v].pos = transformedVerts[oldVertIdx];
+						buffer.verts[v].normal = transformedNormals[oldNormIdx];
+					}
 
-					buffer.transformVerts[v] = transformedVerts[oldVertIdx].flipFromStudioMdl();
-					//buffer.transformVerts[v].normal = transformedNormals[oldNormIdx].flipFromStudioMdl();
+					if ((buffer.flags & STUDIO_NF_CHROME) && buffer.skinref < header->numtextures) {
+						Texture* tex = glTextures[buffer.skinref];
+						const float s = 1.0 / (float)tex->width;
+						const float t = 1.0 / (float)tex->height;
 
-					//VectorTransform(pstudioverts[oldVertIdx], m_bonetransform[bone], *pos);
-					//VectorRotate(pstudionorms[oldNormIdx], m_bonetransform[bone], *norm);
+						for (int v = 0; v < buffer.numVerts; v++) {
+							vec3 tNormal = buffer.verts[v].normal;
+							int boneIdx = (int)buffer.verts[v].bone;
+							float (&bone)[4][4] = m_bonetransform[boneIdx];
 
-					//*norm = norm->normalize();
-					//printf("NORM: %.1f %.1f %.1f\n", norm->x, norm->y, norm->z);
-					vertCount++;
+							vec3 dir = (viewerOrigin + vec3(bone[0][3], bone[2][3], -bone[1][3])).normalize();
+
+							vec3 chromeupvec = crossProduct(dir, viewerRight).normalize();
+							vec3 chromerightvec = crossProduct(dir, chromeupvec).normalize();
+
+							vec3 chromeup, chromeright;
+							VectorIRotate(chromeupvec, bone, chromeup);
+							VectorIRotate(chromerightvec, bone, chromeright);
+
+							vec2 chrome;
+
+							// calc s coord
+							float n = dotProduct(tNormal, chromeright);
+							buffer.verts[v].uv.x = ((n + 1.0) * 32.0) * s;
+
+							// calc t coord
+							n = dotProduct(tNormal, chromeup);
+							buffer.verts[v].uv.y = ((n + 1.0) * 32.0) * t;
+						}
+					}
+
+					buffer.buffer->upload();
 				}
+				else {
+					for (int v = 0; v < buffer.numVerts; v++) {
+						short oldVertIdx = buffer.origVerts[v];
+						short oldNormIdx = buffer.origNorms[v];
+						buffer.transformVerts[v] = transformedVerts[oldVertIdx].flipFromStudioMdl();
+					}
+				}
+				
 			}
 		}
 	}
-
-	//logf("Transformed %d verts\n", vertCount);
 }
 
 void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin, vec3 viewerRight, bool isSelected) {
@@ -1341,46 +1390,46 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 		ent->drawFrame = normalizeRangef(ent->drawFrame, 0.0f, seq->numframes - 1);
 	}
 
-	SetUpBones(angles, opts.sequence, ent->drawFrame);
-
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
-
-	g_app->mdlShader->bind();
+	shader->bind();
 
 	switch (opts.rendermode) {
 	default:
 	case RENDER_MODE_NORMAL:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		g_app->mdlShader->setUniform("colorMult", vec4(1,1,1,1));
+		shader->setUniform("colorMult", vec4(1,1,1,1));
 		break;
 	case RENDER_MODE_SOLID:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, 1));
+		shader->setUniform("colorMult", vec4(1, 1, 1, 1));
 		break;
 	case RENDER_MODE_COLOR:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		g_app->mdlShader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
+		shader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_TEXTURE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_GLOW:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	case RENDER_MODE_ADDITIVE:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		g_app->mdlShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
 		break;
 	}
 
-	g_app->mdlShader->setUniform("sTex", 0);	
-	g_app->mdlShader->setUniform("elights", 1); // number of active lights
-	g_app->mdlShader->setUniform("ambient", opts.rendercolor.toVec() * 0.4f); // ambient lighting
-	g_app->mdlShader->setUniform("viewerOrigin", viewerOrigin - origin); // world coordinates
-	g_app->mdlShader->setUniform("viewerRight", viewerRight);
+	shader->setUniform("sTex", 0);
+	shader->setUniform("elights", 1); // number of active lights
+	shader->setUniform("ambient", opts.rendercolor.toVec() * 0.4f); // ambient lighting
+	
+	if (!legacyMode) {
+		shader->setUniform("viewerOrigin", viewerOrigin - origin); // world coordinates
+		shader->setUniform("viewerRight", viewerRight);
+	}
 
 	// light data
 	vec3 lights[4][3];
@@ -1390,26 +1439,56 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	}
 	lights[0][0] = vec3(1024, 1024, 1024); // light position
 	lights[0][1] = opts.rendercolor.toVec(); // diffuse color
-	g_app->mdlShader->setUniform("lights", (float*)lights, 4*3*3);
-
+	shader->setUniform("lights", (float*)lights, 4*3*3);
 	glCheckError("setting MDL scene uniforms");
+
+	shader->pushMatrix(MAT_MODEL);
+	shader->modelMat->loadIdentity();
+	shader->modelMat->translate(origin.x, origin.z, -origin.y);
+
 	
-	// Hack: setup the bone matrices as a 3D texture.
-	// Opengl 3.0 doesn't have uniform buffers and mat4[128] is far too many uniforms for a valid shader.
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, u_boneTexture);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
+	if (!legacyMode) {
+		if (g_settings.animate_models) {
+			SetUpBones(angles, opts.sequence, ent->drawFrame);
+		}
+		else {
+			SetUpBones(angles, opts.sequence, 0);
+		}
+
+		// Hack: upload bone matrices as texture pixels.
+		// Opengl 3.0 doesn't have uniform buffers and mat4[128] is far too many uniforms for a valid shader.
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, u_boneTexture);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
+	}
+	else {
+		if (g_settings.animate_models) {
+			// no way to upload bone data. Do transforms on the CPU (slow!!)
+			SetUpBones(angles, opts.sequence, ent->drawFrame);
+			transformVerts(opts.body, true);
+			needTransform = true;
+		}
+		else {
+			if (needTransform) {
+				// revert to no angles and use matrix rotations instead
+				SetUpBones(vec3(), opts.sequence, 0);
+				transformVerts(opts.body, true);
+				needTransform = false;
+			}
+
+			// to hell with the chrome, just orient the model cheaply.
+			angles = angles * (PI / 180.0f);
+			shader->modelMat->rotateY(angles.y);
+			shader->modelMat->rotateZ(angles.x);
+			shader->modelMat->rotateX(angles.z);
+		}
+	}
 	glActiveTexture(GL_TEXTURE0);
 
-	glCheckError("updating MDL bone texture");
-
-	g_app->mdlShader->pushMatrix(MAT_MODEL);
-	g_app->mdlShader->modelMat->loadIdentity();
-	g_app->mdlShader->modelMat->translate(origin.x, origin.z, -origin.y);
 	// Don't rotate the scene because it messes up chrome effect.
-	g_app->mdlShader->updateMatrixes();
+	shader->updateMatrixes();
 
-	glCheckError("updating MDL shader matrices");
+	glCheckError("updating MDL bone texture");
 
 	data.seek(header->skinindex);
 	
@@ -1447,10 +1526,10 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 			}
 
 			if (render.flags & STUDIO_NF_ADDITIVE) {
-				g_app->mdlShader->setUniform("additiveEnable", 1);
+				shader->setUniform("additiveEnable", 1);
 			}
 			else {
-				g_app->mdlShader->setUniform("additiveEnable", 0);
+				shader->setUniform("additiveEnable", 0);
 			}
 
 			int flatShade = 0;
@@ -1460,17 +1539,19 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 				flatShade = 1;
 			}
 
-			g_app->mdlShader->setUniform("flatshadeEnable", flatShade);
+			shader->setUniform("flatshadeEnable", flatShade);
 
-			if (render.flags & STUDIO_NF_CHROME) {
-				const float s = 1.0 / (float)tex->width;
-				const float t = 1.0 / (float)tex->height;
-					
-				g_app->mdlShader->setUniform("chromeEnable", 1);
-				g_app->mdlShader->setUniform("textureST", vec2(s, t));
-			}
-			else {
-				g_app->mdlShader->setUniform("chromeEnable", 0);
+			if (!legacyMode) {
+				if (render.flags & STUDIO_NF_CHROME) {
+					const float s = 1.0 / (float)tex->width;
+					const float t = 1.0 / (float)tex->height;
+
+					shader->setUniform("chromeEnable", 1);
+					shader->setUniform("textureST", vec2(s, t));
+				}
+				else {
+					shader->setUniform("chromeEnable", 0);
+				}
 			}
 
 			glCheckError("setting MDL body uniforms");
@@ -1483,7 +1564,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 
 	//logf("Draw %d meshes\n", meshCount);
 
-	g_app->mdlShader->popMatrix(MAT_MODEL);
+	shader->popMatrix(MAT_MODEL);
 }
 
 // get a AABB containing all model vertices at the given angles and animation frame
@@ -1520,7 +1601,7 @@ void MdlRenderer::getModelBoundingBox(vec3 angles, int sequence, vec3& mins, vec
 
 		for (int f = 0; f < seq->numframes; f++) {
 			SetUpBones(vec3(), sequence, f);
-			transformVerts();
+			transformVerts(255, false);
 
 			int meshCount = 0;
 			for (int b = 0; b < header->numbodyparts; b++) {
@@ -1601,7 +1682,7 @@ bool MdlRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 	bestDist = oldBestDist;	
 
 	SetUpBones(ent->drawAngles, opts.sequence, ent->drawFrame);
-	transformVerts();
+	transformVerts(opts.body, false);
 
 	start -= ent->drawOrigin;
 

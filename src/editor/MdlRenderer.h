@@ -66,6 +66,7 @@ public:
 	void loadData() override;
 
 private:
+	ShaderProgram* shader;
 	Texture** glTextures = NULL;
 	MdlMeshRender*** meshBuffers = NULL;
 	int numTextures;
@@ -75,6 +76,9 @@ private:
 	mstream data; // TODO: parse structures into class members instead of seeking through the original data
 	mstream texdata;
 	vector<mstream> seqheaders; // external sequence model data
+
+	bool legacyMode;
+	bool needTransform;
 
 	uint u_boneTexture;
 
@@ -96,6 +100,7 @@ private:
 
 	// for transformverts
 	vec3 transformedVerts[MAXSTUDIOVERTS];
+	vec3 transformedNormals[MAXSTUDIOVERTS];
 
 	bool loadTextureData();
 	bool loadSequenceData();
@@ -105,7 +110,7 @@ private:
 	bool validate();
 	bool hasExternalTextures();
 	bool hasExternalSequences();
-	void transformVerts();
+	void transformVerts(int body, bool forRender, vec3 viewerOrigin=vec3(), vec3 viewerRight=vec3(1,0,0));
 
 	// frame values = 0 - 1.0 (0-100%)
 	// angles = rotation for the entire model (y = pitch, z = yaw)

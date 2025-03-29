@@ -5,7 +5,7 @@
 #include "ShaderProgram.h"
 
 // Vertex Array Objects should in theory be faster due to fewer opengl call per draw
-// but I see a slowdown and they crash my win7 opengl 3.2 netbook, so don't use them.
+// but I see a slowdown and they crash my win7 opengl 3.0 netbook, so don't use them.
 bool g_use_vao = false;
 
 VertexAttr commonAttr[VBUF_FLAGBITS] =
@@ -112,7 +112,7 @@ void VertexBuffer::addAttribute(int numValues, int valueType, int normalized, co
 void VertexBuffer::addAttribute(int type, const char* varName) {
 
 	int idx = 0;
-	while (type >>= 1) // unroll for more speed...
+	while (type >>= 1)
 	{
 		idx++;
 	}
@@ -264,7 +264,7 @@ void VertexBuffer::drawRange(int primitive, int start, int end)
 		glDrawArrays(primitive, start, end - start);
 
 	if (vaoId == -1) {
-		// my windows 7 opengl 3.2 netbook needs this or else it crashes
+		// my windows 7 opengl 3.0 netbook needs this or else it crashes
 		for (int i = 0; i < attribs.size(); i++)
 		{
 			VertexAttr& a = attribs[i];

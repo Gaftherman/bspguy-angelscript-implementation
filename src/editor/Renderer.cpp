@@ -314,9 +314,11 @@ void Renderer::compileShaders() {
 	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
 	const char* bspFragShader = bsp_legacy_frag_glsl;
+	const char* mdl_vert = mdl_vert_glsl;
 
 	if (g_settings.renderer == RENDERER_OPENGL_21_LEGACY) {
 		logf("Legacy renderer selected. Not checking extension support.\n");
+		mdl_vert = mdl_legacy_vert_glsl;
 	}
 	else if (strstr(openglExts, "GL_EXT_texture_array")) {
 		g_opengl_texture_array_support = true;
@@ -352,7 +354,7 @@ void Renderer::compileShaders() {
 	colorShader->addUniform("colorMult", UNIFORM_VEC4);
 	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 
-	mdlShader = new ShaderProgram("MDL", mdl_vert_glsl, mdl_frag_glsl);
+	mdlShader = new ShaderProgram("MDL", mdl_vert, mdl_frag_glsl);
 	mdlShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	mdlShader->setMatrixNames(NULL, "modelViewProjection");
 	mdlShader->setVertexAttributeNames("vPosition", NULL, "vTex", "vNormal");
@@ -363,11 +365,13 @@ void Renderer::compileShaders() {
 	mdlShader->addUniform("additiveEnable", UNIFORM_INT);
 	mdlShader->addUniform("chromeEnable", UNIFORM_INT);
 	mdlShader->addUniform("flatshadeEnable", UNIFORM_INT);
-	mdlShader->addUniform("viewerOrigin", UNIFORM_VEC3);
-	mdlShader->addUniform("viewerRight", UNIFORM_VEC3);
-	mdlShader->addUniform("textureST", UNIFORM_VEC2);
-	mdlShader->addUniform("boneMatrixTexture", UNIFORM_INT);
 	mdlShader->addUniform("colorMult", UNIFORM_VEC4);
+	if (g_settings.renderer != RENDERER_OPENGL_21_LEGACY) {
+		mdlShader->addUniform("viewerOrigin", UNIFORM_VEC3);
+		mdlShader->addUniform("viewerRight", UNIFORM_VEC3);
+		mdlShader->addUniform("textureST", UNIFORM_VEC2);
+		mdlShader->addUniform("boneMatrixTexture", UNIFORM_INT);
+	}
 
 	sprShader = new ShaderProgram("SPR", spr_vert_glsl, spr_frag_glsl);
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
@@ -3008,7 +3012,6 @@ bool Renderer::drawModelsAndSprites() {
 
 		if (mdl->isStudioModel()) {
 			((MdlRenderer*)mdl)->draw(drawOri, drawAngles, ent, g_app->cameraOrigin, g_app->cameraRight, isSelected);
-			glCheckError("Rendering MDL");
 		}
 		else if (mdl->isSprite()) {
 			COLOR3 color = COLOR3(255, 255, 255);

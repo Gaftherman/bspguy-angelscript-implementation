@@ -31,6 +31,7 @@ struct AppSettings {
 	bool mapsize_auto;
 	bool texture_filtering;
 	int renderer;
+	bool animate_models;
 
 	bool debug_open;
 	bool keyvalue_open;

@@ -4322,9 +4322,10 @@ void Gui::drawSettings() {
 	if (ImGui::Begin("Editor Setup", &showSettingsWidget))
 	{
 		ImGuiContext& g = *GImGui;
-		const int settings_tabs = 3;
+		const int settings_tabs = 4;
 		static const char* tab_titles[settings_tabs] = {
 			"General",
+			"Rendering",
 			"Asset Paths",
 			"FGDs",
 		};
@@ -4372,6 +4373,34 @@ void Gui::drawSettings() {
 
 		ImGui::BeginChild("right pane content");
 		if (settingsTab == 0) {
+			ImGui::DragFloat("Movement Speed", &app->moveSpeed, 0.1f, 0.1f, 1000, "%.1f");
+			ImGui::DragFloat("Rotation Speed", &app->rotationSpeed, 0.01f, 0.1f, 100, "%.1f");
+			if (ImGui::DragInt("Font Size", &fontSize, 0.1f, 8, 48, "%d pixels")) {
+				shouldReloadFonts = true;
+			}
+			ImGui::DragInt("Undo Levels", &app->undoLevels, 0.05f, 0, 64);
+
+			ImGui::Columns(2);
+			ImGui::Checkbox("Verbose Logging", &g_verbose);
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("For troubleshooting problems with the program or specific commands");
+			}
+			ImGui::NextColumn();
+
+			ImGui::Checkbox("Confirm Close", &g_settings.confirm_exit);
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Show a warning dialog if closing the map without saving changes.\n");
+			}
+			ImGui::NextColumn();
+
+			if (ImGui::Checkbox("Unicode Font", &g_settings.unicode_font)) {
+				shouldReloadFonts = true;
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("The unicode font may take a long time to load depending on your specs.\nA new version of ImGui is coming soon to improve that.\n");
+			}
+		}
+		else if (settingsTab == 1) {
 			static const char* renderers[RENDERER_COUNT] = {
 				"OpenGL",
 				"OpenGL (Legacy)",
@@ -4397,27 +4426,16 @@ void Gui::drawSettings() {
 				ImGui::EndCombo();
 			}
 
-			ImGui::DragFloat("Movement Speed", &app->moveSpeed, 0.1f, 0.1f, 1000, "%.1f");
-			ImGui::DragFloat("Rotation Speed", &app->rotationSpeed, 0.01f, 0.1f, 100, "%.1f");
-			if (ImGui::DragInt("Font Size", &fontSize, 0.1f, 8, 48, "%d pixels")) {
-				shouldReloadFonts = true;
-			}
-			ImGui::DragInt("Undo Levels", &app->undoLevels, 0.05f, 0, 64);
 			ImGui::DragFloat("Field of View", &app->fov, 0.1f, 1.0f, 150.0f, "%.1f degrees");
 			ImGui::DragFloat("Back Clipping Plane", &app->zFar, 10.0f, -99999.f, 99999.f, "%.0f", ImGuiSliderFlags_Logarithmic);
 			ImGui::DragFloat("Model Render Distance", &app->zFarMdl, 10.0f, -99999.f, 99999.f, "%.0f", ImGuiSliderFlags_Logarithmic);
 
 			ImGui::Columns(2);
-			ImGui::Checkbox("Verbose Logging", &g_verbose);
+			ImGui::Checkbox("Animate Models", &g_settings.animate_models);
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("For troubleshooting problems with the program or specific commands");
+				ImGui::SetTooltip("Animations have a high impact on performance with the legacy renderer.\n");
 			}
-			ImGui::NextColumn();
 
-			ImGui::Checkbox("Confirm Close", &g_settings.confirm_exit);
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Show a warning dialog if closing the map without saving changes.\n");
-			}
 			ImGui::NextColumn();
 
 			if (ImGui::Checkbox("VSync", &vsync)) {
@@ -4426,22 +4444,16 @@ void Gui::drawSettings() {
 
 			ImGui::NextColumn();
 
-/*
-			ImGui::Checkbox("Texture Filtering", &g_settings.texture_filtering);
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Smooths far-away textures.\n");
-			}
+			/*
+						ImGui::Checkbox("Texture Filtering", &g_settings.texture_filtering);
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip("Smooths far-away textures.\n");
+						}
 
-			ImGui::NextColumn();
-*/
-			if (ImGui::Checkbox("Unicode Font", &g_settings.unicode_font)) {
-				shouldReloadFonts = true;
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("The unicode font may take a long time to load depending on your specs.\nA new version of ImGui is coming soon to improve that.\n");
-			}
+						ImGui::NextColumn();
+			*/
 		}
-		else if (settingsTab == 1) {
+		else if (settingsTab == 2) {
 			ImGui::InputText("##GameDir", gamedir, 256, ImGuiInputTextFlags_ElideLeft);
 
 			ImGui::SameLine();
@@ -4493,7 +4505,7 @@ void Gui::drawSettings() {
 					"\nFor example, you would add \"valve\" here for Half-Life.");
 			}
 		}
-		else if (settingsTab == 2) {
+		else if (settingsTab == 3) {
 			for (int i = 0; i < numFgds; i++) {
 				ImGui::SetNextItemWidth(ImGui::GetWindowWidth() - 100);
 				tmpFgdPaths[i].resize(256);
@@ -4565,7 +4577,7 @@ void Gui::drawSettings() {
 
 		ImGui::EndChild();
 
-		if (settingsTab <= 2) {
+		if (settingsTab <= 3) {
 			ImGui::Separator();
 
 			ImGui::BeginDisabled(app->isLoading);

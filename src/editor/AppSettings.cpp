@@ -40,6 +40,7 @@ void AppSettings::loadDefault()
 	mapsize_max = 32768;
 	mapsize_auto = true;
 	texture_filtering = false;
+	animate_models = true;
 	settings_tab = 0;
 	engine = ENGINE_SVEN_COOP;
 	renderer = RENDERER_OPENGL_21;
@@ -98,6 +99,7 @@ void AppSettings::load() {
 			else if (key == "first_load") { g_settings.first_load = atoi(val.c_str()) != 0; }
 			else if (key == "mapsize_auto") { g_settings.mapsize_auto = atoi(val.c_str()) != 0; }
 			else if (key == "texture_filtering") { g_settings.texture_filtering = atoi(val.c_str()) != 0; }
+			else if (key == "animate_models") { g_settings.animate_models = atoi(val.c_str()) != 0; }
 			else if (key == "fov") { g_settings.fov = atof(val.c_str()); }
 			else if (key == "zfar") { g_settings.zfar = atof(val.c_str()); }
 			else if (key == "zfarmdl") { g_settings.zFarMdl = atof(val.c_str()); }
@@ -223,6 +225,7 @@ void AppSettings::save() {
 	file << "renderer=" << g_settings.renderer << endl;
 	file << "mapsize_auto=" << g_settings.mapsize_auto << endl;
 	file << "engine=" << g_settings.engine << endl;
+	file << "animate_models=" << g_settings.animate_models << endl;
 }
 
 void AppSettings::addRecentFile(string map) {

@@ -6,13 +6,11 @@
 #include "globals.h"
 
 // TODO v5:
-// on load attempt to draw vbo before upload
-// mip maps for 3d textures
 // caching for ent matrix
 // asset path beginning with / doesn't work
 // lag on first model pick
-// gui disappears while moving things
 // tooltips for general settings
+// update shaders when renderer changed
 
 // v5 todo low prio:
 // ripent saftey warning

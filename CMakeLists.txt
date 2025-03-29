@@ -121,6 +121,7 @@ set(SHADER_FILES
 	
 	src/shaders/mdl_vert.glsl
 	src/shaders/mdl_frag.glsl
+	src/shaders/mdl_legacy_vert.glsl
 )
 
 # Custom command that always runs because cmake doesn't care if .glsl contents change.
