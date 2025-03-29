@@ -37,6 +37,8 @@ int glGetErrorDebug() {
 }
 
 void glCheckError(const char* checkMessage) {
+	// error checking is very expensive
+#ifndef NDEBUG
 	static int lastError = 0;
 	int glerror = glGetError();
 	if (glerror != GL_NO_ERROR) {
@@ -46,13 +48,7 @@ void glCheckError(const char* checkMessage) {
 			debugf("Got OpenGL Error %d after %s\n", glerror, checkMessage);
 		lastError = glerror;
 	}
-}
-
-void glClearError() {
-	int error = glGetError();
-	if (error) {
-		logf("Cleared error %d\n", error);
-	}
+#endif
 }
 
 void error_callback(int error, const char* description)
