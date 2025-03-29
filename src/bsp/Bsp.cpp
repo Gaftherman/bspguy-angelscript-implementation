@@ -3439,13 +3439,14 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 		if (wads[k]->hasTexture(tex.szName)) {
 			WADTEX* wadTex = wads[k]->readTexture(tex.szName);
 
-			for (int i = 0; i < 4; i++) {
-				tex.nOffsets[i] = wadTex->nOffsets[i];
-			}
 			if (tex.nHeight != wadTex->nHeight || tex.nWidth != wadTex->nWidth) {
 				logf("Failed to embed texture %s from wad %s (dimensions don't match)\n", tex.szName, wads[k]->filename.c_str());
 				delete wadTex;
 				continue;
+			}
+
+			for (int i = 0; i < 4; i++) {
+				tex.nOffsets[i] = wadTex->nOffsets[i];
 			}
 
 			int sz = tex.nWidth * tex.nHeight;	   // miptex 0

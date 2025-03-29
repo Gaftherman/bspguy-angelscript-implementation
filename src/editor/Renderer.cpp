@@ -168,6 +168,8 @@ Renderer::Renderer() {
 		return;
 	}
 
+	glCheckError("window creation");
+
 	GLint texImageUnits;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &g_max_texture_size);
 	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &texImageUnits);
@@ -175,20 +177,28 @@ Renderer::Renderer() {
 	glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &g_max_vtf_units);
 	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
-	glewInit();
-
 	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
 	logf("    Texture Units: %d / 5\n", texImageUnits);
 	logf("    Texture Array Layers: %d\n", g_max_texture_array_layers);
 	logf("    Vertex Texture Fetch Units: %d\n", g_max_vtf_units);
 	debugf("OpenGL Extensions:\n%s\n", openglExts);
 
+	glCheckError("checking extensions");
+
+	glewInit();
+
+	glCheckError("glew init");
+
 	// init to black screen instead of white
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glfwSwapBuffers(window);
 	glfwSwapInterval(1);
 
+	glCheckError("glfw buffer setup");
+
 	gui = new Gui(this);
+
+	glCheckError("GUI init");
 
 	compileShaders();
 
@@ -301,8 +311,6 @@ bool Renderer::createWindow() {
 }
 
 void Renderer::compileShaders() {
-	glClearError();
-
 	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
 	const char* bspFragShader = bsp_legacy_frag_glsl;
@@ -388,9 +396,13 @@ Renderer::~Renderer() {
 }
 
 void Renderer::renderLoop() {
+	glCheckError("entering renderloop");
+
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
+
+	glCheckError("renderloop state enable");
 
 	{
 		moveAxes.dimColor[0] = { 110, 0, 160, 255 };
@@ -432,13 +444,17 @@ void Renderer::renderLoop() {
 		scaleAxes.numAxes = 6;
 	}
 
+	glCheckError("creating transform axes");
+
 	updateDragAxes();
+
+	glCheckError("updating transform axes");
 
 	float s = 1.0f;
 	cCube vertCube(vec3(-s, -s, -s), vec3(s, s, s), { 0, 128, 255, 255 });
 	VertexBuffer vertCubeBuffer(colorShader, COLOR_4B | POS_3F, &vertCube, 6 * 6);
 
-	glCheckError("Before render loop");
+	glCheckError("pre render loop");
 
 	float lastFrameTime = glfwGetTime();
 	while (!glfwWindowShouldClose(window))
@@ -2439,6 +2455,8 @@ void Renderer::addMap(Bsp* map) {
 
 	mapRenderer = new BspRenderer(map, pointEntRenderer);
 
+	glCheckError("creating BSP renderer");
+
 	gui->checkValidHulls();
 
 	// Pick default map
@@ -2466,6 +2484,8 @@ void Renderer::addMap(Bsp* map) {
 	updateWindowTitle();
 
 	emptyMapLoaded = false;
+
+	glCheckError("add map");
 }
 
 void Renderer::drawLine(vec3 start, vec3 end, COLOR4 color) {

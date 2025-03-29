@@ -12,6 +12,7 @@
 // asset path beginning with / doesn't work
 // lag on first model pick
 // gui disappears while moving things
+// tooltips for general settings
 
 // v5 todo low prio:
 // ripent saftey warning

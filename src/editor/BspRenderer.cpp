@@ -64,7 +64,11 @@ BspRenderer::BspRenderer(Bsp* map, PointEntRenderer* pointEntRenderer) {
 	redTex->upload(GL_RGB);
 	greyTex->upload(GL_RGB);
 	blackTex->upload(GL_RGB);
-	whiteTex3D->upload(GL_RGB);
+
+	if (g_opengl_3d_texture_support || g_opengl_texture_array_support)
+		whiteTex3D->upload(GL_RGB); // only needed if texture arrays/3d textures are supported
+
+	glCheckError("creating plain textures in BSP renderer");
 
 	preloadTextures();
 	//loadTextures();
@@ -167,8 +171,8 @@ void BspRenderer::loadTextures() {
 		}
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 
-		COLOR3* palette;
-		byte* src;
+		COLOR3* palette = NULL;
+		byte* src = NULL;
 		WADTEX* wadTex = NULL;
 
 		int lastMipSize = (tex.nWidth / 8) * (tex.nHeight / 8);
@@ -178,9 +182,17 @@ void BspRenderer::loadTextures() {
 			bool foundInWad = false;
 			for (int k = 0; k < wads.size(); k++) {
 				if (wads[k]->hasTexture(tex.szName)) {
-					foundInWad = true;
-
 					wadTex = wads[k]->readTexture(tex.szName);
+
+					if (wadTex->nWidth != tex.nWidth || wadTex->nHeight != tex.nHeight) {
+						debugf("Found a texture named %s in %s but the dimensions don't match. Skipping.\n",
+							tex.szName, wads[k]->filename.c_str());
+						delete wadTex;
+						wadTex = NULL;
+						continue;
+					}
+
+					foundInWad = true;
 					palette = (COLOR3*)(wadTex->data + wadTex->nOffsets[3] + lastMipSize + 2 - 40);
 					src = wadTex->data;
 
@@ -467,6 +479,8 @@ void BspRenderer::preRenderFaces() {
 		worldRenderGroups + modelRenderGroups,
 		worldRenderGroups,
 		modelRenderGroups);
+
+	glCheckError("BSP pre render");
 }
 
 void BspRenderer::deleteRenderModel(RenderModel* renderModel) {
@@ -1316,6 +1330,8 @@ void BspRenderer::preRenderEnts() {
 	pointEnts = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, entCubes, numPointEnts * 6 * 6);
 	pointEnts->ownData = true;
 	pointEnts->upload();
+
+	glCheckError("BSP pre render ents");
 }
 
 void BspRenderer::refreshPointEnt(int entIdx) {

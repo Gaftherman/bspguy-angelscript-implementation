@@ -64,6 +64,8 @@ void Gui::init() {
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
+	glCheckError("Creating ImGui context");
+
 	io.IniFilename = iniPath.c_str();
 
 	// Setup Dear ImGui style
@@ -74,7 +76,11 @@ void Gui::init() {
 	ImGui_ImplGlfw_InitForOpenGL(app->window, true);
 	ImGui_ImplOpenGL2_Init();
 
+	glCheckError("ImGui init");
+
 	loadFonts();
+
+	glCheckError("ImGui font load");
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 
@@ -91,6 +97,8 @@ void Gui::init() {
 	lodepng_decode32(&icon_data, &w, &h, face_icon, sizeof(face_icon));
 	faceIconTexture = new Texture(w, h, icon_data);
 	faceIconTexture->upload(GL_RGBA);
+
+	glCheckError("icon uploads");
 }
 
 void Gui::draw() {
@@ -807,7 +815,7 @@ void Gui::drawMenuBar() {
 			g_app->openMap(NULL);
 		}
 
-		if (ImGui::BeginMenu("Recent Files")) {
+		if (ImGui::BeginMenu("Recent Files", !app->isLoading)) {
 			if (g_settings.recentFiles.size()) {
 				ImGui::Separator();
 				int idx = 1;
