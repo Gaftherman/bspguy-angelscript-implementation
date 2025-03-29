@@ -2,7 +2,6 @@
 #include "ShaderProgram.h"
 #include "primitives.h"
 #include "VertexBuffer.h"
-#include "shaders.h"
 #include "Gui.h"
 #include "Polygon3D.h"
 #include "PointEntRenderer.h"
@@ -23,6 +22,7 @@
 #include <unordered_set>
 #include "tinyfiledialogs.h"
 #include <lodepng.h>
+#include "embedded_shaders.h"
 
 #include "icons/app.h"
 #include "icons/app2.h"
@@ -305,25 +305,25 @@ void Renderer::compileShaders() {
 
 	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
-	const char* bspFragShader = g_shader_multitexture_fragment;
+	const char* bspFragShader = bsp_legacy_frag_glsl;
 
 	if (g_settings.renderer == RENDERER_OPENGL_21_LEGACY) {
 		logf("Legacy renderer selected. Not checking extension support.\n");
 	}
 	else if (strstr(openglExts, "GL_EXT_texture_array")) {
 		g_opengl_texture_array_support = true;
-		bspFragShader = g_shader_multitexture_array_fragment;
+		bspFragShader = bsp_arraytex_frag_glsl;
 	}
 	else if (strstr(openglExts, "GL_EXT_texture3D")) {
 		logf("Texture arrays not supported. 3D textures without filtering will be used instead\n");
 		g_opengl_3d_texture_support = true;
-		bspFragShader = g_shader_multitexture_3d_fragment;
+		bspFragShader = bsp_3dtex_frag_glsl;
 	}
 	else {
 		logf("Neither texture arrays nor 3D textures are supported. Map rendering will be slow.\n");
 	}
 
-	bspShader = new ShaderProgram("BSP", g_shader_multitexture_vertex, bspFragShader);
+	bspShader = new ShaderProgram("BSP", bsp_vert_glsl, bspFragShader);
 	bspShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	bspShader->setMatrixNames(NULL, "modelViewProjection");
 	bspShader->addUniform("sTex", UNIFORM_INT);
@@ -337,14 +337,14 @@ void Renderer::compileShaders() {
 		bspShader->setUniform(name, s + 1);
 	}
 
-	colorShader = new ShaderProgram("Color", g_shader_cVert_vertex, g_shader_cVert_fragment);
+	colorShader = new ShaderProgram("Color", cvert_vert_glsl, cvert_frag_glsl);
 	colorShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	colorShader->setMatrixNames(NULL, "modelViewProjection");
 	colorShader->setVertexAttributeNames("vPosition", "vColor", NULL, NULL);
 	colorShader->addUniform("colorMult", UNIFORM_VEC4);
 	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 
-	mdlShader = new ShaderProgram("MDL", g_shader_mdl_vertex, g_shader_mdl_fragment);
+	mdlShader = new ShaderProgram("MDL", mdl_vert_glsl, mdl_frag_glsl);
 	mdlShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	mdlShader->setMatrixNames(NULL, "modelViewProjection");
 	mdlShader->setVertexAttributeNames("vPosition", NULL, "vTex", "vNormal");
@@ -361,20 +361,20 @@ void Renderer::compileShaders() {
 	mdlShader->addUniform("boneMatrixTexture", UNIFORM_INT);
 	mdlShader->addUniform("colorMult", UNIFORM_VEC4);
 
-	sprShader = new ShaderProgram("SPR", g_shader_spr_vertex, g_shader_spr_fragment);
+	sprShader = new ShaderProgram("SPR", spr_vert_glsl, spr_frag_glsl);
 	sprShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprShader->setMatrixNames(NULL, "modelViewProjection");
 	sprShader->setVertexAttributeNames("vPosition", NULL, "vTex", NULL);
 	sprShader->addUniform("color", UNIFORM_VEC4);
 
-	vec3Shader = new ShaderProgram("vec3", g_shader_vec3_vertex, g_shader_vec3_fragment);
+	vec3Shader = new ShaderProgram("vec3", vec3_vert_glsl, vec3_frag_glsl);
 	vec3Shader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	vec3Shader->setMatrixNames(NULL, "modelViewProjection");
 	vec3Shader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);
 	vec3Shader->addUniform("color", UNIFORM_VEC4);
 	vec3Shader->setUniform("color", vec4(1, 1, 1, 1));
 
-	sprOutlineShader = new ShaderProgram("SPR outline", g_shader_vec3_vertex, g_shader_vec3depth_fragment);
+	sprOutlineShader = new ShaderProgram("SPR outline", vec3_vert_glsl, vec3_depth_frag_glsl);
 	sprOutlineShader->setMatrixes(&model, &view, &projection, &modelView, &modelViewProjection);
 	sprOutlineShader->setMatrixNames(NULL, "modelViewProjection");
 	sprOutlineShader->setVertexAttributeNames("vPosition", NULL, NULL, NULL);

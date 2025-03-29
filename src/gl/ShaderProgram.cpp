@@ -90,6 +90,8 @@ void ShaderProgram::updateMatrixes()
 
 void ShaderProgram::setMatrixNames(const char* modelViewMat, const char* modelViewProjMat)
 {
+	bind();
+
 	if (modelViewMat != NULL)
 	{
 		modelViewID = glGetUniformLocation(ID, modelViewMat);
@@ -106,6 +108,8 @@ void ShaderProgram::setMatrixNames(const char* modelViewMat, const char* modelVi
 
 void ShaderProgram::setVertexAttributeNames(const char* posAtt, const char* colorAtt, const char* texAtt, const char* normAtt)
 {
+	bind();
+
 	if (posAtt != NULL)
 	{
 		vposID = glGetAttribLocation(ID, posAtt);

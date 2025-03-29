@@ -61,7 +61,6 @@ set(SOURCE_FILES
 	src/nav/LeafOctree.h			src/nav/LeafOctree.cpp
 	
 	# OpenGL rendering
-	src/gl/shaders.h			src/gl/shaders.cpp
 	src/gl/primitives.h			src/gl/primitives.cpp
 	src/gl/Shader.h				src/gl/Shader.cpp
 	src/gl/ShaderProgram.h		src/gl/ShaderProgram.cpp
@@ -104,6 +103,40 @@ set(SOURCE_FILES
 	src/util/lzma_util.h src/util/lzma_util.cpp
 )
 
+set(SHADER_FILES
+	src/shaders/vec3_vert.glsl
+	src/shaders/vec3_frag.glsl
+	src/shaders/vec3_depth_frag.glsl
+	
+	src/shaders/cvert_vert.glsl
+	src/shaders/cvert_frag.glsl
+	
+	src/shaders/bsp_vert.glsl
+	src/shaders/bsp_legacy_frag.glsl
+	src/shaders/bsp_3dtex_frag.glsl
+	src/shaders/bsp_arraytex_frag.glsl
+	
+	src/shaders/spr_vert.glsl
+	src/shaders/spr_frag.glsl
+	
+	src/shaders/mdl_vert.glsl
+	src/shaders/mdl_frag.glsl
+)
+
+# Custom command that always runs because cmake doesn't care if .glsl contents change.
+# The command will check if the generated file needs updating or not
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/__dummy_file.h  # fake file that never exists, causing this step to run every build
+	${CMAKE_BINARY_DIR}/embedded_shaders.cpp
+	COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/embed_shaders.cmake" "embedded_shaders.h" "embedded_shaders.cpp" ${SHADER_FILES}
+)
+add_custom_target(
+	my_custom_target_that_always_runs ALL
+	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/__dummy_file.h
+)
+
+set(SOURCE_FILES ${SOURCE_FILES} "${CMAKE_BINARY_DIR}/embedded_shaders.cpp")
+
 include_directories(src)
 include_directories(src/bsp)
 include_directories(src/cli)
@@ -117,12 +150,22 @@ include_directories(imgui)
 include_directories(imgui/examples)
 include_directories(imgui/backends)
 include_directories(glew/include)
+include_directories(${CMAKE_BINARY_DIR})
+
 
 add_definitions(-DGLEW_STATIC)
 
 if(MSVC)
 	add_executable(${PROJECT_NAME} ${SOURCE_FILES} src/data/icons/app_icon.rc)
 	target_link_libraries(${PROJECT_NAME} glfw liblzma)
+
+	add_custom_command(
+		TARGET ${PROJECT_NAME}
+		PRE_BUILD
+		COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/embed_shaders.cmake" "embedded_shaders.h" "embedded_shaders.cpp" "${SHADER_FILES}"
+		${CMAKE_CURRENT_BINARY_DIR}/__dummy_file.h
+	)
+	add_dependencies(${PROJECT_NAME} my_custom_target_that_always_runs)
 
 	# no warnings for release builds
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W0")
@@ -177,6 +220,7 @@ if(MSVC)
 											src/gl/Texture.h
 											src/gl/TextureArray.h
 											src/gl/primitives.h
+											${CMAKE_BINARY_DIR}/embedded_shaders.h
 											src/gl/shaders.h)
 											
 	source_group("Source Files\\gl" FILES	src/gl/Shader.cpp
@@ -185,7 +229,10 @@ if(MSVC)
 											src/gl/Texture.cpp
 											src/gl/TextureArray.cpp
 											src/gl/primitives.cpp
+											${CMAKE_BINARY_DIR}/embedded_shaders.cpp
 											src/gl/shaders.cpp)
+											
+	source_group("Source Files\\gl\\shaders" FILES ${SHADER_FILES})
 											
 	source_group("Header Files\\editor" FILES	src/editor/BspRenderer.h
 												src/editor/TextureAtlas.h
