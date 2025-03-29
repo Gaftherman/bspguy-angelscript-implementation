@@ -363,6 +363,8 @@ void MdlRenderer::loadData() {
 }
 
 void MdlRenderer::upload() {
+	glCheckError("MDL upload entered");
+
 	if (loadState != MODEL_LOAD_UPLOAD) {
 		logf("MDL upload called before initial load\n");
 		return;
@@ -378,6 +380,8 @@ void MdlRenderer::upload() {
 			}
 		}
 	}
+
+	glCheckError("MDL texture uploads");
 
 	for (int b = 0; b < header->numbodyparts; b++) {
 		// Try loading required model info
@@ -399,21 +403,25 @@ void MdlRenderer::upload() {
 		}
 	}
 
+	glCheckError("MDL body mesh uploads");
+
 	g_app->mdlShader->bind();
 
 	glGenTextures(1, &u_boneTexture);
-	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
+	glBindTexture(GL_TEXTURE_2D, u_boneTexture);
 
 	// disable filtering and mipmaps so the texture can be used as a lookup table
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
 	g_app->mdlShader->setUniform("boneMatrixTexture", 1);
 
 	// allocate data so subImage can be used for faster updates
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F, 4, 1, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, MAXSTUDIOBONES, 0, GL_RGBA, GL_FLOAT, m_bonetransform);
+
+	glCheckError("MDL bone texture creation");
 
 	loadState = MODEL_LOAD_DONE;
 }
@@ -1305,6 +1313,8 @@ void MdlRenderer::transformVerts() {
 }
 
 void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin, vec3 viewerRight, bool isSelected) {
+	glCheckError("entering MDL render");
+	
 	if (!valid || loadState != MODEL_LOAD_DONE) {
 		return;
 	}
@@ -1366,28 +1376,11 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 		break;
 	}
 
-	g_app->mdlShader->setUniform("sTex", 0);
-	glActiveTexture(GL_TEXTURE0);
-
-	// number of active lights
-	g_app->mdlShader->setUniform("elights", 1);
-
-	// ambient lighting
-	g_app->mdlShader->setUniform("ambient", opts.rendercolor.toVec() * 0.4f);
-
-	/*
-	// lighting matrices
-	mat4x4 lightModelMat;
-	mat4x4 lightNormalMat;
-
-	lightModelMat.loadIdentity();
-	lightNormalMat.loadIdentity();
-
-	uint modelView = glGetUniformLocation(shaderProgram->ID, "modelView");
-	uint normalMat = glGetUniformLocation(shaderProgram->ID, "normalMat");
-	glUniformMatrix4fv(modelView, 1, false, (float*)&lightModelMat);
-	glUniformMatrix4fv(normalMat, 1, false, (float*)&lightNormalMat);
-	*/
+	g_app->mdlShader->setUniform("sTex", 0);	
+	g_app->mdlShader->setUniform("elights", 1); // number of active lights
+	g_app->mdlShader->setUniform("ambient", opts.rendercolor.toVec() * 0.4f); // ambient lighting
+	g_app->mdlShader->setUniform("viewerOrigin", viewerOrigin - origin); // world coordinates
+	g_app->mdlShader->setUniform("viewerRight", viewerRight);
 
 	// light data
 	vec3 lights[4][3];
@@ -1398,14 +1391,17 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	lights[0][0] = vec3(1024, 1024, 1024); // light position
 	lights[0][1] = opts.rendercolor.toVec(); // diffuse color
 	g_app->mdlShader->setUniform("lights", (float*)lights, 4*3*3);
-	//glUniformMatrix3fv(u_lightsId, 4, false, (float*)lights);
+
+	glCheckError("setting MDL scene uniforms");
 	
 	// Hack: setup the bone matrices as a 3D texture.
 	// Opengl 3.0 doesn't have uniform buffers and mat4[128] is far too many uniforms for a valid shader.
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_3D, u_boneTexture);
-	glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, 4, 1, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
+	glBindTexture(GL_TEXTURE_2D, u_boneTexture);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, MAXSTUDIOBONES, GL_RGBA, GL_FLOAT, m_bonetransform);
 	glActiveTexture(GL_TEXTURE0);
+
+	glCheckError("updating MDL bone texture");
 
 	g_app->mdlShader->pushMatrix(MAT_MODEL);
 	g_app->mdlShader->modelMat->loadIdentity();
@@ -1413,11 +1409,7 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	// Don't rotate the scene because it messes up chrome effect.
 	g_app->mdlShader->updateMatrixes();
 
-	vec3 uploadOrigin = viewerOrigin - origin; // world coordinates
-	vec3 uploadRight = viewerRight;
-
-	g_app->mdlShader->setUniform("viewerOrigin", uploadOrigin);
-	g_app->mdlShader->setUniform("viewerRight", viewerRight);
+	glCheckError("updating MDL shader matrices");
 
 	data.seek(header->skinindex);
 	
@@ -1447,6 +1439,8 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 
 			Texture* tex = glTextures[remappedSkin];
 			tex->bind();
+
+			glCheckError("binding MDL texture");
 
 			if (!render.buffer) {
 				continue;
@@ -1479,7 +1473,11 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 				g_app->mdlShader->setUniform("chromeEnable", 0);
 			}
 
+			glCheckError("setting MDL body uniforms");
+
 			render.buffer->draw(GL_TRIANGLES);
+
+			glCheckError("rendering MDL body part");
 		}
 	}
 

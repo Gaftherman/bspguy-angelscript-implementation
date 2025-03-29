@@ -12,9 +12,9 @@ uniform int elights;
 uniform vec3 ambient;
 
 // skeleton
-// 3D texture as an array of mat4 (poor man's UBO). Vertex Texture Fetch requires GL 3.0 or 2.1 w/ ARB
+// Texture as an array of mat4 (poor man's UBO). Vertex Texture Fetch requires GL 3.0 or 2.1 w/ ARB
 // Can't use UBO without upgrading to GL 3.1. Can't have 128 mat4 uniforms for all GPUs.
-uniform sampler3D boneMatrixTexture;
+uniform sampler2D boneMatrixTexture;
 
 // render flags
 uniform int chromeEnable;
@@ -45,10 +45,10 @@ void main()
 {
 	mat4 bone;
 	float boneCoord = (vBone / 128.0) + (1.0 / 512.0);
-	bone[0] = texture3D(boneMatrixTexture, vec3(0.00 + (1.0 / 8.0), 0, boneCoord));
-	bone[1] = texture3D(boneMatrixTexture, vec3(0.25 + (1.0 / 8.0), 0, boneCoord));
-	bone[2] = texture3D(boneMatrixTexture, vec3(0.50 + (1.0 / 8.0), 0, boneCoord));
-	bone[3] = texture3D(boneMatrixTexture, vec3(0.75 + (1.0 / 8.0), 0, boneCoord));
+	bone[0] = texture2D(boneMatrixTexture, vec2(0.00 + (1.0 / 8.0), boneCoord));
+	bone[1] = texture2D(boneMatrixTexture, vec2(0.25 + (1.0 / 8.0), boneCoord));
+	bone[2] = texture2D(boneMatrixTexture, vec2(0.50 + (1.0 / 8.0), boneCoord));
+	bone[3] = texture2D(boneMatrixTexture, vec2(0.75 + (1.0 / 8.0), boneCoord));
 
 
 	vec3 pos = rotateVector(vPosition, bone) + vec3(bone[0][3], bone[2][3], -bone[1][3]);
