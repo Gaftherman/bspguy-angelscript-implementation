@@ -102,15 +102,71 @@ void remove_unused_data(Bsp* map) {
 
 #ifdef WIN32
 #include <Windows.h>
-#endif
 
-void hideConsoleWindow() {
-#ifdef WIN32
-#ifndef DEBUG_MODE
-	::ShowWindow(::GetConsoleWindow(), SW_HIDE);
-#endif
-#endif
+int main(int argc, char* argv[]);
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+	// Try to attach to an existing console
+	if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+		FILE* fp;
+
+		// Redirect STDOUT to the console
+		freopen_s(&fp, "CONOUT$", "w", stdout);
+		freopen_s(&fp, "CONOUT$", "w", stderr);
+		freopen_s(&fp, "CONIN$", "r", stdin);
+
+		// Ensure the standard streams are unbuffered
+		setvbuf(stdout, NULL, _IONBF, 0);
+		setvbuf(stderr, NULL, _IONBF, 0);
+		setvbuf(stdin, NULL, _IONBF, 0);
+	}
+	logf("\n");
+	
+	// Convert Unicode command-line arguments to ANSI-compatible arguments
+	int argc;
+	LPWSTR* argvW = CommandLineToArgvW(GetCommandLineW(), &argc);
+
+	if (!argvW) return main(0, nullptr);  // Fallback in case of error
+
+	// Convert wide-char (LPWSTR) to multi-byte (char*)
+	std::vector<std::string> args(argc);  // Allocate storage
+	std::vector<char*> argv(argc);  // Pointers to char* strings
+
+	for (int i = 0; i < argc; i++) {
+		int size_needed = WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, NULL, 0, NULL, NULL);
+		args[i].resize(size_needed);  // Resize the string buffer
+		WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, &args[i][0], size_needed, NULL, NULL);
+		argv[i] = &args[i][0];  // Store writable pointer
+	}
+
+	LocalFree(argvW);  // Free memory allocated by CommandLineToArgvW
+
+	int ret = main(argc, argv.data());
+
+	// Send an enter key as the console being freed is not enough to release it
+	// https://forum.qt.io/topic/64472/just-want-to-write-to-console-if-run-from-commandline/5?_=1743375469910
+	HANDLE hConsoleInputHandle = GetStdHandle(STD_INPUT_HANDLE);
+	
+	if (!hConsoleInputHandle) {
+		return ret;
+	}
+
+	DWORD nEventsWritten = 0;
+	INPUT_RECORD aInputRecords[1];
+	aInputRecords[0].EventType = KEY_EVENT;
+	aInputRecords[0].Event.KeyEvent.bKeyDown = TRUE;
+	aInputRecords[0].Event.KeyEvent.uChar.UnicodeChar = VK_RETURN;
+	aInputRecords[0].Event.KeyEvent.wVirtualKeyCode = VK_RETURN;
+	aInputRecords[0].Event.KeyEvent.wVirtualScanCode = MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC);
+	aInputRecords[0].Event.KeyEvent.wRepeatCount = 1;
+	aInputRecords[0].Event.KeyEvent.dwControlKeyState = 0;
+	WriteConsoleInput(hConsoleInputHandle, aInputRecords, 1, &nEventsWritten);
+
+	FreeConsole();
+	
+	return ret;
 }
+#endif
 
 void start_viewer(const char* map) {
 	Bsp* bsp = NULL;
@@ -134,7 +190,6 @@ void start_viewer(const char* map) {
 		renderer.addMap(bsp);
 	}
 	
-	hideConsoleWindow();
 	renderer.renderLoop();
 }
 
@@ -686,10 +741,10 @@ void print_help(string command) {
 			"  renametex : Renames/replaces a texture in the BSP\n"
 
 			"\nRun 'bspguy <command> help' to read about a specific command.\n"
-			"\nTo launch the 3D editor. Drag and drop a .bsp file onto the executable,\n"
-			"or run 'bspguy <mapname>'"
+			"\nTo launch the 3D editor, run this program without any arguments."
 			);
 	}
+	logf("\n");
 }
 
 void init_limits() {
