@@ -434,6 +434,4 @@ void ShaderProgram::popMatrix(int matType)
 				logf("Can't pop matrix. Stack is empty.\n");
 		}
 	}
-
-	updateMatrixes();
 }

@@ -345,7 +345,7 @@ EntRenderOpts Entity::getRenderOpts() {
 }
 
 mat4x4 Entity::getRotationMatrix(bool flipped) {
-	if (hasCachedRotMatrixes && false) { // TODO: force rotate messing this up i think
+	if (hasCachedRotMatrixes) { // TODO: force rotate messing this up i think
 		return flipped ? cachedRotationMatrixFlipped : cachedRotationMatrix;
 	}
 
@@ -357,34 +357,29 @@ mat4x4 Entity::getRotationMatrix(bool flipped) {
 		bool isBspModel = getBspModelIdx() != -1;
 
 		if (angles != vec3()) {
-			if (flipped) {
-				// well this makes no sense but it's required for object picking
-				// but not for rendering. I guess it's a combination of flips or undoing them, idk
-				if (isBspModel) {
-					cachedRotationMatrixFlipped.rotateX(-angles.z);
-					cachedRotationMatrixFlipped.rotateY(angles.x);
-					cachedRotationMatrixFlipped.rotateZ(-angles.y);
-				}
-				else {
-					cachedRotationMatrixFlipped.rotateY(angles.x);
-					cachedRotationMatrixFlipped.rotateZ(-angles.y);
-					cachedRotationMatrixFlipped.rotateX(-angles.z);
-				}
+
+			// well this makes no sense but it's required for object picking
+			// but not for rendering. I guess it's a combination of flips or undoing them, idk
+			if (isBspModel) {
+				cachedRotationMatrixFlipped.rotateX(-angles.z);
+				cachedRotationMatrixFlipped.rotateY(angles.x);
+				cachedRotationMatrixFlipped.rotateZ(-angles.y);
 			}
 			else {
-				if (isBspModel) {
-					cachedRotationMatrix.rotateY(angles.y);
-					cachedRotationMatrix.rotateZ(angles.x);
-					cachedRotationMatrix.rotateX(angles.z);
-				}
-				else {
-					cachedRotationMatrix.rotateX(angles.z);
-					cachedRotationMatrix.rotateY(angles.y);
-					cachedRotationMatrix.rotateZ(angles.x);
-				}
+				cachedRotationMatrixFlipped.rotateY(angles.x);
+				cachedRotationMatrixFlipped.rotateZ(-angles.y);
+				cachedRotationMatrixFlipped.rotateX(-angles.z);
 			}
-
-
+			if (isBspModel) {
+				cachedRotationMatrix.rotateY(angles.y);
+				cachedRotationMatrix.rotateZ(angles.x);
+				cachedRotationMatrix.rotateX(angles.z);
+			}
+			else {
+				cachedRotationMatrix.rotateX(angles.z);
+				cachedRotationMatrix.rotateY(angles.y);
+				cachedRotationMatrix.rotateZ(angles.x);
+			}
 		}
 	}
 

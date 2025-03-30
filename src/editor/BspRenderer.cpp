@@ -1708,6 +1708,9 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 				Entity* ent = map->ents[highlightEnt];
 				if (ent->hidden)
 					continue;
+				if (!willDrawModel(ent, renderEnts[highlightEnt].modelIdx, true))
+					continue;
+
 				activeShader->pushMatrix(MAT_MODEL);
 				*activeShader->modelMat = renderEnts[highlightEnt].modelMat;
 				activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
@@ -1735,6 +1738,9 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 			Entity* ent = map->ents[i];
 			if (ent->hidden)
 				continue;
+			if (!willDrawModel(ent, renderEnts[i].modelIdx, transparencyPass))
+				continue;
+
 			bool isHighlighted = highlighted.count(i);
 			activeShader->pushMatrix(MAT_MODEL);
 			*activeShader->modelMat = renderEnts[i].modelMat;
@@ -1751,7 +1757,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 		}
 	}
 
-	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass) {
+	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass && !wireframePass) {
 		drawPointEntities(highlightedEnts);
 		activeShader->bind();
 	}
@@ -1769,6 +1775,11 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 					Entity* ent = map->ents[i];
 					if (ent->hidden)
 						continue;
+
+					RenderClipnodes& clip = renderClipnodes[renderEnts[i].modelIdx];
+					if (clipnodeHull == -1 && getBestClipnodeHull(renderEnts[i].modelIdx) == -1) {
+						continue; // skip if no hull can be drawn
+					}
 
 					if (clipnodeHull == -1 && renderModels[renderEnts[i].modelIdx].groupCount > 0) {
 						continue; // skip rendering for models that have faces, if in auto mode
@@ -1805,11 +1816,13 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 				Entity* ent = map->ents[highlightEnt];
 				if (ent->hidden)
 					continue;
+				if (!willDrawModel(ent, renderEnts[highlightEnt].modelIdx, true))
+					continue;
 
 				activeShader->pushMatrix(MAT_MODEL);
 				activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
 				*activeShader->modelMat = renderEnts[highlightEnt].modelMat;
-				// TODO: Why not rotating by entity angles?
+				*activeShader->modelMat = *activeShader->modelMat * ent->getRotationMatrix(false);
 				activeShader->updateMatrixes();
 				
 				if (wireframePass) 
@@ -1840,6 +1853,49 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 
 		renderModels[modelIdx].wireframeBuffer->draw(GL_LINES);
 	}
+}
+
+bool BspRenderer::willDrawModel(Entity* ent, int modelIdx, bool transparent) {
+	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+		return false;
+	}
+
+	EntRenderOpts opts = ent->getRenderOpts();
+	bool isTransparent = false;
+
+	switch (opts.rendermode) {
+	case RENDER_MODE_SOLID:
+		isTransparent = true;
+		break;
+	case RENDER_MODE_COLOR:
+	case RENDER_MODE_TEXTURE:
+	case RENDER_MODE_GLOW:
+	case RENDER_MODE_ADDITIVE:
+		isTransparent = opts.renderamt < 255;
+		break;
+	default:
+		break;
+	}
+
+	for (int i = 0; i < renderModels[modelIdx].groupCount; i++) {
+		RenderGroup& rgroup = renderModels[modelIdx].renderGroups[i];
+
+		if ((rgroup.transparent || isTransparent) != transparent)
+			continue;
+
+		if (rgroup.transparent) {
+			if (modelIdx == 0 && !(g_render_flags & RENDER_SPECIAL))
+				continue;
+			else if (modelIdx != 0 && !(g_render_flags & RENDER_SPECIAL_ENTS))
+				continue;
+		}
+		else if (modelIdx != 0 && !(g_render_flags & RENDER_ENTS))
+			continue;
+
+		return true;
+	}
+
+	return false;
 }
 
 void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight) {
@@ -2030,6 +2086,7 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 	}
 
 	if (pointEntIdx - nextRangeDrawIdx > 0) {
+		g_app->colorShader->updateMatrixes();
 		pointEnts->drawRange(GL_TRIANGLES, cubeVerts * nextRangeDrawIdx, cubeVerts * pointEntIdx);
 	}
 }

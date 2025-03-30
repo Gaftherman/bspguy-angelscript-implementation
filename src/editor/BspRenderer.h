@@ -154,6 +154,7 @@ public:
 	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
 		int clipnodeHull, bool transparencyPass, bool wireframePass);
 
+	bool willDrawModel(Entity* ent, int modelIdx, bool transparent);
 	void drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight);
 	void drawModelWireframe(int modelIdx, bool highlight);
 	void drawModelClipnodes(int modelIdx, bool highlight, int hullIdx);
