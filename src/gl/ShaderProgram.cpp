@@ -445,4 +445,6 @@ void ShaderProgram::popMatrix(int matType)
 				logf("Can't pop matrix. Stack is empty.\n");
 		}
 	}
+
+	updateMatrixes(); // TODO: this is expensive but i don't want to deal with the bugs right now. It breaks point ents.
 }

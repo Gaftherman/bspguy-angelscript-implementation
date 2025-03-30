@@ -489,15 +489,26 @@ void BspRenderer::deleteRenderModel(RenderModel* renderModel) {
 	}
 	for (int k = 0; k < renderModel->groupCount; k++) {
 		RenderGroup& group = renderModel->renderGroups[k];
-		delete[] group.verts;
-		delete group.buffer;
+		if (group.verts)
+			delete[] group.verts;
+		if (group.buffer)
+			delete group.buffer;
+		group.verts = NULL;
+		group.buffer = NULL;
 	}
+	if (renderModel->wireframeVerts)
+		delete[] renderModel->wireframeVerts;
+	if (renderModel->wireframeBuffer)
+		delete renderModel->wireframeBuffer;
+	if (renderModel->renderGroups)
+		delete[] renderModel->renderGroups;
+	if (renderModel->renderFaces)
+		delete[] renderModel->renderFaces;
 
-	delete[] renderModel->wireframeVerts;
-	delete renderModel->wireframeBuffer;
-
-	delete[] renderModel->renderGroups;
-	delete[] renderModel->renderFaces;
+	renderModel->wireframeVerts = NULL;
+	renderModel->wireframeBuffer = NULL;
+	renderModel->renderGroups = NULL;
+	renderModel->renderFaces = NULL;
 }
 
 void BspRenderer::deleteRenderClipnodes() {
@@ -2086,7 +2097,6 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 	}
 
 	if (pointEntIdx - nextRangeDrawIdx > 0) {
-		g_app->colorShader->updateMatrixes();
 		pointEnts->drawRange(GL_TRIANGLES, cubeVerts * nextRangeDrawIdx, cubeVerts * pointEntIdx);
 	}
 }

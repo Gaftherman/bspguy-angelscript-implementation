@@ -223,7 +223,7 @@ bool DecompressVis(const byte* src, byte* const dest, const unsigned int dest_le
 
 	do
 	{
-		if (src - visLump > visLength) {
+		if (src - visLump >= visLength) {
 			//hlassume(src - visLump < visLength, assume_DECOMPRESSVIS_OVERFLOW);
 			return false;
 		}

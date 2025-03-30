@@ -4383,7 +4383,7 @@ void Gui::drawSettings() {
 			ImGui::Columns(2);
 			ImGui::Checkbox("Verbose Logging", &g_verbose);
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("For troubleshooting problems with the program");
+				ImGui::SetTooltip("For troubleshooting the program");
 			}
 			ImGui::NextColumn();
 
@@ -6176,6 +6176,9 @@ void Gui::drawTextureTool() {
 		if (ImGui::InputText("##texname", textureName, MAXTEXTURENAME)) {
 			textureChanged = true;
 		}
+		if (ImGui::IsItemHovered() && !validTexture) {
+			ImGui::SetTooltip("Texture not found in the BSP or any loaded WADs");
+		}
 		ImGui::EndDisabled();
 		if (refreshAfterFacePaste) {
 			textureChanged = true;
@@ -6300,14 +6303,15 @@ void Gui::drawTextureTool() {
 		float imgWidth = min(256.0f, inputWidth * 2 - 2);
 		ImVec2 imgSize = ImVec2(imgWidth, imgWidth);
 		if (ImGui::ImageButton("texicon", textureId, imgSize, ImVec2(0, 0), ImVec2(1, 1))) {
-			logf("Open browser!\n");
+			logf("Texture browser not implemented.\n");
 
-			ImGui::OpenPopup("Not Implemented");
+			//ImGui::OpenPopup("Texture Browser");
 		}
 
-		if (ImGui::BeginPopupModal("Not Implemented", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		/*
+		if (ImGui::BeginPopupModal("Texture Browser", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			ImGui::Text("TODO: Texture browser\n\n");
+			ImGui::TextWrapped("There's no texture browser yet, but you can type in any texture name to apply it. If the name is found in a loaded WAD then it will be added to the BSP data.\n\n");
 			ImGui::Separator();
 
 			if (ImGui::Button("OK", ImVec2(120, 0))) {
@@ -6316,6 +6320,7 @@ void Gui::drawTextureTool() {
 			ImGui::SetItemDefaultFocus();
 			ImGui::EndPopup();
 		}
+		*/
 
 		ImGui::Text(("Source: " + texture_src).c_str());
 		ImGui::Text(("Size: " + to_string(tex_size_kb) + " KB").c_str());
