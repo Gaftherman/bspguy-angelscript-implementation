@@ -38,7 +38,7 @@ int glGetErrorDebug() {
 
 void glCheckError(const char* checkMessage) {
 	// error checking is very expensive
-#ifndef RELEASE_MODE
+#ifdef DEBUG_MODE
 	static int lastError = 0;
 	int glerror = glGetError();
 	if (glerror != GL_NO_ERROR) {
@@ -508,14 +508,17 @@ void Renderer::renderLoop() {
 
 		glCheckError("Setting up view");
 
+		vector<OrderedEnt> orderedEnts;
+		mapRenderer->getRenderEnts(orderedEnts);
+
 		// draw opaque world/entity faces
-		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, false);
+		mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, false);
 
 		glCheckError("Rendering BSP (opaque pass)");
 
 		// wireframe pass
 		if (g_render_flags & RENDER_WIREFRAME) {
-			mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);
+			mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);
 			glCheckError("Rendering BSP (wireframe pass)");
 		}
 		
@@ -527,7 +530,7 @@ void Renderer::renderLoop() {
 		glCheckError("Rendering models and sprites");
 		
 		// draw transparent entity faces
-		mapRenderer->render(pickInfo.ents, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
+		mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
 		glCheckError("Rendering BSP (transparency pass)");
 
 		if (!mapRenderer->isFinishedLoading()) {

@@ -132,7 +132,7 @@ private:
 	void drawDebugWidget();
 	void drawKeyvalueEditor();
 	void drawKeyvalueEditor_SmartEditTab(Fgd* fgd);
-	void drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, float inputWidth, bool isGrouped, int keyOffset);
+	void drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef*>& keys, float inputWidth, bool isGrouped, int keyOffset);
 	void drawKeyvalueEditor_FlagsTab(Fgd* fgd);
 	void drawKeyvalueEditor_RawEditTab();
 	void drawTransformWidget();

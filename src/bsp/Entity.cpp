@@ -344,7 +344,7 @@ EntRenderOpts Entity::getRenderOpts() {
 	return cachedRenderOpts;
 }
 
-mat4x4 Entity::getRotationMatrix(bool flipped) {
+const mat4x4& Entity::getRotationMatrix(bool flipped) {
 	if (hasCachedRotMatrixes) { // TODO: force rotate messing this up i think
 		return flipped ? cachedRotationMatrixFlipped : cachedRotationMatrix;
 	}

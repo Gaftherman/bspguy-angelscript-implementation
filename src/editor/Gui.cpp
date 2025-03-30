@@ -111,7 +111,7 @@ void Gui::draw() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-#ifndef RELEASE_MODE
+#ifdef DEBUG_MODE
 	ImGui::ShowDemoWindow();
 #endif
 
@@ -2763,7 +2763,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab(Fgd* fgd) {
 	if (fgdClass != NULL) {
 		struct KeyGroup {
 			string name;
-			vector<KeyvalueDef> keys;
+			vector<KeyvalueDef*> keys;
 			COLOR3 color;
 
 			static uint32_t hash(const char* str) {
@@ -2802,7 +2802,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab(Fgd* fgd) {
 				tempGroup.keys.clear();
 				tempGroup.color = keyvalue.color;
 			}
-			tempGroup.keys.push_back(keyvalue);
+			tempGroup.keys.push_back(&keyvalue);
 		}
 		if (tempGroup.keys.size())
 			groups.push_back(tempGroup);
@@ -2856,7 +2856,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab(Fgd* fgd) {
 	ImGui::EndChild();
 }
 
-void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, float inputWidth, bool isGrouped, int keyOffset) {
+void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef*>& keys, float inputWidth, bool isGrouped, int keyOffset) {
 	static char keyNames[MAX_KEYS_PER_ENT][MAX_KEY_LEN];
 	static char keyValues[MAX_KEYS_PER_ENT][MAX_VAL_LEN];
 
@@ -2875,7 +2875,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef>& keys, f
 	vector<Entity*> pickEnts = app->pickInfo.getEnts();
 
 	for (int i = 0; i < keys.size(); i++) {
-		KeyvalueDef& keyvalue = keys[i];
+		KeyvalueDef& keyvalue = *keys[i];
 		string key = keyvalue.name;
 		if (key == "spawnflags") {
 			continue;

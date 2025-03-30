@@ -318,9 +318,7 @@ void BspRenderer::updateModelShaders() {
 void BspRenderer::loadLightmaps() {
 	double startTime = glfwGetTime();
 
-	// don't get too crazy, lightmap nodes are 16bit, and it takes longer to gen
-	// lightmaps for large sizes
-	int maxSize = g_settings.renderer == RENDERER_OPENGL_21_LEGACY ? 1024 : 2048; // old 
+	int maxSize = g_settings.renderer == RENDERER_OPENGL_21_LEGACY ? 1024 : 2048; // old gpu lied about max texture size
 	lightmapAtlasSz = clamp(g_max_texture_size, 512, maxSize);
 	lightmapAtlasZoneSz = 128; // 64 is too small for maps like snd, 256 or greater is slower
 
@@ -1677,7 +1675,32 @@ int BspRenderer::addTextureToMap(string textureName) {
 	return newMiptex;
 }
 
-void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
+void BspRenderer::getRenderEnts(vector<OrderedEnt>& ents) {
+	ents.reserve(map->ents.size());
+	vec3 mapOffset = map->ents.size() ? map->ents[0]->getOrigin() : vec3();
+	vec3 renderOffset = mapOffset.flip();
+
+	for (int i = 0; i < map->ents.size(); i++) {
+		map->ents[i]->highlighted = false;
+		OrderedEnt ent;
+		ent.ent = map->ents[i];
+		ent.modelIdx = map->ents[i]->getBspModelIdx();
+		ent.transform = renderEnts[i].modelMat;
+		ent.transform.translate(renderOffset.x, renderOffset.y, renderOffset.z);
+		ent.transform = ent.transform * map->ents[i]->getRotationMatrix(false);
+		ents.push_back(ent);
+	}
+	for (Entity* highlightEnt : g_app->pickInfo.getEnts()) {
+		highlightEnt->highlighted = true;
+	}
+
+	// draw highlighted ents last
+	sort(ents.begin(), ents.end(), [](const OrderedEnt& a, const OrderedEnt& b) {
+		return a.ent->highlighted < b.ent->highlighted;
+		});
+}
+
+void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAlwaysOnTop,
 	int clipnodeHull, bool transparencyPass, bool wireframePass) {
 	if (map->ents.empty())
 		return;
@@ -1698,6 +1721,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDepthFunc(GL_LEQUAL);
 
 	if (!wireframePass) {
 		if (g_render_flags & RENDER_LIGHTMAPS) {
@@ -1708,72 +1732,44 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 		}
 	}
 
-	std::unordered_set<int> highlighted;
-	for (int highlightEnt : highlightedEnts) {
-		highlighted.insert(highlightEnt);
-	}
-
-	// draw highlighted ent first so other ent edges don't overlap the highlighted edges (for solids)
-	if (highlightedEnts.size() && !highlightAlwaysOnTop && !transparencyPass && !wireframePass) {
-		for (int highlightEnt : highlightedEnts) {
-			if (renderEnts[highlightEnt].modelIdx >= 0 && renderEnts[highlightEnt].modelIdx < map->modelCount) {				
-				Entity* ent = map->ents[highlightEnt];
-				if (ent->hidden)
-					continue;
-				if (!willDrawModel(ent, renderEnts[highlightEnt].modelIdx, true))
-					continue;
-
-				activeShader->pushMatrix(MAT_MODEL);
-				*activeShader->modelMat = renderEnts[highlightEnt].modelMat;
-				activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-				*activeShader->modelMat = *activeShader->modelMat * ent->getRotationMatrix(false);
-				activeShader->updateMatrixes();
-
-				if (wireframePass)
-					drawModelWireframe(renderEnts[highlightEnt].modelIdx, true);
-				else
-					drawModel(ent, renderEnts[highlightEnt].modelIdx, false, true);
-
-				activeShader->popMatrix(MAT_MODEL);
-			}
-		}
-	}
-
 	if (wireframePass)
 		drawModelWireframe(0, false);
 	else {
 		drawModel(map->ents[0], 0, transparencyPass, false);
 	}
 
-	for (int i = 0, sz = map->ents.size(); i < sz; i++) {
-		if (renderEnts[i].modelIdx >= 0 && renderEnts[i].modelIdx < map->modelCount) {
-			Entity* ent = map->ents[i];
+	activeShader->pushMatrix(MAT_MODEL);
+	for (int i = 0, sz = orderedEnts.size(); i < sz; i++) {
+		const OrderedEnt& orderEnt = orderedEnts[i];
+		int modelIdx = orderEnt.modelIdx;
+
+		if (modelIdx >= 0 && modelIdx < map->modelCount) {
+			Entity* ent = orderEnt.ent;
 			if (ent->hidden)
 				continue;
-			if (!willDrawModel(ent, renderEnts[i].modelIdx, transparencyPass))
+			if (!wireframePass && !willDrawModel(ent, modelIdx, transparencyPass))
 				continue;
 
-			bool isHighlighted = highlighted.count(i);
-			activeShader->pushMatrix(MAT_MODEL);
-			*activeShader->modelMat = renderEnts[i].modelMat;
-			activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-			*activeShader->modelMat = *activeShader->modelMat * map->ents[i]->getRotationMatrix(false);
+			if (highlightAlwaysOnTop && ent->highlighted)
+				glDisable(GL_DEPTH_TEST);
+			
+			*activeShader->modelMat = orderEnt.transform;
 			activeShader->updateMatrixes();
 
 			if (wireframePass)
-				drawModelWireframe(renderEnts[i].modelIdx, isHighlighted);
+				drawModelWireframe(modelIdx, ent->highlighted);
 			else
-				drawModel(ent, renderEnts[i].modelIdx, transparencyPass, isHighlighted);
-
-			activeShader->popMatrix(MAT_MODEL);
+				drawModel(ent, modelIdx, transparencyPass, ent->highlighted);
 		}
 	}
+	activeShader->popMatrix(MAT_MODEL);
 
 	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass && !wireframePass) {
-		drawPointEntities(highlightedEnts);
+		drawPointEntities();
 		activeShader->bind();
 	}
 
+	// draw clipnodes in a separate pass to prevent interleaving shader binds
 	if (clipnodesLoaded && transparencyPass && !wireframePass) {
 		g_app->colorShader->bind();
 
@@ -1782,72 +1778,45 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 		}
 
 		if ((g_render_flags & RENDER_ENTS) && (g_render_flags & RENDER_ENT_CLIPNODES)) {
-			for (int i = 0, sz = map->ents.size(); i < sz; i++) {
-				if (renderEnts[i].modelIdx >= 0 && renderEnts[i].modelIdx < map->modelCount) {
-					Entity* ent = map->ents[i];
+			g_app->colorShader->pushMatrix(MAT_MODEL);
+			for (int i = 0, sz = orderedEnts.size(); i < sz; i++) {
+				const OrderedEnt& orderEnt = orderedEnts[i];
+				int modelIdx = orderEnt.modelIdx;
+
+				if (modelIdx >= 0 && modelIdx < map->modelCount) {
+					Entity* ent = orderEnt.ent;
 					if (ent->hidden)
 						continue;
 
-					RenderClipnodes& clip = renderClipnodes[renderEnts[i].modelIdx];
-					if (clipnodeHull == -1 && getBestClipnodeHull(renderEnts[i].modelIdx) == -1) {
+					RenderClipnodes& clip = renderClipnodes[modelIdx];
+					if (clipnodeHull == -1 && getBestClipnodeHull(modelIdx) == -1) {
 						continue; // skip if no hull can be drawn
 					}
 
-					if (clipnodeHull == -1 && renderModels[renderEnts[i].modelIdx].groupCount > 0) {
+					if (clipnodeHull == -1 && renderModels[modelIdx].groupCount > 0) {
 						continue; // skip rendering for models that have faces, if in auto mode
 					}
-					bool isHighlighted = highlighted.count(i);
-					g_app->colorShader->pushMatrix(MAT_MODEL);
-					*g_app->colorShader->modelMat = renderEnts[i].modelMat;
-					g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-					*g_app->colorShader->modelMat = *g_app->colorShader->modelMat * map->ents[i]->getRotationMatrix(false);
+					
+					*g_app->colorShader->modelMat = orderEnt.transform;
 					g_app->colorShader->updateMatrixes();
 
-					if (isHighlighted) {
+					if (ent->highlighted) {
 						g_app->colorShader->setUniform("colorMult", vec4(1, 0.25f, 0.25f, 1));
 					}
 
-					drawModelClipnodes(renderEnts[i].modelIdx, false, clipnodeHull);
+					drawModelClipnodes(modelIdx, false, clipnodeHull);
 
-					if (isHighlighted) {
+					if (ent->highlighted) {
 						g_app->colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 					}
-
-					g_app->colorShader->popMatrix(MAT_MODEL);
 				}
 			}
+			g_app->colorShader->popMatrix(MAT_MODEL);
 		}		
 	}
 
-	if (highlightedEnts.size() && highlightAlwaysOnTop && transparencyPass) {
-		activeShader->bind();
-
-		glDisable(GL_DEPTH_TEST);
-		for (int highlightEnt : highlightedEnts) {
-			if (renderEnts[highlightEnt].modelIdx >= 0 && renderEnts[highlightEnt].modelIdx < map->modelCount) {
-				Entity* ent = map->ents[highlightEnt];
-				if (ent->hidden)
-					continue;
-				if (!willDrawModel(ent, renderEnts[highlightEnt].modelIdx, true))
-					continue;
-
-				activeShader->pushMatrix(MAT_MODEL);
-				activeShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
-				*activeShader->modelMat = renderEnts[highlightEnt].modelMat;
-				*activeShader->modelMat = *activeShader->modelMat * ent->getRotationMatrix(false);
-				activeShader->updateMatrixes();
-				
-				if (wireframePass) 
-					drawModelWireframe(renderEnts[highlightEnt].modelIdx, true);
-				else
-					drawModel(ent, renderEnts[highlightEnt].modelIdx, true, true);
-				
-				activeShader->popMatrix(MAT_MODEL);
-			}
-		}
-		glEnable(GL_DEPTH_TEST);
-	}
-
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 	delayLoadData();
 }
 
@@ -2046,13 +2015,13 @@ void BspRenderer::drawModelClipnodes(int modelIdx, bool highlight, int hullIdx) 
 	}
 }
 
-void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
+void BspRenderer::drawPointEntities() {
 	vec3 renderOffset = mapOffset.flip();
 
 	g_app->colorShader->bind();
 	g_app->colorShader->updateMatrixes();
 
-	if (highlightedEnts.empty() && !(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
+	if (g_app->pickInfo.ents.empty() && !(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
 		if (pointEnts->numVerts > 0)
 			pointEnts->draw(GL_TRIANGLES);
 		return;
@@ -2060,11 +2029,6 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 
 	int pointEntIdx = 0;
 	int nextRangeDrawIdx = 0; // starting index for the next range draw
-
-	std::unordered_set<int> highlighted;
-	for (int highlightEnt : highlightedEnts) {
-		highlighted.insert(highlightEnt);
-	}
 
 	const int cubeVerts = 6 * 6;
 
@@ -2074,7 +2038,7 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 		if (renderEnts[i].modelIdx >= 0 || ent->hidden)
 			continue;
 
-		if (highlighted.count(i) || map->ents[i]->didStudioDraw) {
+		if (ent->highlighted || map->ents[i]->didStudioDraw) {
 			if (pointEntIdx - nextRangeDrawIdx > 0) {
 				pointEnts->drawRange(GL_TRIANGLES, cubeVerts * nextRangeDrawIdx, cubeVerts * pointEntIdx);
 			}
@@ -2086,8 +2050,10 @@ void BspRenderer::drawPointEntities(const vector<int>& highlightedEnts) {
 				g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
 				g_app->colorShader->updateMatrixes();
 
-				renderEnts[i].pointEntCube->selectBuffer->draw(GL_TRIANGLES);
-				renderEnts[i].pointEntCube->buffer->draw(GL_TRIANGLES);
+				if (ent->highlighted)
+					renderEnts[i].pointEntCube->selectBuffer->draw(GL_TRIANGLES);
+				else
+					renderEnts[i].pointEntCube->buffer->draw(GL_TRIANGLES);
 				renderEnts[i].pointEntCube->wireframeBuffer->draw(GL_LINES);
 
 				g_app->colorShader->popMatrix(MAT_MODEL);

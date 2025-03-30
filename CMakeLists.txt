@@ -172,8 +172,8 @@ if(MSVC)
 		${CMAKE_CURRENT_BINARY_DIR}/__dummy_file.h
 	)
 	add_dependencies(${PROJECT_NAME} my_custom_target_that_always_runs)
-	
-	# no warnings for release builds, static runtime
+
+	# no warnings for release builds
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W0")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W1")
 
@@ -181,7 +181,7 @@ if(MSVC)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP /we4715")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} /MP /we4715")
 	
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DRELEASE_MODE")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG_MODE")
 		
 	add_subdirectory(glfw)
 	
@@ -321,6 +321,6 @@ else()
 	add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 	target_link_libraries(${PROJECT_NAME} glfw liblzma GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -fno-omit-frame-pointer -std=c++11")
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DRELEASE_MODE -O2")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG_MODE -g -O0")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 endif()

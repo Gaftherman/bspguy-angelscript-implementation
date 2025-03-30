@@ -33,6 +33,7 @@ class Entity
 public:
 	vector<string> keyOrder;
 	bool hidden = false; // hidden in the 3d view
+	bool highlighted = false; // temporary within a single render call only
 
 	// model rendering state updated whenever drawCached is false
 	bool drawCached; // origin, angles, sequence, and model are cached?
@@ -82,7 +83,7 @@ public:
 
 	EntRenderOpts getRenderOpts();
 
-	mat4x4 getRotationMatrix(bool flipped);
+	const mat4x4& getRotationMatrix(bool flipped);
 
 	// color assigned by color255 key in the FGD (lights)
 	COLOR3 getFgdTint();

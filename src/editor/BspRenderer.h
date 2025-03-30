@@ -101,6 +101,12 @@ struct RenderClipnodes {
 	vector<FaceMath> faceMaths[MAX_MAP_HULLS];
 };
 
+struct OrderedEnt {
+	Entity* ent;
+	int modelIdx;
+	mat4x4 transform;
+};
+
 struct BSPMODEL;
 struct BSPFACE;
 
@@ -151,14 +157,15 @@ public:
 	BspRenderer(Bsp* map, PointEntRenderer* fgd);
 	~BspRenderer();
 
-	void render(const vector<int>& highlightedEnts, bool highlightAlwaysOnTop,
+	void getRenderEnts(vector<OrderedEnt>& ents); // calc ent data for multipass rendering
+	void render(const vector<OrderedEnt>& orderedEnts, bool highlightAlwaysOnTop,
 		int clipnodeHull, bool transparencyPass, bool wireframePass);
 
 	bool willDrawModel(Entity* ent, int modelIdx, bool transparent);
 	void drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight);
 	void drawModelWireframe(int modelIdx, bool highlight);
 	void drawModelClipnodes(int modelIdx, bool highlight, int hullIdx);
-	void drawPointEntities(const vector<int>& highlightedEnts);
+	void drawPointEntities();
 
 	bool pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx);
 	bool pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int modelIdx, int hullIdx, int testEntidx, int& faceIdx, float& bestDist);
