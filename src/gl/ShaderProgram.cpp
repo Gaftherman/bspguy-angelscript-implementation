@@ -10,9 +10,20 @@ ShaderProgram::ShaderProgram(string name)
 	this->name = name;
 	compiled = false;
 	modelViewID = modelViewProjID = -1;
+	vShader = fShader = NULL;
 }
 
 void ShaderProgram::compile(const char* vshaderSource, const char* fshaderSource) {
+	if (vShader) {
+		removeShader(vShader->ID);
+		delete vShader;
+		vShader = NULL;
+	}
+	if (fShader) {
+		removeShader(fShader->ID);
+		delete fShader;
+		fShader = NULL;
+	}
 	vShader = new Shader(vshaderSource, GL_VERTEX_SHADER);
 	fShader = new Shader(fshaderSource, GL_FRAGMENT_SHADER);
 	link();

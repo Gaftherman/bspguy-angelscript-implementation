@@ -12,14 +12,6 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Download and install dependencies
-      run: |
-        Invoke-WebRequest https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0-win32.zip -outfile glew-2.2.0-win32.zip
-
-        tar -xf glew-2.2.0-win32.zip
-
-        ren glew-2.2.0 glew
-
     - name: Build release 
       run: |
         mkdir build && cd build

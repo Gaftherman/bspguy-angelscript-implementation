@@ -4383,7 +4383,7 @@ void Gui::drawSettings() {
 			ImGui::Columns(2);
 			ImGui::Checkbox("Verbose Logging", &g_verbose);
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("For troubleshooting problems with the program or specific commands");
+				ImGui::SetTooltip("For troubleshooting problems with the program");
 			}
 			ImGui::NextColumn();
 

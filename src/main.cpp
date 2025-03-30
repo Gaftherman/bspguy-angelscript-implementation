@@ -5,13 +5,6 @@
 #include "Renderer.h"
 #include "globals.h"
 
-// TODO v5:
-// caching for ent matrix
-// asset path beginning with / doesn't work
-// lag on first model pick
-// tooltips for general settings
-// update shaders when renderer changed
-
 // v5 todo low prio:
 // ripent saftey warning
 // hold click to select behind
@@ -25,7 +18,7 @@
 // speed up clipnode gen ?
 // box selection for entities
 // add glew to a repo somewhere so fresh building is easier
-// scale axes in wrong place for rotated solids
+// scale axes and vertex editing in wrong place for rotated solids
 
 // todo:
 // alt instead of ctrl for slow movement, then can use hotkeys

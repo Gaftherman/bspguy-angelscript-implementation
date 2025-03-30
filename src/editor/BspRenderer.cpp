@@ -1810,8 +1810,8 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 	if (highlightedEnts.size() && highlightAlwaysOnTop && transparencyPass) {
 		activeShader->bind();
 
+		glDisable(GL_DEPTH_TEST);
 		for (int highlightEnt : highlightedEnts) {
-			glDisable(GL_DEPTH_TEST);
 			if (renderEnts[highlightEnt].modelIdx >= 0 && renderEnts[highlightEnt].modelIdx < map->modelCount) {
 				Entity* ent = map->ents[highlightEnt];
 				if (ent->hidden)
@@ -1832,8 +1832,8 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 				
 				activeShader->popMatrix(MAT_MODEL);
 			}
-			glEnable(GL_DEPTH_TEST);
 		}
+		glEnable(GL_DEPTH_TEST);
 	}
 
 	delayLoadData();
