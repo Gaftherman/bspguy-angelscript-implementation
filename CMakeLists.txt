@@ -7,6 +7,12 @@ set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
 
 project(bspguy)
 
+if (MSVC)
+	# static runtime for all projects
+	add_compile_options(/MT)
+	add_definitions(-UHAVE___BUILTIN_ASSUME_ALIGNED) # probably only needed for v141_xp
+endif()
+
 set(BUILD_TESTING OFF)
 set(XZ_TOOL_XZ OFF)
 set(XZ_TOOL_XZDEC OFF)
@@ -153,7 +159,6 @@ include_directories(imgui/backends)
 include_directories(glew/include)
 include_directories(${CMAKE_BINARY_DIR})
 
-
 add_definitions(-DGLEW_STATIC)
 
 if(MSVC)
@@ -167,16 +172,16 @@ if(MSVC)
 		${CMAKE_CURRENT_BINARY_DIR}/__dummy_file.h
 	)
 	add_dependencies(${PROJECT_NAME} my_custom_target_that_always_runs)
-
-	# no warnings for release builds
+	
+	# no warnings for release builds, static runtime
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W0")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W1")
 
-	# parallel compile
+	# parallel compile,
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP /we4715")
-
-	# compile using the static runtime	
-	set_property(TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} /MP /we4715")
+	
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DRELEASE_MODE")
 		
 	add_subdirectory(glfw)
 	
@@ -317,5 +322,5 @@ else()
 	target_link_libraries(${PROJECT_NAME} glfw liblzma GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -fno-omit-frame-pointer -std=c++11")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DRELEASE_MODE -O2")
 endif()

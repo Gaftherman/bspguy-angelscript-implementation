@@ -94,7 +94,6 @@ void Texture::upload(int format, bool lightmap)
 		{
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 		}
 
 		if (format == GL_RGB)
@@ -103,6 +102,34 @@ void Texture::upload(int format, bool lightmap)
 		}
 
 		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+		if (!lightmap && width % 16 == 0 && height % 16 == 0 && format == GL_RGBA) {
+			const int mipLevels = 3;
+			COLOR4* texdata = (COLOR4*)data;
+
+			for (int m = 1; m <= mipLevels; m++) {
+				int mipWidth = width >> m;
+				int mipHeight = height >> m;
+				int scale = 1 << m;
+
+				COLOR4* mipData = new COLOR4[mipWidth * mipHeight];
+				for (int y = 0; y < mipHeight; y++) {
+					for (int x = 0; x < mipWidth; x++) {
+						int srcX = x * scale;
+						int srcY = y * scale;
+						mipData[y * mipWidth + x] = texdata[y * width * scale + x * scale];
+					}
+				}
+
+				glTexImage2D(GL_TEXTURE_2D, m, format, mipWidth, mipHeight, 0, format, GL_UNSIGNED_BYTE, mipData);
+				delete[] mipData;
+			}
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels);
+		}
+		else {
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		}
 	}
 
 	uploaded = true;

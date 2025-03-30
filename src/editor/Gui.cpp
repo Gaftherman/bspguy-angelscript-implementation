@@ -111,7 +111,7 @@ void Gui::draw() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-#ifndef NDEBUG
+#ifndef RELEASE_MODE
 	ImGui::ShowDemoWindow();
 #endif
 
@@ -192,6 +192,8 @@ void Gui::draw() {
 	ImGui::Render();
 	glViewport(0, 0, app->windowWidth, app->windowHeight);
 	ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+
+	glDisable(GL_SCISSOR_TEST);
 
 	if (shouldReloadFonts) {
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -817,7 +819,6 @@ void Gui::drawMenuBar() {
 
 		if (ImGui::BeginMenu("Recent Files", !app->isLoading)) {
 			if (g_settings.recentFiles.size()) {
-				ImGui::Separator();
 				int idx = 1;
 				for (int i = g_settings.recentFiles.size() - 1; i >= 0; i--) {
 					if (ImGui::MenuItem((to_string(idx++) + ": " + g_settings.recentFiles[i]).c_str(), NULL)) {
@@ -4437,7 +4438,7 @@ void Gui::drawSettings() {
 			ImGui::Columns(2);
 			ImGui::Checkbox("Animate Models", &g_settings.animate_models);
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Animations have a high impact on performance with the legacy renderer.\n");
+				ImGui::SetTooltip("Animations have a big impact on FPS with the legacy renderer.\n");
 			}
 
 			ImGui::NextColumn();

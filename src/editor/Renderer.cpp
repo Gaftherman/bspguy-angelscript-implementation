@@ -38,7 +38,7 @@ int glGetErrorDebug() {
 
 void glCheckError(const char* checkMessage) {
 	// error checking is very expensive
-#ifndef NDEBUG
+#ifndef RELEASE_MODE
 	static int lastError = 0;
 	int glerror = glGetError();
 	if (glerror != GL_NO_ERROR) {
@@ -174,6 +174,7 @@ Renderer::Renderer() {
 	const char* openglExts = (const char*)glGetString(GL_EXTENSIONS);
 
 	logf("OpenGL Version: %s\n", (char*)glGetString(GL_VERSION));
+	logf("    Max Texture size: %dx%d\n", g_max_texture_size, g_max_texture_size);
 	logf("    Texture Units: %d / 5\n", texImageUnits);
 	logf("    Texture Array Layers: %d\n", g_max_texture_array_layers);
 	logf("    Vertex Texture Fetch Units: %d\n", g_max_vtf_units);
@@ -187,6 +188,13 @@ Renderer::Renderer() {
 
 	// init to black screen instead of white
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// give ImGui something to push/pop to
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
 	glfwSwapBuffers(window);
 	glfwSwapInterval(1);
 

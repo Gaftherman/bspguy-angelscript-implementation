@@ -32,11 +32,6 @@ BspRenderer::BspRenderer(Bsp* map, PointEntRenderer* pointEntRenderer) {
 	this->map = map;
 	this->pointEntRenderer = pointEntRenderer;
 
-	// don't get too crazy, lightmap nodes are 16bit, and it takes longer to gen
-	// lightmaps for large sizes
-	lightmapAtlasSz = clamp(g_max_texture_size, 512, 2048);
-	lightmapAtlasZoneSz = 128; // 64 is too small for maps like snd, 256 or greater is slower
-
 	renderEnts = NULL;
 	renderModels = NULL;
 	faceMaths = NULL;
@@ -322,6 +317,12 @@ void BspRenderer::updateModelShaders() {
 
 void BspRenderer::loadLightmaps() {
 	double startTime = glfwGetTime();
+
+	// don't get too crazy, lightmap nodes are 16bit, and it takes longer to gen
+	// lightmaps for large sizes
+	int maxSize = g_settings.renderer == RENDERER_OPENGL_21_LEGACY ? 1024 : 2048; // old 
+	lightmapAtlasSz = clamp(g_max_texture_size, 512, maxSize);
+	lightmapAtlasZoneSz = 128; // 64 is too small for maps like snd, 256 or greater is slower
 
 	vector<TextureAtlas*> atlases;
 	vector<Texture*> atlasTextures;
@@ -1713,7 +1714,7 @@ void BspRenderer::render(const vector<int>& highlightedEnts, bool highlightAlway
 	}
 
 	// draw highlighted ent first so other ent edges don't overlap the highlighted edges (for solids)
-	if (highlightedEnts.size() && !highlightAlwaysOnTop && !transparencyPass) {
+	if (highlightedEnts.size() && !highlightAlwaysOnTop && !transparencyPass && !wireframePass) {
 		for (int highlightEnt : highlightedEnts) {
 			if (renderEnts[highlightEnt].modelIdx >= 0 && renderEnts[highlightEnt].modelIdx < map->modelCount) {				
 				Entity* ent = map->ents[highlightEnt];
