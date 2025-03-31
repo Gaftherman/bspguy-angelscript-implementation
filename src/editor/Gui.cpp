@@ -387,6 +387,7 @@ void Gui::draw3dContextMenus() {
 				}
 			}
 
+
 			if (anyBspModelSelected) {
 				
 
@@ -406,7 +407,8 @@ void Gui::draw3dContextMenus() {
 						}
 						checkValidHulls();
 						
-						map->remove_unused_model_structures().print_delete_stats(1);
+						// don't delete models so that indexes don't shift which would require a full refresh
+						map->remove_unused_model_structures(false).print_delete_stats(1);
 						reloadLimits();
 
 						command->pushUndoState();
@@ -430,7 +432,7 @@ void Gui::draw3dContextMenus() {
 							}
 							checkValidHulls();
 
-							map->remove_unused_model_structures().print_delete_stats(1);
+							map->remove_unused_model_structures(false).print_delete_stats(1);
 							reloadLimits();
 
 							command->pushUndoState();
@@ -460,7 +462,7 @@ void Gui::draw3dContextMenus() {
 						checkValidHulls();
 
 						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures().print_delete_stats(1);
+						map->remove_unused_model_structures(false).print_delete_stats(1);
 						reloadLimits();
 
 						command->pushUndoState();
@@ -483,7 +485,7 @@ void Gui::draw3dContextMenus() {
 						checkValidHulls();
 
 						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures().print_delete_stats(1);
+						map->remove_unused_model_structures(false).print_delete_stats(1);
 						reloadLimits();
 
 						command->pushUndoState();
@@ -509,7 +511,7 @@ void Gui::draw3dContextMenus() {
 							checkValidHulls();
 
 							logf("Cleaning %s\n", map->name.c_str());
-							map->remove_unused_model_structures().print_delete_stats(1);
+							map->remove_unused_model_structures(false).print_delete_stats(1);
 							reloadLimits();
 
 							command->pushUndoState();
@@ -533,7 +535,7 @@ void Gui::draw3dContextMenus() {
 						}
 
 						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures().print_delete_stats(1);
+						map->remove_unused_model_structures(false).print_delete_stats(1);
 						reloadLimits();
 
 						command->pushUndoState();
@@ -557,7 +559,7 @@ void Gui::draw3dContextMenus() {
 							}
 
 							logf("Cleaning %s\n", map->name.c_str());
-							map->remove_unused_model_structures().print_delete_stats(1);
+							map->remove_unused_model_structures(false).print_delete_stats(1);
 							reloadLimits();
 
 							command->pushUndoState();
@@ -593,7 +595,7 @@ void Gui::draw3dContextMenus() {
 									checkValidHulls();
 									
 									logf("Cleaning %s\n", map->name.c_str());
-									map->remove_unused_model_structures().print_delete_stats(1);
+									map->remove_unused_model_structures(false).print_delete_stats(1);
 									reloadLimits();
 
 									command->pushUndoState();

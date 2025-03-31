@@ -1387,7 +1387,7 @@ int Bsp::remove_unused_visdata(STRUCTREMAP* remap, BSPLEAF* oldLeaves, int oldLe
 	return oldVisLength - newVisLen;
 }
 
-STRUCTCOUNT Bsp::remove_unused_model_structures() {
+STRUCTCOUNT Bsp::remove_unused_model_structures(bool deleteModels) {
 	int oldVisLeafCount = 0;
 	count_leaves(models[0].iHeadnodes[0], oldVisLeafCount);
 	//oldVisLeafCount = models[0].nVisLeafs;
@@ -1405,10 +1405,12 @@ STRUCTCOUNT Bsp::remove_unused_model_structures() {
 		}
 	}
 
+	int deletedModels = 0;
 	// reversed so models can be deleted without shifting the next delete index
  	for (int i = modelCount-1; i >= 0; i--) { 
-		if (!usedModels[i]) {
+		if (!usedModels[i] && deleteModels) {
 			delete_model(i);
+			deletedModels++;
 		}
 		else {
 			mark_model_structures(i, &usedStructures, false);
@@ -1442,6 +1444,7 @@ STRUCTCOUNT Bsp::remove_unused_model_structures() {
 	removeCount.edges = remove_unused_structs(LUMP_EDGES, usedStructures.edges, remap.edges);
 	removeCount.verts = remove_unused_structs(LUMP_VERTICES, usedStructures.verts, remap.verts);
 	removeCount.textures = remove_unused_textures(usedStructures.textures, remap.textures);
+	removeCount.models = deletedModels;
 
 	STRUCTCOUNT newCounts(this);
 
