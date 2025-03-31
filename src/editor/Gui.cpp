@@ -353,18 +353,61 @@ void Gui::draw3dContextMenus() {
 				app->deleteEnts();
 			}
 			ImGui::Separator();
-			int modelIdx = app->pickInfo.getModelIndex();
-			if (modelIdx > 0) {
-				Bsp* map = app->pickInfo.getMap();
-				BSPMODEL& model = *app->pickInfo.getModel();
+			
+			Bsp* map = app->pickInfo.getMap();
+			bool anyBspModelSelected = false;
+			bool anyValidHeadnode[MAX_MAP_HULLS] = {false};
+			bool anyRedirectValid[MAX_MAP_HULLS] = { false };
+			bool anyCanRedirect = false;
+			vector<Entity*> pickEnts = app->pickInfo.getEnts();
+			vector<int> modelIndexes;
+			for (Entity* ent : pickEnts) {
+				int modelIdx = ent->getBspModelIdx();
 
-				if (ImGui::BeginMenu("Create Hull", !app->invalidSolid && app->isTransformableSolid)) {
+				if (modelIdx < 0)
+					continue;
+
+				BSPMODEL& model = map->models[modelIdx];
+				anyBspModelSelected = true;
+				modelIndexes.push_back(modelIdx);
+				for (int i = 0; i < MAX_MAP_HULLS; i++) {
+					if (model.iHeadnodes[i] >= 0) {
+						anyValidHeadnode[i] = true;
+					}
+				}
+				if (model.iHeadnodes[1] != model.iHeadnodes[2] || model.iHeadnodes[1] != model.iHeadnodes[3]) {
+					anyCanRedirect = true;
+				}
+				for (int i = 1; i < MAX_MAP_HULLS; i++) {
+					for (int k = 1; k < MAX_MAP_HULLS; k++) {
+						if (model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i]) {
+							anyRedirectValid[i] = true;
+						}
+					}
+				}
+			}
+
+			if (anyBspModelSelected) {
+				
+
+				if (ImGui::BeginMenu("Create Hull", !app->invalidSolid && app->isTransformableSolid && anyValidHeadnode[0])) {
 					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Create Model Clipnodes", modelIdx);
+						ModelEditCommand* command = new ModelEditCommand("Create Model Clipnodes", modelIndexes);
 
-						map->regenerate_clipnodes(modelIdx, -1);
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[0] >= 0) {
+								map->regenerate_clipnodes(idx, -1);
+								logf("Regenerated hulls 1-3 on model %d\n", idx);
+							}
+							else {
+								logf("Model %d has no nodes. Skipping.\n", idx);
+							}
+						}
 						checkValidHulls();
-						logf("Regenerated hulls 1-3 on model %d\n", modelIdx);
+						
+						map->remove_unused_model_structures().print_delete_stats(1);
+						reloadLimits();
 
 						command->pushUndoState();
 					}
@@ -372,14 +415,23 @@ void Gui::draw3dContextMenus() {
 					ImGui::Separator();
 
 					for (int i = 1; i < MAX_MAP_HULLS; i++) {
-						bool isHullValid = model.iHeadnodes[i] >= 0;
-
 						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str())) {
-							ModelEditCommand* command = new ModelEditCommand("Create Model Hull", modelIdx);
+							ModelEditCommand* command = new ModelEditCommand("Create Model Hull", modelIndexes);
 
-							map->regenerate_clipnodes(modelIdx, i);
+							for (int idx : modelIndexes) {
+								BSPMODEL& model = map->models[idx];
+								if (model.iHeadnodes[0] >= 0) {
+									map->regenerate_clipnodes(idx, i);
+									logf("Regenerated hull %d on model %d\n", i, idx);
+								}
+								else {
+									logf("Model %d has no nodes. Skipping.\n", idx);
+								}
+							}
 							checkValidHulls();
-							logf("Regenerated hull %d on model %d\n", i, modelIdx);
+
+							map->remove_unused_model_structures().print_delete_stats(1);
+							reloadLimits();
 
 							command->pushUndoState();
 						}
@@ -390,25 +442,49 @@ void Gui::draw3dContextMenus() {
 
 				if (ImGui::BeginMenu("Delete Hull", !app->isLoading)) {
 					if (ImGui::MenuItem("All Hulls")) {
-						ModelEditCommand* command = new ModelEditCommand("Delete Model Hulls", modelIdx);
+						ModelEditCommand* command = new ModelEditCommand("Delete Model Hulls", modelIndexes);
 
-						map->delete_hull(0, modelIdx, -1);
-						map->delete_hull(1, modelIdx, -1);
-						map->delete_hull(2, modelIdx, -1);
-						map->delete_hull(3, modelIdx, -1);
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[0] >= 0 || model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
+								map->delete_hull(0, idx, -1);
+								map->delete_hull(1, idx, -1);
+								map->delete_hull(2, idx, -1);
+								map->delete_hull(3, idx, -1);
+								logf("Deleted all hulls on model %d\n", idx);
+							}
+							else {
+								logf("Model %d has no hulls. Skipping.\n", idx);
+							}
+						}
 						checkValidHulls();
-						logf("Deleted all hulls on model %d\n", modelIdx);
+
+						logf("Cleaning %s\n", map->name.c_str());
+						map->remove_unused_model_structures().print_delete_stats(1);
+						reloadLimits();
 
 						command->pushUndoState();
 					}
 					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Delete Model Clipnodes", modelIdx);
+						ModelEditCommand* command = new ModelEditCommand("Delete Model Clipnodes", modelIndexes);
 
-						map->delete_hull(1, modelIdx, -1);
-						map->delete_hull(2, modelIdx, -1);
-						map->delete_hull(3, modelIdx, -1);
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
+								map->delete_hull(1, idx, -1);
+								map->delete_hull(2, idx, -1);
+								map->delete_hull(3, idx, -1);
+								logf("Deleted hulls 1-3 on model %d\n", idx);
+							}
+							else {
+								logf("Model %d has no clipnodes. Skipping.\n", idx);
+							}
+						}
 						checkValidHulls();
-						logf("Deleted hulls 1-3 on model %d\n", modelIdx);
+
+						logf("Cleaning %s\n", map->name.c_str());
+						map->remove_unused_model_structures().print_delete_stats(1);
+						reloadLimits();
 
 						command->pushUndoState();
 					}
@@ -416,14 +492,25 @@ void Gui::draw3dContextMenus() {
 					ImGui::Separator();
 
 					for (int i = 0; i < MAX_MAP_HULLS; i++) {
-						bool isHullValid = model.iHeadnodes[i] >= 0;
 
-						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, isHullValid)) {
-							ModelEditCommand* command = new ModelEditCommand("Delete Model Hull", modelIdx);
+						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
+							ModelEditCommand* command = new ModelEditCommand("Delete Model Hull", modelIndexes);
 
-							map->delete_hull(i, modelIdx, -1);
+							for (int idx : modelIndexes) {
+								BSPMODEL& model = map->models[idx];
+								if (model.iHeadnodes[i] >= 0) {
+									map->delete_hull(i, idx, -1);
+									logf("Deleted hull %d on model %d\n", i, idx);
+								}
+								else {
+									logf("Model %d has no hull %d. Skipping.\n", idx, i);
+								}
+							}
 							checkValidHulls();
-							logf("Deleted hull %d on model %d\n", i, modelIdx);
+
+							logf("Cleaning %s\n", map->name.c_str());
+							map->remove_unused_model_structures().print_delete_stats(1);
+							reloadLimits();
 
 							command->pushUndoState();
 						}
@@ -433,14 +520,21 @@ void Gui::draw3dContextMenus() {
 				}
 				tooltip(g, "Deletes a hull from the selected model. Run the Clean command afterward to reduce the clipnode count for the map. Be careful using this as it can cause crashes if the entity needs the deleted hull.");
 
-				if (ImGui::BeginMenu("Simplify Hull", !app->isLoading)) {
+				if (ImGui::BeginMenu("Simplify Hull", !app->isLoading && (anyValidHeadnode[1] || anyValidHeadnode[2] || anyValidHeadnode[3]))) {
 					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Simplify Model Clipnodes", modelIdx);
+						ModelEditCommand* command = new ModelEditCommand("Simplify Model Clipnodes", modelIndexes);
 
-						map->simplify_model_collision(modelIdx, 1);
-						map->simplify_model_collision(modelIdx, 2);
-						map->simplify_model_collision(modelIdx, 3);
-						logf("Replaced hulls 1-3 on model %d with a box-shaped hull\n", modelIdx);
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							map->simplify_model_collision(idx, 1);
+							map->simplify_model_collision(idx, 2);
+							map->simplify_model_collision(idx, 3);
+							logf("Replaced hulls 1-3 on model %d with a box-shaped hull.\n", idx);
+						}
+
+						logf("Cleaning %s\n", map->name.c_str());
+						map->remove_unused_model_structures().print_delete_stats(1);
+						reloadLimits();
 
 						command->pushUndoState();
 					}
@@ -448,13 +542,23 @@ void Gui::draw3dContextMenus() {
 					ImGui::Separator();
 
 					for (int i = 1; i < MAX_MAP_HULLS; i++) {
-						bool isHullValid = model.iHeadnodes[i] >= 0;
+						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
+							ModelEditCommand* command = new ModelEditCommand("Simplify Model Hull", modelIndexes);
 
-						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, isHullValid)) {
-							ModelEditCommand* command = new ModelEditCommand("Simplify Model Hull", modelIdx);
+							for (int idx : modelIndexes) {
+								BSPMODEL& model = map->models[idx];
+								if (model.iHeadnodes[i] >= 0) {
+									map->simplify_model_collision(idx, 1);
+									logf("Replaced hull %d on model %d with a box-shaped hull\n", i, idx);
+								}
+								else {
+									logf("Model %d has no hull %d. Skipping.\n", idx, i);
+								}
+							}
 
-							map->simplify_model_collision(modelIdx, 1);
-							logf("Replaced hull %d on model %d with a box-shaped hull\n", i, modelIdx);
+							logf("Cleaning %s\n", map->name.c_str());
+							map->remove_unused_model_structures().print_delete_stats(1);
+							reloadLimits();
 
 							command->pushUndoState();
 						}
@@ -464,9 +568,7 @@ void Gui::draw3dContextMenus() {
 				}
 				tooltip(g, "Replaces a clipnode hull with a simple box. Run the Clean command afterward to reduce the clipnode count for the map.");
 
-				bool canRedirect = model.iHeadnodes[1] != model.iHeadnodes[2] || model.iHeadnodes[1] != model.iHeadnodes[3];
-
-				if (ImGui::BeginMenu("Redirect Hull", canRedirect && !app->isLoading)) {
+				if (ImGui::BeginMenu("Redirect Hull", anyCanRedirect && !app->isLoading)) {
 					for (int i = 1; i < MAX_MAP_HULLS; i++) {
 						if (ImGui::BeginMenu(("Hull " + to_string(i)).c_str())) {
 
@@ -474,14 +576,25 @@ void Gui::draw3dContextMenus() {
 								if (i == k)
 									continue;
 
-								bool isHullValid = model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i];
+								if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), 0, false, anyRedirectValid[i])) {
+									ModelEditCommand* command = new ModelEditCommand("Redirect Model Hull", modelIndexes);
 
-								if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), 0, false, isHullValid)) {
-									ModelEditCommand* command = new ModelEditCommand("Redirect Model Hull", modelIdx);
-
-									model.iHeadnodes[i] = model.iHeadnodes[k];
+									for (int idx : modelIndexes) {
+										BSPMODEL& model = map->models[idx];
+										bool canRedirect = model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i];
+										if (canRedirect) {
+											model.iHeadnodes[i] = model.iHeadnodes[k];
+											logf("Redirected hull %d to hull %d on model %d\n", i, k, idx);
+										}
+										else {
+											logf("Model %d has no hull %d or it was already redirected to %d. Skipping.\n", idx, k, i);
+										}
+									}
 									checkValidHulls();
-									logf("Redirected hull %d to hull %d on model %d\n", i, k, modelIdx);
+									
+									logf("Cleaning %s\n", map->name.c_str());
+									map->remove_unused_model_structures().print_delete_stats(1);
+									reloadLimits();
 
 									command->pushUndoState();
 								}
@@ -4343,9 +4456,9 @@ void Gui::drawSettings() {
 		ImGui::SameLine();
 
 		// right
-
+		bool hasFooter = settingsTab >= 2;
 		ImGui::BeginGroup();
-		int footerHeight = settingsTab <= 2 ? ImGui::GetFrameHeightWithSpacing() + 4 : 0;
+		int footerHeight = hasFooter ? ImGui::GetFrameHeightWithSpacing() + 4 : 0;
 		ImGui::BeginChild("item view", ImVec2(0, -footerHeight)); // Leave room for 1 line below us
 		ImGui::Text(tab_titles[settingsTab]);
 		ImGui::Separator();
@@ -4506,8 +4619,7 @@ void Gui::drawSettings() {
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Asset Paths are used to find textures and models.\n"
 					"Filling this out will fix missing textures (pink and black checkerboards)\n\n"
-					"You can use paths relative to your Game Directory or absolute paths."
-					"\nFor example, you would add \"valve\" here for Half-Life.");
+					"You can use paths relative to your Game Directory or absolute paths.");
 			}
 		}
 		else if (settingsTab == 3) {
@@ -4572,17 +4684,14 @@ void Gui::drawSettings() {
 				ImGui::SetTooltip("Add a path to a Game Definition File (.fgd)."
 					"\n\nFGD files define entity configurations. Without FGDs you will see pink\n"
 					"cubes and be unable to use the Attributes tab in the Keyvalue Editor.\n\n"
-					"You can use paths relative to your Asset Paths or absolute paths."
-					"\nFor example, you would add \"sven-coop.fgd\" here for Sven Co-op.");
+					"You can use paths relative to your Asset Paths or absolute paths.");
 			}
 		}
 
-
+		ImGui::EndChild();
 		ImGui::EndChild();
 
-		ImGui::EndChild();
-
-		if (settingsTab <= 3) {
+		if (hasFooter) {
 			ImGui::Separator();
 
 			ImGui::BeginDisabled(app->isLoading);

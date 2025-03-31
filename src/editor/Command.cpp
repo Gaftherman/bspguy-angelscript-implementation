@@ -501,13 +501,14 @@ void LumpReplaceCommand::refresh() {
 	Bsp* map = getBsp();
 	BspRenderer* renderer = getBspRenderer();
 
+	g_app->gui->refresh();
+
 	if (norefresh) {
 		return;
 	}
 
 	renderer->reload();
 	g_app->deselectObject();
-	g_app->gui->refresh();
 	g_app->saveLumpState(map, 0xffffffff, true);
 }
 
@@ -525,13 +526,16 @@ int LumpReplaceCommand::memoryUsage() {
 
 
 
-ModelEditCommand::ModelEditCommand(string desc, int modelIdx) : LumpReplaceCommand(desc) {
-	this->modelIdx = modelIdx;
+ModelEditCommand::ModelEditCommand(string desc, vector<int> modelIndexes) : LumpReplaceCommand(desc) {
+	this->modelIndexes = modelIndexes;
 }
 
 void ModelEditCommand::refresh() {
-	g_app->mapRenderer->refreshModel(modelIdx);
-	g_app->mapRenderer->refreshModelClipnodes(modelIdx);
+	for (int idx : modelIndexes) {
+		g_app->mapRenderer->refreshModel(idx);
+		g_app->mapRenderer->refreshModelClipnodes(idx);
+	}
+	g_app->gui->refresh();
 }
 
 int ModelEditCommand::memoryUsage() {

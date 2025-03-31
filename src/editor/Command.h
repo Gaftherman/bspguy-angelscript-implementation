@@ -121,13 +121,13 @@ public:
 	int memoryUsage();
 };
 
-// refreshes a single model instead of the entire map
+// refreshes sepcific models instead of the entire map
 // TODO: replace the other model edit command with this
 class ModelEditCommand : public LumpReplaceCommand {
 public:
-	int modelIdx;
+	vector<int> modelIndexes;
 
-	ModelEditCommand(string desc, int modelIdx);
+	ModelEditCommand(string desc, vector<int> modelIndexes);
 
 	void refresh() override;
 	int memoryUsage() override;

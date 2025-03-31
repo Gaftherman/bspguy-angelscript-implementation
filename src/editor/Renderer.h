@@ -62,6 +62,7 @@ class Renderer {
 	friend class CreateEntityFromTextCommand;
 	friend class EditBspModelCommand;
 	friend class LumpReplaceCommand;
+	friend class ModelEditCommand;
 	friend class FacesEditCommand;
 	friend class LeafNavMesh;
 	friend class BspRenderer;
