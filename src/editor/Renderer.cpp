@@ -574,7 +574,7 @@ void Renderer::renderLoop() {
 				model.loadIdentity();
 				colorShader->pushMatrix(MAT_MODEL);
 				if (pickInfo.getEnt()) {
-					vec3 offset = mapRenderer->mapOffset.flip();
+					vec3 offset = mapRenderer->renderOffset;
 					model.translate(offset.x, offset.y, offset.z);
 				}
 				colorShader->updateMatrixes();
@@ -1290,9 +1290,8 @@ void Renderer::drawModelVerts() {
 
 	Bsp* map = mapRenderer->map;
 	Entity* ent = pickInfo.getEnt();
-	vec3 mapOffset = mapRenderer->mapOffset;
-	vec3 renderOffset = mapOffset.flip();
-	vec3 localCameraOrigin = cameraOrigin - mapOffset;
+	vec3 renderOffset = mapRenderer->renderOffset;
+	vec3 localCameraOrigin = cameraOrigin - mapRenderer->mapOffset;
 
 	COLOR4 vertDimColor = { 200, 200, 200, 255 };
 	COLOR4 vertHoverColor = { 255, 255, 255, 255 };
@@ -1365,7 +1364,7 @@ void Renderer::drawModelOrigin() {
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	Bsp* map = mapRenderer->map;
-	vec3 mapOffset = mapRenderer->mapOffset;
+	vec3 renderOffset = mapRenderer->renderOffset;
 	Entity* ent = pickInfo.getEnt();
 
 	COLOR4 vertDimColor = { 0, 200, 0, 255 };
@@ -1377,7 +1376,7 @@ void Renderer::drawModelOrigin() {
 		vertDimColor = { 32, 32, 32, 255 };
 	}
 
-	vec3 ori = transformedOrigin + mapOffset;
+	vec3 ori = transformedOrigin + renderOffset;
 	float s = (ori - cameraOrigin).length() * vertExtentFactor;
 	ori = ori.flip();
 
@@ -1429,6 +1428,7 @@ void Renderer::drawTransformAxes() {
 void Renderer::drawEntConnections() {
 	if (entConnections && (g_render_flags & RENDER_ENT_CONNECTIONS)) {
 		model.loadIdentity();
+		model.translate(mapRenderer->renderOffset.x, mapRenderer->renderOffset.y, mapRenderer->renderOffset.z);
 		colorShader->updateMatrixes();
 		entConnections->draw(GL_LINES);
 	}
@@ -1503,9 +1503,6 @@ void Renderer::updateEntDirectionVectors() {
 			vec3* pos = (vec3*)&rawVerts[k].x;
 			*pos = (rotMat * vec4(*pos, 1)).xyz() + ori;
 		}
-		for (int k = 0; k < arrowVerts; k += 3) {
-
-		}
 	}
 
 	entDirectionVectors = new VertexBuffer(colorShader, COLOR_4B | POS_3F, arrows, numPointers * arrowVerts);
@@ -1524,6 +1521,7 @@ void Renderer::drawEntDirectionVectors() {
 
 	colorShader->bind();
 	model.loadIdentity();
+	model.translate(mapRenderer->renderOffset.x, mapRenderer->renderOffset.y, mapRenderer->renderOffset.z);
 	colorShader->updateMatrixes();
 	entDirectionVectors->draw(GL_TRIANGLES);
 
@@ -1609,6 +1607,7 @@ void Renderer::drawTextureAxes() {
 
 	colorShader->bind();
 	model.loadIdentity();
+	model.translate(mapRenderer->renderOffset.x, mapRenderer->renderOffset.y, mapRenderer->renderOffset.z);
 	colorShader->updateMatrixes();
 	allTextureAxes->draw(GL_LINES);
 
@@ -2856,7 +2855,7 @@ bool Renderer::drawModelsAndSprites() {
 		selectedEnts.insert(idx);
 	}
 
-	vec3 renderOffset = mapRenderer->mapOffset.flip();
+	vec3 renderOffset = mapRenderer->renderOffset;
 
 	vec3 camForward, camRight, camUp;
 	makeVectors(cameraAngles, camForward, camRight, camUp);
@@ -2872,7 +2871,7 @@ bool Renderer::drawModelsAndSprites() {
 
 	
 	float aspect = (float)windowWidth / (float)windowHeight;
-	Frustum frustum = getViewFrustum(cameraOrigin, cameraAngles, aspect, zNear, zFar, fov);
+	Frustum frustum = getViewFrustum(cameraOrigin - mapRenderer->mapOffset, cameraAngles, aspect, zNear, zFar, fov);
 
 	bool modelsLoading = false;
 

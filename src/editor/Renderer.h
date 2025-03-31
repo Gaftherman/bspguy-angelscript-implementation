@@ -48,7 +48,7 @@ struct TransformAxes {
 
 struct EntConnection {
 	Entity* self;
-	Entity* target;
+	Entity* target; // TODO: crashed
 	COLOR4 color;
 };
 

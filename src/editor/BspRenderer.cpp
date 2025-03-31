@@ -1677,8 +1677,8 @@ int BspRenderer::addTextureToMap(string textureName) {
 
 void BspRenderer::getRenderEnts(vector<OrderedEnt>& ents) {
 	ents.reserve(map->ents.size());
-	vec3 mapOffset = map->ents.size() ? map->ents[0]->getOrigin() : vec3();
-	vec3 renderOffset = mapOffset.flip();
+	mapOffset = map->ents.size() ? map->ents[0]->getOrigin() : vec3();
+	renderOffset = vec3(mapOffset.x, mapOffset.z, -mapOffset.y);
 
 	for (int i = 0; i < map->ents.size(); i++) {
 		map->ents[i]->highlighted = false;
@@ -1706,8 +1706,6 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 		return;
 	
 	BSPMODEL& world = map->models[0];
-	mapOffset = map->ents.size() ? map->ents[0]->getOrigin() : vec3();
-	vec3 renderOffset = mapOffset.flip();
 
 	activeShader = g_app->bspShader;
 
@@ -2016,8 +2014,6 @@ void BspRenderer::drawModelClipnodes(int modelIdx, bool highlight, int hullIdx) 
 }
 
 void BspRenderer::drawPointEntities() {
-	vec3 renderOffset = mapOffset.flip();
-
 	g_app->colorShader->bind();
 	g_app->colorShader->updateMatrixes();
 
@@ -2074,6 +2070,7 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 	entIdx = -1;
 	faceIdx = -1;
 
+	vec3 pickOffset = vec3(mapOffset.x, mapOffset.y, mapOffset.z);
 	start -= mapOffset;
 
 	if (!map || map->ents.size() == 0)

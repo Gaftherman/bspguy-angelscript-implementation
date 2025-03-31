@@ -150,7 +150,7 @@ class BspRenderer {
 public:
 	Bsp* map;
 	PointEntRenderer* pointEntRenderer;
-	vec3 mapOffset;
+	vec3 mapOffset, renderOffset;
 	int showLightFlag = -1;
 	vector<Wad*> wads;
 
