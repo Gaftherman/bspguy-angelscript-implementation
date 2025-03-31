@@ -573,29 +573,66 @@ void Renderer::renderLoop() {
 				colorShader->bind();
 				model.loadIdentity();
 				colorShader->pushMatrix(MAT_MODEL);
+				colorShader->updateMatrixes();
+				glDisable(GL_CULL_FACE);
+				
+				if ((g_render_flags & RENDER_MAP_BOUNDARY) && !emptyMapLoaded) {
+					glDepthFunc(GL_LESS);
+
+					COLOR4 red = COLOR4(255, 0, 0, 64);
+					COLOR4 invisible = COLOR4(0, 0, 0, 0);
+					COLOR4 green = COLOR4(0, 255, 0, 64);
+					COLOR4 boxColor = gui->hoveredOOB == 0 ? red : green;
+					vec3 center = vec3();
+					float width = g_settings.mapsize_max;
+					vec3 sz = vec3(width, width, width);
+					vec3 pos = vec3(center.x, center.z, -center.y);
+					cCube cube(pos - sz, pos + sz, gui->hoveredOOB == 0 ? red : green);
+
+					if (gui->hoveredOOB >= 0) {
+						red = COLOR4(255, 0, 0, 128);
+
+						BSPPLANE plane;
+						plane.fDist = g_settings.mapsize_max;
+						switch (gui->hoveredOOB) {
+						case 1: plane.vNormal = vec3(1, 0, 0); cube.right.setColor(invisible); break;
+						case 2: plane.vNormal = vec3(-1, 0, 0); cube.left.setColor(invisible); break;
+						case 3: plane.vNormal = vec3(0, 1, 0);  cube.front.setColor(invisible); break;
+						case 4: plane.vNormal = vec3(0, -1, 0); cube.back.setColor(invisible); break;
+						case 5: plane.vNormal = vec3(0, 0, 1); cube.bottom.setColor(invisible); break;
+						case 6: plane.vNormal = vec3(0, 0, -1); cube.top.setColor(invisible); break;
+						}
+
+						drawPlane(plane, red, g_settings.mapsize_max*1.2f);
+					}
+
+					{
+						VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &cube, 6 * 6);
+						buffer.upload();
+						buffer.draw(GL_TRIANGLES);
+					}
+					glDepthFunc(GL_LEQUAL);
+
+					glDepthFunc(GL_LEQUAL); // draw lines in front (still causes some z fighting)
+					drawBoxOutline(vec3(), g_settings.mapsize_max * 2, COLOR4(0, 0, 0, 255));
+					
+					glDepthFunc(GL_LESS);
+				}
+
 				if (pickInfo.getEnt()) {
 					vec3 offset = mapRenderer->renderOffset;
 					model.translate(offset.x, offset.y, offset.z);
 				}
 				colorShader->updateMatrixes();
-				glDisable(GL_CULL_FACE);
+
+				if (hasCullbox) {
+					drawBox(cullMins, cullMaxs, COLOR4(255, 0, 0, 64));
+				}
 
 				if (g_render_flags & RENDER_ORIGIN) {
 					drawLine(debugPoint - vec3(32, 0, 0), debugPoint + vec3(32, 0, 0), { 128, 128, 255, 255 });
 					drawLine(debugPoint - vec3(0, 32, 0), debugPoint + vec3(0, 32, 0), { 0, 255, 0, 255 });
 					drawLine(debugPoint - vec3(0, 0, 32), debugPoint + vec3(0, 0, 32), { 0, 0, 255, 255 });
-				}
-				
-				if ((g_render_flags & RENDER_MAP_BOUNDARY) && !emptyMapLoaded) {
-					glDepthFunc(GL_LESS);
-					drawBox(mapRenderer->map->ents[0]->getOrigin() * -1, g_settings.mapsize_max * 2, COLOR4(0, 255, 0, 64));
-					glDepthFunc(GL_LEQUAL); // draw lines in front (still causes some z fighting)
-					drawBoxOutline(mapRenderer->map->ents[0]->getOrigin() * -1, g_settings.mapsize_max * 2, COLOR4(0, 0, 0, 255));
-					glDepthFunc(GL_LESS);
-				}
-
-				if (hasCullbox) {
-					drawBox(cullMins, cullMaxs, COLOR4(255, 0, 0, 64));
 				}
 
 				glEnable(GL_CULL_FACE);

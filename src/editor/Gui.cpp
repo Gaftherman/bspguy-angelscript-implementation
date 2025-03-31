@@ -115,6 +115,8 @@ void Gui::draw() {
 	ImGui::ShowDemoWindow();
 #endif
 
+	hoveredOOB = -1;
+
 	drawMenuBar();
 	drawPopups();
 
@@ -1589,7 +1591,7 @@ void Gui::drawMenuBar() {
 
 		if (ImGui::MenuItem("Cull Entity", 0, false, true)) {
 			Entity* newEnt = new Entity();
-			vec3 origin = (app->cameraOrigin + app->cameraForward * 100);
+			vec3 origin = (app->cameraOrigin + app->cameraForward * 100) - app->mapRenderer->mapOffset;
 			if (app->gridSnappingEnabled)
 				origin = app->snapToGrid(origin);
 			newEnt->addKeyvalue("origin", origin.toKeyvalueString());
@@ -1770,15 +1772,15 @@ void Gui::drawMenuBar() {
 				"on the positive Z Axis",
 			};
 
-			static int clipFlags[10] = {
+			static int clipFlags[7] = {
 				(int)0xffffffff,
-				OOB_CLIP_X | OOB_CLIP_X_NEG,
+				//OOB_CLIP_X | OOB_CLIP_X_NEG,
 				OOB_CLIP_X,
 				OOB_CLIP_X_NEG,
-				OOB_CLIP_Y | OOB_CLIP_Y_NEG,
+				//OOB_CLIP_Y | OOB_CLIP_Y_NEG,
 				OOB_CLIP_Y,
 				OOB_CLIP_Y_NEG,
-				OOB_CLIP_Z | OOB_CLIP_Z_NEG,
+				//OOB_CLIP_Z | OOB_CLIP_Z_NEG,
 				OOB_CLIP_Z,
 				OOB_CLIP_Z_NEG,
 			};
@@ -1797,6 +1799,9 @@ void Gui::drawMenuBar() {
 
 					map->delete_oob_data(clipFlags[i]);
 					command->pushUndoState();
+				}
+				if (ImGui::IsItemHovered()) {
+					hoveredOOB = i;
 				}
 				tooltip(g, ("Deletes out-of-bounds BSP structures and entities " + string(optionDesc[i]) + ".\n\n"
 					"Enable the Map Boundary setting in the View menu to see what will be deleted.").c_str());
@@ -2404,9 +2409,10 @@ void Gui::drawStatusMessage() {
 	bool concave = !app->isTransformableSolid && app->pickInfo.ents.size() == 1;
 	bool invalidsolid = app->invalidSolid && app->pickInfo.ents.size() == 1;
 	bool dutchAngle = app->cameraAngles.y != 0;
+	bool worldspawnOri = app->mapRenderer->mapOffset != vec3();
 	bool showStatus = sharedStructs || concave || invalidsolid || badSurfaceExtents
 		|| lightmapTooLarge || app->modelUsesSharedStructures || app->forceAngleRotation
-		|| dutchAngle || angleKey;
+		|| dutchAngle || angleKey || worldspawnOri;
 	
 	if (showStatus) {
 		ImVec2 window_pos = ImVec2((app->windowWidth - windowWidth) / 2, app->windowHeight - (10.0f+mainMenuBarHeight));
@@ -2491,6 +2497,12 @@ void Gui::drawStatusMessage() {
 				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "ANGLE KEY");
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("The selected entity has an \"angle\" keyvalue set.\nThis key has special logic which overrides the \"angles\" keyvalue.");
+				}
+			}
+			if (worldspawnOri) {
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "WORLD ORIGIN");
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Worldspawn has an origin. This will break the game.\n\nEither apply the transformation or delete the origin key to fix.\n");
 				}
 			}
 			windowWidth = ImGui::GetWindowWidth();

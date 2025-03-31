@@ -46,6 +46,7 @@ class Gui {
 
 public:
 	Renderer* app;
+	int hoveredOOB;
 
 	Gui(Renderer* app);
 
