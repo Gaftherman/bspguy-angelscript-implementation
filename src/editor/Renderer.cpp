@@ -1241,7 +1241,6 @@ void Renderer::saveSettings() {
 	g_settings.zfar = zFar;
 	g_settings.fov = fov;
 	g_settings.render_flags = g_render_flags;
-	g_settings.fontSize = gui->fontSize;
 	g_settings.undoLevels = undoLevels;
 	g_settings.moveSpeed = moveSpeed;
 	g_settings.rotSpeed = rotationSpeed;
@@ -1266,7 +1265,6 @@ void Renderer::loadSettings() {
 	zFarMdl = g_settings.zFarMdl;
 	fov = g_settings.fov;
 	g_render_flags = g_settings.render_flags;
-	gui->fontSize = g_settings.fontSize;
 	undoLevels = g_settings.undoLevels;
 	rotationSpeed = g_settings.rotSpeed;
 	moveSpeed = g_settings.moveSpeed;

@@ -2,6 +2,8 @@
 #include "colors.h"
 #include "Texture.h"
 #include "globals.h"
+#include <string.h>
+#include <cmath>
 #include <base_resample.h>
 
 Texture::Texture(int width, int height) {

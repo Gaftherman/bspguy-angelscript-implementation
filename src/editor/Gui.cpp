@@ -2094,7 +2094,7 @@ void Gui::drawMenuBar() {
 
 
 	string fpsText = to_string((int)ImGui::GetIO().Framerate) + " FPS";
-	float fpsWidth = smallFont->CalcTextSizeA(fontSize * g_smallFontSizeMult, FLT_MAX, FLT_MAX, fpsText.c_str()).x;
+	float fpsWidth = smallFont->CalcTextSizeA(g_settings.fontSize * g_smallFontSizeMult, FLT_MAX, FLT_MAX, fpsText.c_str()).x;
 	float rightAlignStart = ImGui::GetWindowWidth() - (fpsWidth + 20);
 
 	ImGui::SameLine(rightAlignStart);
@@ -2146,6 +2146,7 @@ void Gui::drawStatusBar() {
 		
 		static char cam_origin[32];
 		static char cam_angles[32];
+		int fontSize = g_settings.fontSize;
 		static vec3 last_cam_origin = vec3(0.1f, 0, 0);
 		static vec3 last_cam_angles = vec3(0.1f, 0, 0);
 		float originWidth = smallFont->CalcTextSizeA(fontSize * g_smallFontSizeMult, FLT_MAX, FLT_MAX, cam_origin).x;
@@ -2338,7 +2339,7 @@ void Gui::drawToolbar() {
 		ImGuiContext& g = *GImGui;
 		ImVec4 dimColor = style.Colors[ImGuiCol_FrameBg];
 		ImVec4 selectColor = style.Colors[ImGuiCol_FrameBgActive];
-		float iconWidth = (fontSize / 22.0f) * 32;
+		float iconWidth = (g_settings.fontSize / 22.0f) * 32;
 		ImVec2 iconSize = ImVec2(iconWidth, iconWidth);
 		ImVec4 testColor = ImVec4(1, 0, 0, 1);
 		selectColor.x *= selectColor.w;
@@ -2405,8 +2406,8 @@ void Gui::drawStatusMessage() {
 
 	Entity* ent = app->pickInfo.getEnt();
 	bool angleKey = ent && ent->hasKey("angle");
-	bool sharedStructs = app->modelUsesSharedStructures;
-	bool concave = !app->isTransformableSolid;
+	bool sharedStructs = app->modelUsesSharedStructures && app->pickInfo.ents.size() > 0;
+	bool concave = !app->isTransformableSolid && app->pickInfo.ents.size() > 0;
 	bool invalidsolid = app->invalidSolid && app->pickInfo.ents.size() == 1;
 	bool dutchAngle = app->cameraAngles.y != 0;
 	bool worldspawnOri = app->mapRenderer->mapOffset != vec3();
@@ -4358,7 +4359,7 @@ void Gui::loadFonts() {
 			logf("Failed to decompress font! Crash imminent.\n");
 		}
 
-		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_unicode_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
+		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_unicode_sz, g_settings.fontSize * g_smallFontSizeMult, NULL, ranges.Data);
 	}
 	else {
 		if (lzmaDecompress((uint8_t*)notosans, sizeof(notosans), decompressed)) {
@@ -4370,12 +4371,12 @@ void Gui::loadFonts() {
 			logf("Failed to decompress font! Crash imminent.\n");
 		}
 
-		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_sz, fontSize * g_smallFontSizeMult, NULL, ranges.Data);
+		smallFont = io.Fonts->AddFontFromMemoryTTF((void*)smallFontData, notosans_sz, g_settings.fontSize * g_smallFontSizeMult, NULL, ranges.Data);
 	}
 	
-	largeFont = io.Fonts->AddFontFromMemoryTTF((void*)largeFontData, notosans_sz, fontSize*1.25f, NULL, ranges.Data);
-	consoleFont = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontData, notosans_mono_sz, fontSize, NULL, ranges.Data);
-	consoleFontLarge = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontLargeData, notosans_mono_sz, fontSize*1.1f, NULL, ranges.Data);
+	largeFont = io.Fonts->AddFontFromMemoryTTF((void*)largeFontData, notosans_sz, g_settings.fontSize *1.25f, NULL, ranges.Data);
+	consoleFont = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontData, notosans_mono_sz, g_settings.fontSize, NULL, ranges.Data);
+	consoleFontLarge = io.Fonts->AddFontFromMemoryTTF((void*)consoleFontLargeData, notosans_mono_sz, g_settings.fontSize *1.1f, NULL, ranges.Data);
 }
 
 void Gui::drawLog() {
@@ -4510,7 +4511,7 @@ void Gui::drawSettings() {
 		if (settingsTab == 0) {
 			ImGui::DragFloat("Movement Speed", &app->moveSpeed, 0.1f, 0.1f, 1000, "%.1f");
 			ImGui::DragFloat("Rotation Speed", &app->rotationSpeed, 0.01f, 0.1f, 100, "%.1f");
-			if (ImGui::DragInt("Font Size", &fontSize, 0.1f, 8, 48, "%d pixels")) {
+			if (ImGui::DragInt("Font Size", &g_settings.fontSize, 0.1f, 8, 48, "%d pixels")) {
 				shouldReloadFonts = true;
 			}
 			ImGui::DragInt("Undo Levels", &app->undoLevels, 0.05f, 0, 64);
@@ -4913,6 +4914,7 @@ void Gui::drawLimitsSummary(Bsp* map, bool modalMode) {
 	ImGui::Dummy(ImVec2(0, 10));
 	ImGui::PushFont(consoleFontLarge);
 
+	int fontSize = g_settings.fontSize;
 	int midWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, "    Current / Max    ").x;
 	int nameWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, "marksurfaces").x;
 
@@ -5058,6 +5060,7 @@ void Gui::drawLimitTab(Bsp* map, int sortMode) {
 	ImGui::Dummy(ImVec2(0, 10));
 	ImGui::PushFont(consoleFontLarge);
 
+	int fontSize = g_settings.fontSize;
 	int valWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Clipnodes ").x;
 	int usageWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, "  Usage   ").x;
 	int modelWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Model ").x;
@@ -5201,6 +5204,7 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 	ImGui::Dummy(ImVec2(0, 10));
 	ImGui::PushFont(consoleFontLarge);
 
+	int fontSize = g_settings.fontSize;
 	int valWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Clipnodes ").x;
 	int usageWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, "  Usage   ").x;
 	int modelWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Model ").x;
@@ -5581,6 +5585,7 @@ void Gui::drawEntityReport() {
 			ImGuiStyle& style = ImGui::GetStyle();
 			float padding = style.WindowPadding.x * 2 + style.FramePadding.x * 2;
 			float inputWidth = (ImGui::GetWindowWidth() - (padding + style.ScrollbarSize)) * 0.5f;
+			int fontSize = g_settings.fontSize;
 			inputWidth -= smallFont->CalcTextSizeA(fontSize*g_smallFontSizeMult, FLT_MAX, FLT_MAX, " = ").x;
 
 			for (int i = 0; i < MAX_FILTERS; i++) {
