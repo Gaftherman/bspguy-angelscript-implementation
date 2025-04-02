@@ -22,7 +22,7 @@ See the [wiki](https://github.com/wootguy/bspguy/wiki) for merging and porting t
 - Windows XP or later / Any flavor of Linux (AFAIK)
 - 256MB of VRAM
 
-If the program fails to start on Windows, launch it from the Command Prompt so you can see what failed. If textures/objects are black or completely missing, switch to the legacy renderer (`Settings` -> `Editor Setup` -> `Rendering` -> `OpenGL (Legacy)`).
+If the program fails to start on Windows, launch it from the Command Prompt so you can see what failed. If the program crashes when loading a map, or textures/objects are black or completely missing, switch to the legacy renderer (`Settings` -> `Editor Setup` -> `Rendering` -> `OpenGL (Legacy)`).
 
 ## First-time Setup
 1. Click `Settings` -> `Editor Setup` -> `Asset Paths`
