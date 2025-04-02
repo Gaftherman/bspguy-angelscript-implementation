@@ -5,7 +5,8 @@
 #include "Renderer.h"
 #include "globals.h"
 
-// v5 todo low prio:
+
+// todo:
 // ripent saftey warning
 // hold click to select behind
 // skybox rendering
@@ -19,8 +20,7 @@
 // box selection for entities
 // add glew to a repo somewhere so fresh building is easier
 // scale axes and vertex editing in wrong place for rotated solids
-
-// todo:
+// - ! textures dont count toward allocblock?
 // alt instead of ctrl for slow movement, then can use hotkeys
 // figure out mdl asan corruption. maybe a false positive it doesn't really make sense. disabling external sequence loads fixes
 // invalid solid undo not reverting plane vertex positions sometimes
@@ -84,7 +84,7 @@
 // Removing HULL 0 from solid model crashes game when standing on it
 
 
-const char* g_version_string = "bspguy v5 WIP (March 2025)";
+const char* g_version_string = "bspguy v5 (April 2025)";
 
 bool g_verbose = false;
 
