@@ -2,40 +2,41 @@
 A tool for editing GoldSrc maps without decompiling.
 
 # Usage
-To launch the 3D editor, drag and drop a .bsp file onto the executable, or "Open with" bspguy, or run `bspguy <mapname>`
+Double-click to launch the 3D editor, or run `bspguy -help` for the command-line interface.
 
-See the [wiki](https://github.com/wootguy/bspguy/wiki) for tutorials.
+See the [wiki](https://github.com/wootguy/bspguy/wiki) for merging and porting tutorials.
 
 ## Editor Features
-- Keyvalue editor with FGD support
-- Entity + BSP model creation and duplication
-- Easy object movement and scaling
-- Vertex manipulation + face splitting
-    - Used to make perfectly shaped triggers. A box is often good enough, though.
-- BSP model origin movement/alignment
-- Optimize + clean commands to prevent overflows
-- Hull deletion + redirection + creation
-  - clipnode generation is similar to `-cliptype legacy` in the CSG compiler (the _worst_ method)
-- Basic face editing
+- Entity editor with FGD support
+- Visualized entity connections and keyvalue searching
+- Map merging and porting tools
+- BSP model editing (convex only)
+- Texture editing
+- Clipnode rendering
+- And more!
 
-![image](https://user-images.githubusercontent.com/12087544/88471604-1768ac80-cec0-11ea-9ce5-13095e843ce7.png)
+![image](https://github.com/user-attachments/assets/1db127c9-e52a-4ca6-a011-ccb2ed2a7407)
 
-**The editor is full of bugs, unstable, and not all actions can be undone. Save early and often! Make backups before experimenting with anything.**
+## System Requirements
+- OpenGL 2.1
+- Windows XP or later / Any flavor of Linux (AFAIK)
+- 256MB of VRAM
 
-Requires OpenGL 3.0 or later.
+If the program fails to start on Windows, launch it from the Command Prompt so you can see what failed. If textures/objects are black or completely missing, switch to the legacy renderer (`Settings` -> `Editor Setup` -> `Rendering` -> `OpenGL (Legacy)`).
 
 ## First-time Setup
-1. Click `File` -> `Settings` -> `General`
-1. Set the `Game Directory` to your game folder path (e.g. `D:/Steam/steamapps/common/Half-Life/`), then click `Apply Changes`.
-    - This will fix the missing textures.
-1. Click the `FGDs` tab and add the full path to your game's fgd file(s) (e.g. `D:/Steam/steamapps/Sven Co-op/svencoop/sven-coop.fgd`). Click `Apply Changes`.
-    - This will give point entities more colorful cubes, and enable the `Attributes` tab in the `Keyvalue editor`.
+1. Click `Settings` -> `Editor Setup` -> `Asset Paths`
+1. Set the `Game Directory` to your game folder path (e.g. `D:\Steam\steamapps\common\Half-Life`).
+1. Add mod directory names as `Asset Paths` (e.g. `valve`, `cstrike`, `svencoop`)
+    - Suffixed paths are searched automatically (adding `valve` implies `valve_addon`, `valve_hd`, and `valve_downloads`).
+    - Use absolute paths if you have multiple game directories (e.g. `C:\Steam\steamapps\common\Sven Co-op\svencoop`).
+1. Click the `FGDs` tab and add your mod FGD file(s). Paths can be absolute or relative to your Asset Paths.
+1. Click `Apply Changes`. This should fix missing textures, replace pink cubes, and enable the `Attributes` tab in the `Keyvalue editor`
 
-bspguy saves configuration files to `%APPDATA%/bspguy` on Windows.
-
+bspguy saves configuration files to `%APPDATA%/bspguy` on Windows, and to `~/.config/bspguy` on Linux.
 
 ## Command Line
-Some functions are only available via the CLI.
+Some editor functions are also available via the CLI. I recommend using the CLI for map merging because it can process 3+ maps at once.
 
 ```
 Usage: bspguy <command> <mapname> [options]
@@ -55,18 +56,17 @@ Run 'bspguy <command> help' to read about a specific command.
 ### Windows users:
 1. Install [CMake](https://cmake.org/download/), [Visual Studio Community](https://visualstudio.microsoft.com/downloads/), and [Git](https://git-scm.com/download/win).
     * Visual Studio: Make sure to checkmark "Desktop development with C++" if you're installing for the first time. 
-1. Open a command prompt somewhere and run this command to download the source code (don't click the download zip button!):
+1. Open a command prompt somewhere and run these commands to download and build the source code:
    ```
     git clone --recurse-submodules --shallow-submodules https://github.com/wootguy/bspguy
-    ```
-1. Download [GLEW](http://glew.sourceforge.net/) (choose the `Binaries Windows 32-bit and 64-bit` link) and extract the `glew-x.y.z` folder into the `bspguy` folder that was created in the previous step. Rename the `glew-x.y.z` folder to `glew`.
-1. Open a command prompt in the `bspguy` folder and run these commands:
-    ```
+    cd bspguy
     mkdir build && cd build
     cmake ..
     cmake --build . --config Release
     ```
     (you can open a command-prompt in the current folder by typing `cmd` into the address bar of the explorer window)
+
+To build an x86 version for Windows XP, replace the `cmake ..` command with `cmake -A win32 -T v141_xp ..`. You will need the  `v141_xp` toolset downloaded. It's available in the Visual Studio Installer for VS 2017.
 
 ### Linux users:
 1. Install Git, CMake, X11, GLFW, GLEW, and a compiler.
@@ -75,8 +75,8 @@ Run 'bspguy <command> help' to read about a specific command.
     ```
     git clone --recurse-submodules --shallow-submodules https://github.com/wootguy/bspguy
     cd bspguy
-    mkdir build; cd build
-    cmake .. -DCMAKE_BUILD_TYPE=RELEASE
+    mkdir build && cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release
     make
     ```
     (a terminal can _usually_ be opened by pressing F4 with the file manager window in focus)
