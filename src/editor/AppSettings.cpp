@@ -161,7 +161,6 @@ void AppSettings::load() {
 
 	if (resPaths.size() == 0) {
 		resPaths.push_back("valve");
-		resPaths.push_back("valve_downloads");
 	}
 }
 

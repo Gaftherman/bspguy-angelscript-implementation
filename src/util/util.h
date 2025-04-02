@@ -126,6 +126,8 @@ void push_unique_vec2(vector<vec2>& verts, vec2 vert);
 
 void push_unique_vec3(vector<vec3>& verts, vec3 vert);
 
+vector<string> getAssetPaths(string assetPath);
+
 vector<string> getAssetPaths();
 
 // search all asset paths for a file

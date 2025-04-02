@@ -1,7 +1,6 @@
 #define MAX_MAP_HULLS	4
 #define MAX_MAP_COORD 131072 // stuff breaks past this point
 
-#define MAX_TEXTURE_DIMENSION 1024
 #define MAXTEXTURENAME 16
 #define MIPLEVELS 4
 

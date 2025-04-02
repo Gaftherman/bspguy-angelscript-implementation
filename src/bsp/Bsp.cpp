@@ -5576,11 +5576,11 @@ BSPMIPTEX * Bsp::find_embedded_texture(const char* name) {
 
 int Bsp::add_texture(const char* name, byte* data, int width, int height) {
 	if (width % 16 != 0 || height % 16 != 0) {
-		logf("Dimensions not divisible by 16");
+		logf("Texture %s dimensions are not divisible by 16.", name);
 		return -1;
 	}
-	if (width > MAX_TEXTURE_DIMENSION || height > MAX_TEXTURE_DIMENSION) {
-		logf("Width/height too large");
+	if (width * height > g_limits.max_texturepixels) {
+		logf("Texture %s is too big to add.", name);
 		return -1;
 	}
 

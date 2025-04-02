@@ -937,9 +937,52 @@ void sleepms(uint32_t ms)
 #endif
 }
 
+vector<string> getAssetPaths(string assetPath) {
+	vector<string> paths = {};
+
+	assetPath = string(assetPath.c_str());
+
+	const char* suffixes[4] = {
+		"_addon",
+		"_hd",
+		"",
+		"_downloads"
+	};
+
+
+	char end = assetPath[assetPath.size() - 1];
+	if (end == '\\' || end == '/') {
+		assetPath = assetPath.substr(0, assetPath.find_last_not_of("/\\")+1);
+	}
+
+	bool isAbsolute = isAbsolutePath(assetPath);
+
+	for (int i = 0; i < 4; i++) {
+		string suffixedPath = assetPath + suffixes[i];
+
+#ifdef WIN32
+		suffixedPath += "\\";
+#else
+		suffixedPath += "/";
+#endif
+
+		if (!isAbsolute && g_settings.gamedir.length())
+			paths.push_back(joinPaths(g_settings.gamedir, suffixedPath));
+		else
+			paths.push_back(suffixedPath);
+	}
+
+	return paths;
+}
+
 vector<string> getAssetPaths() {
-	vector<string> tryPaths = {
-		"./"
+	vector<string> tryPaths = {};
+
+	const char* suffixes[4] = {
+		"_addon",
+		"_hd",
+		"",
+		"_downloads"
 	};
 
 	for (const string& resPath : g_settings.resPaths) {
@@ -954,10 +997,10 @@ vector<string> getAssetPaths() {
 #endif
 		}
 
-		tryPaths.push_back(path);
-
-		if (!isAbsolutePath(path) && g_settings.gamedir.length())
-			tryPaths.push_back(joinPaths(g_settings.gamedir, path));
+		vector<string> paths = getAssetPaths(path);
+		for (string& suffixedPath : paths) {
+			tryPaths.push_back(suffixedPath);
+		}
 	}
 
 	return tryPaths;

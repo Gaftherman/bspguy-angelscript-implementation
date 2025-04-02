@@ -4594,7 +4594,9 @@ void Gui::drawSettings() {
 			*/
 		}
 		else if (settingsTab == 2) {
-			ImGui::InputText("##GameDir", gamedir, 256, ImGuiInputTextFlags_ElideLeft);
+			if (ImGui::InputText("##GameDir", gamedir, 256, ImGuiInputTextFlags_ElideLeft)) {
+				g_settings.gamedir = string(gamedir);
+			}
 
 			ImGui::SameLine();
 			ImGui::Text("Game Directory");
@@ -4612,13 +4614,13 @@ void Gui::drawSettings() {
 				ImGui::InputText(("##res" + to_string(i)).c_str(), &tmpResPaths[i][0], 256, ImGuiInputTextFlags_ElideLeft);
 				ImGui::SameLine();
 				if (ImGui::IsItemHovered()) {
-					string paths = tmpResPaths[i];
-					if (!isAbsolutePath(tmpResPaths[i])) {
-						paths = joinPaths(getAbsolutePath(""), tmpResPaths[i]);
-						if (!string(gamedir).empty())
-							paths += "\n" + joinPaths(gamedir, tmpResPaths[i]);
+					vector<string> paths = getAssetPaths(tmpResPaths[i]);
+					string pathStr;
+					for (string& path : paths) {
+						pathStr += "\n" + path;
 					}
-					ImGui::SetTooltip(("This asset path adds the following search paths:\n" + paths).c_str());
+
+					ImGui::SetTooltip(("This asset path adds the following search paths:\n" + pathStr).c_str());
 				}
 
 				ImGui::SameLine();
@@ -4641,7 +4643,7 @@ void Gui::drawSettings() {
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Asset Paths are used to find textures and models.\n"
 					"Filling this out will fix missing textures (pink and black checkerboards)\n\n"
-					"You can use paths relative to your Game Directory or absolute paths.");
+					"You can use paths relative to your Game Directory or absolute paths.\nSuffixed paths are searched automatically (_addon, _hd, and _downloads)");
 			}
 		}
 		else if (settingsTab == 3) {
