@@ -4643,7 +4643,7 @@ void Gui::drawSettings() {
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Asset Paths are used to find textures and models.\n"
 					"Filling this out will fix missing textures (pink and black checkerboards)\n\n"
-					"You can use paths relative to your Game Directory or absolute paths.\nSuffixed paths are searched automatically (_addon, _hd, and _downloads)");
+					"You can use paths relative to your Game Directory or absolute paths.\nSuffixed paths are searched automatically (_addon and _downloads)");
 			}
 		}
 		else if (settingsTab == 3) {

@@ -942,9 +942,9 @@ vector<string> getAssetPaths(string assetPath) {
 
 	assetPath = string(assetPath.c_str());
 
-	const char* suffixes[4] = {
+	const char* suffixes[3] = {
 		"_addon",
-		"_hd",
+		//"_hd", (don't want to see the HD models...)
 		"",
 		"_downloads"
 	};
@@ -957,7 +957,7 @@ vector<string> getAssetPaths(string assetPath) {
 
 	bool isAbsolute = isAbsolutePath(assetPath);
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 3; i++) {
 		string suffixedPath = assetPath + suffixes[i];
 
 #ifdef WIN32
@@ -978,24 +978,8 @@ vector<string> getAssetPaths(string assetPath) {
 vector<string> getAssetPaths() {
 	vector<string> tryPaths = {};
 
-	const char* suffixes[4] = {
-		"_addon",
-		"_hd",
-		"",
-		"_downloads"
-	};
-
 	for (const string& resPath : g_settings.resPaths) {
 		string path = std::string(resPath.c_str()); // this is necessary for some reason
-
-		char end = path[path.size() - 1];
-		if (end != '\\' && end != '/') {
-#ifdef WIN32
-			path += "\\";
-#else
-			path += "/";
-#endif
-		}
 
 		vector<string> paths = getAssetPaths(path);
 		for (string& suffixedPath : paths) {
