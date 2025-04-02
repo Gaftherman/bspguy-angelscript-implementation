@@ -494,6 +494,7 @@ bool MdlRenderer::loadTextureData() {
 
 			glTextures[i] = new Texture(tex->width, tex->height, imageData);
 			glTextures[i]->format = GL_RGBA;
+			//glTextures[i]->generateMipMaps(3);
 		} else{
 			COLOR3* imageData = new COLOR3[imageDataSz];
 
@@ -503,6 +504,7 @@ bool MdlRenderer::loadTextureData() {
 
 			glTextures[i] = new Texture(tex->width, tex->height, imageData);
 			glTextures[i]->format = GL_RGB;
+			//glTextures[i]->generateMipMaps(3);
 		}
 	}
 
