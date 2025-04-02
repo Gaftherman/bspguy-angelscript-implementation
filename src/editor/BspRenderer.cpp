@@ -2310,6 +2310,7 @@ void PickInfo::selectFace(int faceIdx) {
 void PickInfo::deselect() {
 	ents.clear();
 	faces.clear();
+	g_app->pickCount++;
 	//logf("Deselect\n");
 }
 
@@ -2444,6 +2445,11 @@ vector<int> PickInfo::getModelIndexes() {
 	vector<int> outIdx;
 	Bsp* map = getMap();
 
+	for (int i = 0; i < ents.size(); i++) {
+		int modelIdx = map->ents[ents[i]]->getBspModelIdx();
+		if (modelIdx >= 0)
+			outIdx.push_back(modelIdx);
+	}
 	for (int i = 0; i < faces.size(); i++) {
 		outIdx.push_back(map->get_model_from_face(faces[i]));
 	}

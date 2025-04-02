@@ -2288,8 +2288,12 @@ void Renderer::pickObject() {
 		}
 
 		isTransformableSolid = pickInfo.ents.size() == 1;
-		if (isTransformableSolid && pickInfo.getModelIndex() > 0) {
-			isTransformableSolid = pickInfo.getMap()->is_convex(pickInfo.getModelIndex());
+		if (isTransformableSolid) {
+			for (int idx : pickInfo.getModelIndexes()) {
+				isTransformableSolid = pickInfo.getMap()->is_convex(pickInfo.getModelIndex());
+				if (!isTransformableSolid)
+					break;
+			}
 		}
 	}
 	else if (pickMode == PICK_FACE) {
@@ -3394,7 +3398,11 @@ void Renderer::updateModelVerts() {
 
 	updateSelectionSize();
 
-	modelUsesSharedStructures = map->does_model_use_shared_structures(modelIdx);
+	for (int idx : pickInfo.getModelIndexes()) {
+		modelUsesSharedStructures |= map->does_model_use_shared_structures(idx);
+		if (modelUsesSharedStructures)
+			break;
+	}
 
 	if (!map->is_convex(modelIdx)) {
 		return;
@@ -4458,10 +4466,10 @@ void Renderer::goToFace(Bsp* map, int faceIdx) {
 		}
 	}
 
-	vec3 offset;
+	vec3 offset = mapRenderer->mapOffset;
 	for (int i = 0; i < map->ents.size(); i++) {
 		if (map->ents[i]->getBspModelIdx() == modelIdx) {
-			offset = map->ents[i]->getOrigin();
+			offset += map->ents[i]->getOrigin();
 		}
 	}
 

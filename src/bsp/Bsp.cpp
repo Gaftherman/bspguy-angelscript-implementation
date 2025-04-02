@@ -525,13 +525,13 @@ bool Bsp::vertex_manipulation_sync(int modelIdx, vector<TransformVert>& hullVert
 		vector<vec3>& verts = it->second;
 
 		if (verts.size() < 3) {
-			logf("Face has less than 3 verts\n");
+			debugf("Face has less than 3 verts\n");
 			return false; // invalid solid
 		}
 
 		BSPPLANE newPlane;
 		if (!getPlaneFromVerts(verts, newPlane.vNormal, newPlane.fDist)) {
-			logf("Verts not planar\n");
+			debugf("Verts not planar\n");
 			return false; // verts not planar
 		}
 
@@ -968,10 +968,13 @@ void Bsp::split_shared_model_structures(int modelIdx) {
 
 	g_progress.update("Split model structures", modelCount);
 
-	mark_model_structures(modelIdx, &shouldMove, modelIdx == 0);
+	bool notMovingLeaves = modelIdx != 0;
+
+	int startIdx;
+	mark_model_structures(modelIdx, &shouldMove, notMovingLeaves);
 	for (int i = 0; i < modelCount; i++) {
 		if (i != modelIdx)
-			mark_model_structures(i, &shouldNotMove, false);
+			mark_model_structures(i, &shouldNotMove, notMovingLeaves);
 
 		g_progress.tick();
 	}

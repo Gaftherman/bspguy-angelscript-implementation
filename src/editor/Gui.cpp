@@ -2000,10 +2000,10 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Search for entities by name, class, and/or other properties.");
 
-		if (ImGui::MenuItem("Face Properties", "", showTextureWidget)) {
+		if (ImGui::MenuItem("Face Editor", "", showTextureWidget)) {
 			showTextureWidget = !showTextureWidget;
 			if (showTextureWidget)
-				ImGui::SetWindowCollapsed("Face Properties", false);
+				ImGui::SetWindowCollapsed("Face Editor", false);
 		}
 		tooltip(g, "Edit faces and textures.");
 
@@ -2405,15 +2405,22 @@ void Gui::drawStatusMessage() {
 
 	Entity* ent = app->pickInfo.getEnt();
 	bool angleKey = ent && ent->hasKey("angle");
-	bool sharedStructs = app->modelUsesSharedStructures && app->pickInfo.ents.size() == 1;
-	bool concave = !app->isTransformableSolid && app->pickInfo.ents.size() == 1;
+	bool sharedStructs = app->modelUsesSharedStructures;
+	bool concave = !app->isTransformableSolid;
 	bool invalidsolid = app->invalidSolid && app->pickInfo.ents.size() == 1;
 	bool dutchAngle = app->cameraAngles.y != 0;
 	bool worldspawnOri = app->mapRenderer->mapOffset != vec3();
 	bool showStatus = sharedStructs || concave || invalidsolid || badSurfaceExtents
-		|| lightmapTooLarge || app->modelUsesSharedStructures || app->forceAngleRotation
+		|| lightmapTooLarge || sharedStructs || app->forceAngleRotation
 		|| dutchAngle || angleKey || worldspawnOri;
 	
+	static int lastPickCount = 0;
+
+	if (app->pickCount != lastPickCount) {
+		lastPickCount = app->pickCount;
+		checkFaceErrors();
+	}
+
 	if (showStatus) {
 		ImVec2 window_pos = ImVec2((app->windowWidth - windowWidth) / 2, app->windowHeight - (10.0f+mainMenuBarHeight));
 		ImVec2 window_pos_pivot = ImVec2(0.0f, 1.0f);
@@ -2422,28 +2429,28 @@ void Gui::drawStatusMessage() {
 
 		if (ImGui::Begin("status", 0, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
-			if (sharedStructs) {
-				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "SHARED DATA");
-				if (ImGui::IsItemHovered())
-				{
-					const char* info =
-						"Model shares planes/clipnodes with other models.\n\nDuplicate the model to enable model editing.";
-					ImGui::BeginTooltip();
-					ImGui::TextUnformatted(info);
-					ImGui::EndTooltip();
-				}
-			}
 			if (concave) {
-				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "CONCAVE SOLID");
+				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "CONCAVE SOLID");
 				if (ImGui::IsItemHovered())
 				{
 					const char* info =
-						"Scaling and vertex manipulation don't work with concave solids yet\n";
+						"Some features of the Transformation widget are disabled for the selected model(s).\n";
+					ImGui::BeginTooltip();
+					ImGui::TextUnformatted(info);
+					ImGui::EndTooltip();
+				}
+			} else if (sharedStructs) {
+				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "SHARED DATA");
+				if (ImGui::IsItemHovered())
+				{
+					const char* info =
+						"Model shares planes/clipnodes with other models.\n\nRight click the entity and select \"Duplicate BSP Model\" to enable all features of the Transformation widget.";
 					ImGui::BeginTooltip();
 					ImGui::TextUnformatted(info);
 					ImGui::EndTooltip();
 				}
 			}
+
 			if (invalidsolid) {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "INVALID SOLID");
 				if (ImGui::IsItemHovered())
@@ -5243,6 +5250,8 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 
 			app->deselectFaces();
 			app->pickInfo.selectFace(faceIdx);
+			app->mapRenderer->highlightFace(faceIdx, true);
+			app->updateTextureAxes();
 			app->pickMode = PICK_FACE;
 			showTextureWidget = true;
 			app->pickCount++;

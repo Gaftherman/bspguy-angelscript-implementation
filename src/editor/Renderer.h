@@ -69,6 +69,7 @@ class Renderer {
 	friend class MdlRenderer;
 	friend class SprRenderer;
 	friend class Entity;
+	friend class PickInfo;
 
 public:
 	BspRenderer* mapRenderer;
