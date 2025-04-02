@@ -2,6 +2,7 @@
 #include "colors.h"
 #include "Texture.h"
 #include "globals.h"
+#include <base_resample.h>
 
 Texture::Texture(int width, int height) {
 	this->width = width;
@@ -46,6 +47,66 @@ Texture::~Texture()
 		glDeleteTextures(1, &id);
 	if (data)
 		delete[] data;
+	for (MipTexture& mip : mipmaps) {
+		delete[] mip.data;
+	}
+}
+
+void Texture::generateMipMaps(int mipLevels) {
+	for (MipTexture& mip : mipmaps) {
+		delete[] mip.data;
+	}
+
+	mipmaps.clear();
+	COLOR4* texdata = (COLOR4*)data;
+
+	// convert to 24bit for resample lib
+	COLOR3* data24 = new COLOR3[width * height];
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			COLOR4& src = texdata[y * width + x];
+			COLOR3& dst = data24[y * width + x];
+			dst.r = src.r;
+			dst.g = src.g;
+			dst.b = src.b;
+		}
+	}
+
+	for (int m = 1; m <= mipLevels; m++) {
+		int mipWidth = width >> m;
+		int mipHeight = height >> m;
+		int scale = 1 << m;
+
+		COLOR3* mipData24 = new COLOR3[mipWidth * mipHeight];
+		base::ResampleImage24((byte*)data24, width, height, (byte*)mipData24, mipWidth, mipHeight,
+			base::KernelType::KernelTypeAverage); // checkerboards look less flickery with this
+			//base::KernelType::KernelTypeBilinear);
+			//base::KernelType::KernelTypeLanczos3);
+
+		// use nearest sampling to fill the alpha channel
+		COLOR4* mipData32 = new COLOR4[mipWidth * mipHeight];
+		for (int y = 0; y < mipHeight; y++) {
+			for (int x = 0; x < mipWidth; x++) {
+				COLOR3& src = mipData24[y * mipWidth + x];
+				COLOR4& dst = mipData32[y * mipWidth + x];
+				COLOR4& originalSrc = texdata[y * width * scale + x * scale];
+				dst.r = src.r;
+				dst.g = src.g;
+				dst.b = src.b;
+				dst.a = originalSrc.a;
+			}
+		}
+		delete[] mipData24;
+
+		MipTexture mip;
+		mip.width = mipWidth;
+		mip.height = mipHeight;
+		mip.data = mipData32;
+		mip.level = m;
+		mipmaps.push_back(mip);
+	}
+
+	delete[] data24;
 }
 
 void Texture::upload(int format, bool lightmap)
@@ -107,24 +168,11 @@ void Texture::upload(int format, bool lightmap)
 			const int mipLevels = 3;
 			COLOR4* texdata = (COLOR4*)data;
 
-			for (int m = 1; m <= mipLevels; m++) {
-				int mipWidth = width >> m;
-				int mipHeight = height >> m;
-				int scale = 1 << m;
-
-				COLOR4* mipData = new COLOR4[mipWidth * mipHeight];
-				for (int y = 0; y < mipHeight; y++) {
-					for (int x = 0; x < mipWidth; x++) {
-						int srcX = x * scale;
-						int srcY = y * scale;
-						mipData[y * mipWidth + x] = texdata[y * width * scale + x * scale];
-					}
-				}
-
-				glTexImage2D(GL_TEXTURE_2D, m, format, mipWidth, mipHeight, 0, format, GL_UNSIGNED_BYTE, mipData);
-				delete[] mipData;
+			for (MipTexture& mip : mipmaps) {
+				glTexImage2D(GL_TEXTURE_2D, mip.level , format, mip.width, mip.height, 0, format, GL_UNSIGNED_BYTE, mip.data);
 			}
 
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.5f);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels);
 		}
 		else {

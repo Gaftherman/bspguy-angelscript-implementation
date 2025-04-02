@@ -162,6 +162,7 @@ void BspRenderer::loadTextures() {
 			Texture* missingCopy = generateMissingTexture(16, 16);
 			glTexturesSwap[i] = missingCopy;
 			glTextureArray->add(missingCopy);
+			glTexturesSwap[i]->generateMipMaps(3);
 			continue;
 		}
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
@@ -200,6 +201,7 @@ void BspRenderer::loadTextures() {
 				Texture* missingCopy = generateMissingTexture(tex.nWidth, tex.nHeight);
 				glTexturesSwap[i] = missingCopy;
 				glTextureArray->add(missingCopy);
+				glTexturesSwap[i]->generateMipMaps(3);
 				continue;
 			}
 		}
@@ -230,6 +232,7 @@ void BspRenderer::loadTextures() {
 
 		glTexturesSwap[i] = new Texture(tex.nWidth, tex.nHeight, imageData);
 		glTextureArray->add(glTexturesSwap[i]);
+		glTexturesSwap[i]->generateMipMaps(3);
 	}
 
 	if (wadTexCount)

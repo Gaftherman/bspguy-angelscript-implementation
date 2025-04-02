@@ -195,17 +195,18 @@ void TextureArray::upload() {
 			bucketCount++;
 			textureCount += buckets[i].count;
 			debugf("%d textures in bucket %dx%d\n", buckets[i].count, sizeX, sizeY);
-			const int mipLevels = 3; // all textures should be divisible by 16 so this should never duplicate
-
+			
 			int glParam3d = g_opengl_texture_array_support ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_3D;
 
 			glBindTexture(glParam3d, buckets[i].glArrayId);
 			glTexImage3D(glParam3d, 0, GL_RGBA, sizeX, sizeY, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 			
 			// allocate mipmaps (TODO: enable conditionally and only for texture arrays, 3D can't have mips)
-			//glTexImage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA, sizeX >> 1, sizeY >> 1, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-			//glTexImage3D(GL_TEXTURE_2D_ARRAY, 2, GL_RGBA, sizeX >> 2, sizeY >> 2, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-			//glTexImage3D(GL_TEXTURE_2D_ARRAY, 3, GL_RGBA, sizeX >> 3, sizeY >> 3, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			if (g_opengl_texture_array_support) {
+				glTexImage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA, sizeX >> 1, sizeY >> 1, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+				glTexImage3D(GL_TEXTURE_2D_ARRAY, 2, GL_RGBA, sizeX >> 2, sizeY >> 2, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+				glTexImage3D(GL_TEXTURE_2D_ARRAY, 3, GL_RGBA, sizeX >> 3, sizeY >> 3, buckets[i].count, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			}
 
 			texDataSz += buckets[i].count * sizeX * sizeY * 3;
 
@@ -216,25 +217,12 @@ void TextureArray::upload() {
 
 					glTexSubImage3D(glParam3d, 0, 0, 0, k, sizeX, sizeY, 1, GL_RGBA, GL_UNSIGNED_BYTE, texdata);
 					
-					/*
-					for (int m = 1; m <= mipLevels; m++) {
-						int mipWidth = sizeX >> m;
-						int mipHeight = sizeY >> m;
-						int scale = 1 << m;
-
-						COLOR4* mipData = new COLOR4[mipWidth * mipHeight];
-						for (int y = 0; y < mipHeight; y++) {
-							for (int x = 0; x < mipWidth; x++) {
-								int srcX = x * scale;
-								int srcY = y * scale;
-								mipData[y*mipWidth + x] = texdata[y*tex->width*scale + x*scale];
-							}
+					if (g_opengl_texture_array_support) {
+						for (MipTexture& mip : tex->mipmaps) {
+							glTexSubImage3D(GL_TEXTURE_2D_ARRAY, mip.level, 0, 0, k,
+								mip.width, mip.height, 1, GL_RGBA, GL_UNSIGNED_BYTE, mip.data);
 						}
-
-						glTexSubImage3D(GL_TEXTURE_2D_ARRAY, m, 0, 0, k, mipWidth, mipHeight, 1, GL_RGBA, GL_UNSIGNED_BYTE, mipData);
-						delete[] mipData;
 					}
-					*/
 
 					delete[] buckets[i].textures[k]->data;
 					buckets[i].textures[k]->data = NULL;
@@ -244,7 +232,8 @@ void TextureArray::upload() {
 			if (g_opengl_texture_array_support) {
 				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-				glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+				glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_LOD_BIAS, -0.5f);
+				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, buckets[i].textures[0]->mipmaps.size());
 			}
 			else {
 				// can't have interpolation for 3D textures or else you see crazy UV problems
