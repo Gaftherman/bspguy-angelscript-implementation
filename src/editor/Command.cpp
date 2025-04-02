@@ -314,7 +314,7 @@ vector<Entity*> CreateEntityFromTextCommand::parse() {
 		{
 			Keyvalue k(line);
 			if (k.key.length() && k.value.length())
-				ent->addKeyvalue(k);
+				ent->setOrAddKeyvalue(k.key, k.value);
 		}
 	}
 

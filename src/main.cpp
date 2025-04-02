@@ -295,9 +295,15 @@ int merge_maps(CommandLine& cli) {
 		cli.hasOption("-noripent"), cli.hasOption("-noscript"), false, max_dim).map;
 
 	logf("\n");
-	if (result->isValid()) result->write(output_name);
+	if (result->isWritable()) {
+		result->write(output_name);
+	}
 	logf("\n");
 	result->print_info(false, 0, 0);
+
+	if (!result->isValid() && result->isWritable()) {
+		logf("\nThe merged map was written despite overflows because this is fixable in the editor.\n");
+	}
 
 	for (int i = 0; i < maps.size(); i++) {
 		delete maps[i];

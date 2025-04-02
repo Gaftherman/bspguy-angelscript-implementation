@@ -50,7 +50,7 @@ MergeResult BspMerger::merge(vector<Bsp*> maps, vec3 gap, string output_name, bo
 				if (!noripent) {
 					// tag ents with the map they belong to
 					for (int i = 0; i < block.map->ents.size(); i++) {
-						block.map->ents[i]->addKeyvalue("$s_bspguy_map_source", toLowerCase(block.map->name));
+						block.map->ents[i]->setOrAddKeyvalue("$s_bspguy_map_source", toLowerCase(block.map->name));
 					}
 				}
 			}
@@ -219,6 +219,11 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 	while (idealMapsPerAxis * idealMapsPerAxis * idealMapsPerAxis < maps.size()) {
 		idealMapsPerAxis++;
 	}
+	if (idealMapsPerAxis > maxMapsPerRow || idealMapsPerAxis > maxMapsPerCol || idealMapsPerAxis > maxMapsPerLayer) {
+		// maps barely fit in the grid, so don't let the ideal size shrink the merged bounds
+		// into something that wouldn't fit all of the maps
+		idealMapsPerAxis = max(max(maxMapsPerRow, maxMapsPerCol), maxMapsPerLayer);
+	}
 
 	if (maxMapsPerRow * maxMapsPerCol * maxMapsPerLayer < maps.size()) {
 		logf("Not enough space to merge all maps! Try moving them individually before merging.");
@@ -236,7 +241,7 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 	logf("Max maps per axis: x=%d y=%d z=%d  (total=%d)\n", maxMapsPerRow, maxMapsPerCol, maxMapsPerLayer, maxMapsPerRow * maxMapsPerCol * maxMapsPerLayer);
 
 	int actualWidth = min(min(idealMapsPerAxis, maxMapsPerRow), (int)maps.size());
-	int actualLength = min(min(maxMapsPerCol, idealMapsPerAxis), (int)ceil(maps.size() / (float)(idealMapsPerAxis)));
+	int actualLength = min(min(idealMapsPerAxis, maxMapsPerCol), (int)ceil(maps.size() / (float)(idealMapsPerAxis)));
 	int actualHeight = min(min(idealMapsPerAxis, maxMapsPerLayer), (int)ceil(maps.size() / (float)(idealMapsPerAxis * idealMapsPerAxis)));
 	logf("Merged map size:   %dx%dx%d maps\n", actualWidth, actualLength, actualHeight);
 
@@ -297,14 +302,14 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 
 	{
 		Entity* map_info = new Entity();
-		map_info->addKeyvalue("origin", map_info_origin.toKeyvalueString());
-		map_info->addKeyvalue("targetname", "bspguy_info");
-		map_info->addKeyvalue("$s_noscript", noscript ? "yes" : "no");
-		map_info->addKeyvalue("$s_version", g_version_string);
-		map_info->addKeyvalue("classname", "info_target");
+		map_info->setOrAddKeyvalue("origin", map_info_origin.toKeyvalueString());
+		map_info->setOrAddKeyvalue("targetname", "bspguy_info");
+		map_info->setOrAddKeyvalue("$s_noscript", noscript ? "yes" : "no");
+		map_info->setOrAddKeyvalue("$s_version", g_version_string);
+		map_info->setOrAddKeyvalue("classname", "info_target");
 
 		for (int i = 0; i < mapOrder.size(); i++) {
-			map_info->addKeyvalue("$s_map" + to_string(i), toLowerCase(mapOrder[i]->name));
+			map_info->setOrAddKeyvalue("$s_map" + to_string(i), toLowerCase(mapOrder[i]->name));
 		}
 
 		mergedMap->ents.push_back(map_info);
@@ -321,12 +326,12 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 			vec3 map_max = sourceMap.maxs + sourceMap.offset;
 
 			Entity* map_info = new Entity();
-			map_info->addKeyvalue("origin", map_info_origin.toKeyvalueString());
-			map_info->addKeyvalue("targetname", "bspguy_info_" + toLowerCase(sourceMapName));
-			map_info->addKeyvalue("$v_min", map_min.toKeyvalueString());
-			map_info->addKeyvalue("$v_max", map_max.toKeyvalueString());
-			map_info->addKeyvalue("$v_offset", sourceMap.offset.toKeyvalueString());
-			map_info->addKeyvalue("classname", "info_target");
+			map_info->setOrAddKeyvalue("origin", map_info_origin.toKeyvalueString());
+			map_info->setOrAddKeyvalue("targetname", "bspguy_info_" + toLowerCase(sourceMapName));
+			map_info->setOrAddKeyvalue("$v_min", map_min.toKeyvalueString());
+			map_info->setOrAddKeyvalue("$v_max", map_max.toKeyvalueString());
+			map_info->setOrAddKeyvalue("$v_offset", sourceMap.offset.toKeyvalueString());
+			map_info->setOrAddKeyvalue("classname", "info_target");
 			mergedMap->ents.push_back(map_info);
 			map_info_origin.z += 10;
 		}
@@ -371,16 +376,16 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 
 		if (skyname != lastSky || skyColorChanged) {
 			Entity* changesky = new Entity();
-			changesky->addKeyvalue("origin", changesky_origin.toKeyvalueString());
-			changesky->addKeyvalue("targetname", "bspguy_start_" + toLowerCase(mapOrder[i]->name));
+			changesky->setOrAddKeyvalue("origin", changesky_origin.toKeyvalueString());
+			changesky->setOrAddKeyvalue("targetname", "bspguy_start_" + toLowerCase(mapOrder[i]->name));
 			if (skyname != lastSky) {
-				changesky->addKeyvalue("skyname", skyname.c_str());
+				changesky->setOrAddKeyvalue("skyname", skyname.c_str());
 			}
 			if (skyColorChanged) {
-				changesky->addKeyvalue("color", skyColor.c_str());
+				changesky->setOrAddKeyvalue("color", skyColor.c_str());
 			}
-			changesky->addKeyvalue("spawnflags", "5"); // all players + update server
-			changesky->addKeyvalue("classname", "trigger_changesky");
+			changesky->setOrAddKeyvalue("spawnflags", "5"); // all players + update server
+			changesky->setOrAddKeyvalue("classname", "trigger_changesky");
 			mergedMap->ents.push_back(changesky);
 			changesky_origin.z += 18;
 			lastSky = skyname;
@@ -397,24 +402,24 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 		string mapname = toLowerCase(mapOrder[i]->name);
 		string equip_name = "equip_" + mapname;
 		
-		equip->addKeyvalue("origin", equip_origin.toKeyvalueString());
-		equip->addKeyvalue("targetname", "equip_" + mapname);
-		equip->addKeyvalue("respawn_equip_mode", "1"); // always equip respawning players
-		equip->addKeyvalue("ammo_equip_mode", "1"); // restock ammo up to CFG default
-		equip->addKeyvalue("$s_bspguy_map_source", mapname);
+		equip->setOrAddKeyvalue("origin", equip_origin.toKeyvalueString());
+		equip->setOrAddKeyvalue("targetname", "equip_" + mapname);
+		equip->setOrAddKeyvalue("respawn_equip_mode", "1"); // always equip respawning players
+		equip->setOrAddKeyvalue("ammo_equip_mode", "1"); // restock ammo up to CFG default
+		equip->setOrAddKeyvalue("$s_bspguy_map_source", mapname);
 
 		// 1 = equip all on trigger to get new weapons for new sections
 		// 2 = force all flag. Set for first map so that you spawn with the most powerful weapon equipped
 		//     when starting a listen server (needed because ent is activated after the host spawns).
-		equip->addKeyvalue("spawnflags", i == 0 ? "3" : "1");
+		equip->setOrAddKeyvalue("spawnflags", i == 0 ? "3" : "1");
 
-		equip->addKeyvalue("classname", "bspguy_equip");
+		equip->setOrAddKeyvalue("classname", "bspguy_equip");
 
-		relay->addKeyvalue("origin", (equip_origin + vec3(0, 18, 0)).toKeyvalueString());
-		relay->addKeyvalue("targetname", "bspguy_start_" + mapname);
-		relay->addKeyvalue("target", "equip_" + mapname); // add new weapons when the map starts
-		relay->addKeyvalue("triggerstate", "1");
-		relay->addKeyvalue("classname", "trigger_relay");
+		relay->setOrAddKeyvalue("origin", (equip_origin + vec3(0, 18, 0)).toKeyvalueString());
+		relay->setOrAddKeyvalue("targetname", "bspguy_start_" + mapname);
+		relay->setOrAddKeyvalue("target", "equip_" + mapname); // add new weapons when the map starts
+		relay->setOrAddKeyvalue("triggerstate", "1");
+		relay->setOrAddKeyvalue("classname", "trigger_relay");
 
 		mergedMap->ents.push_back(equip);
 		mergedMap->ents.push_back(relay);
@@ -473,8 +478,8 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 				updated_spawns++;
 			}
 			if (cname == "trigger_auto") {
-				ent->addKeyvalue("targetname", "bspguy_autos_" + source_map);
-				ent->getClassname() = "trigger_relay";
+				ent->setOrAddKeyvalue("targetname", "bspguy_autos_" + source_map);
+				ent->setOrAddKeyvalue("classname", "trigger_relay");
 			}
 			if (cname.find("monster_") == 0 && cname.rfind("_dead") != cname.size()-5) {
 				// replace with a squadmaker and spawn when this map section starts
@@ -494,48 +499,48 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 				// - apache/osprey targets, and any other monster-specific keys
 
 				ent->clearAllKeyvalues();
-				ent->addKeyvalue("origin", oldKeys["origin"]);
-				ent->addKeyvalue("angles", oldKeys["angles"]);
-				ent->addKeyvalue("targetname", spawn_name);
-				ent->addKeyvalue("netname", oldKeys["targetname"]);
-				//ent->addKeyvalue("target", "bspguy_npc_spawn_" + toLowerCase(source_map));
+				ent->setOrAddKeyvalue("origin", oldKeys["origin"]);
+				ent->setOrAddKeyvalue("angles", oldKeys["angles"]);
+				ent->setOrAddKeyvalue("targetname", spawn_name);
+				ent->setOrAddKeyvalue("netname", oldKeys["targetname"]);
+				//ent->setOrAddKeyvalue("target", "bspguy_npc_spawn_" + toLowerCase(source_map));
 				if (oldKeys["rendermode"] != "0") {
-					ent->addKeyvalue("renderfx", oldKeys["renderfx"]);
-					ent->addKeyvalue("rendermode", oldKeys["rendermode"]);
-					ent->addKeyvalue("renderamt", oldKeys["renderamt"]);
-					ent->addKeyvalue("rendercolor", oldKeys["rendercolor"]);
-					ent->addKeyvalue("change_rendermode", "1");
+					ent->setOrAddKeyvalue("renderfx", oldKeys["renderfx"]);
+					ent->setOrAddKeyvalue("rendermode", oldKeys["rendermode"]);
+					ent->setOrAddKeyvalue("renderamt", oldKeys["renderamt"]);
+					ent->setOrAddKeyvalue("rendercolor", oldKeys["rendercolor"]);
+					ent->setOrAddKeyvalue("change_rendermode", "1");
 				}
-				ent->addKeyvalue("classify", oldKeys["classify"]);
-				ent->addKeyvalue("is_not_revivable", oldKeys["is_not_revivable"]);
-				ent->addKeyvalue("bloodcolor", oldKeys["bloodcolor"]);
-				ent->addKeyvalue("health", oldKeys["health"]);
-				ent->addKeyvalue("minhullsize", oldKeys["minhullsize"]);
-				ent->addKeyvalue("maxhullsize", oldKeys["maxhullsize"]);
-				ent->addKeyvalue("freeroam", oldKeys["freeroam"]);
-				ent->addKeyvalue("monstercount", "1");
-				ent->addKeyvalue("delay", "0");
-				ent->addKeyvalue("m_imaxlivechildren", "1");
-				ent->addKeyvalue("spawn_mode", "2"); // force spawn, never block
-				ent->addKeyvalue("dmg", "0"); // telefrag damage
-				ent->addKeyvalue("trigger_condition", oldKeys["TriggerCondition"]);
-				ent->addKeyvalue("trigger_target", oldKeys["TriggerTarget"]);
-				ent->addKeyvalue("trigger_target", oldKeys["TriggerTarget"]);
-				ent->addKeyvalue("notsolid", "-1");
-				ent->addKeyvalue("gag", (spawnflags & 2) ? "1" : "0");
-				ent->addKeyvalue("weapons", oldKeys["weapons"]);
-				ent->addKeyvalue("new_body", oldKeys["body"]);
-				ent->addKeyvalue("respawn_as_playerally", oldKeys["is_player_ally"]);
-				ent->addKeyvalue("monstertype", oldKeys["classname"]);
-				ent->addKeyvalue("displayname", oldKeys["displayname"]);
-				ent->addKeyvalue("squadname", oldKeys["netname"]);
-				ent->addKeyvalue("new_model", oldKeys["model"]);
-				ent->addKeyvalue("soundlist", oldKeys["soundlist"]);
-				ent->addKeyvalue("path_name", oldKeys["path_name"]);
-				ent->addKeyvalue("guard_ent", oldKeys["guard_ent"]);
-				ent->addKeyvalue("$s_bspguy_map_source", oldKeys["$s_bspguy_map_source"]);
-				ent->addKeyvalue("spawnflags", to_string(newFlags));
-				ent->addKeyvalue("classname", "squadmaker");
+				ent->setOrAddKeyvalue("classify", oldKeys["classify"]);
+				ent->setOrAddKeyvalue("is_not_revivable", oldKeys["is_not_revivable"]);
+				ent->setOrAddKeyvalue("bloodcolor", oldKeys["bloodcolor"]);
+				ent->setOrAddKeyvalue("health", oldKeys["health"]);
+				ent->setOrAddKeyvalue("minhullsize", oldKeys["minhullsize"]);
+				ent->setOrAddKeyvalue("maxhullsize", oldKeys["maxhullsize"]);
+				ent->setOrAddKeyvalue("freeroam", oldKeys["freeroam"]);
+				ent->setOrAddKeyvalue("monstercount", "1");
+				ent->setOrAddKeyvalue("delay", "0");
+				ent->setOrAddKeyvalue("m_imaxlivechildren", "1");
+				ent->setOrAddKeyvalue("spawn_mode", "2"); // force spawn, never block
+				ent->setOrAddKeyvalue("dmg", "0"); // telefrag damage
+				ent->setOrAddKeyvalue("trigger_condition", oldKeys["TriggerCondition"]);
+				ent->setOrAddKeyvalue("trigger_target", oldKeys["TriggerTarget"]);
+				ent->setOrAddKeyvalue("trigger_target", oldKeys["TriggerTarget"]);
+				ent->setOrAddKeyvalue("notsolid", "-1");
+				ent->setOrAddKeyvalue("gag", (spawnflags & 2) ? "1" : "0");
+				ent->setOrAddKeyvalue("weapons", oldKeys["weapons"]);
+				ent->setOrAddKeyvalue("new_body", oldKeys["body"]);
+				ent->setOrAddKeyvalue("respawn_as_playerally", oldKeys["is_player_ally"]);
+				ent->setOrAddKeyvalue("monstertype", oldKeys["classname"]);
+				ent->setOrAddKeyvalue("displayname", oldKeys["displayname"]);
+				ent->setOrAddKeyvalue("squadname", oldKeys["netname"]);
+				ent->setOrAddKeyvalue("new_model", oldKeys["model"]);
+				ent->setOrAddKeyvalue("soundlist", oldKeys["soundlist"]);
+				ent->setOrAddKeyvalue("path_name", oldKeys["path_name"]);
+				ent->setOrAddKeyvalue("guard_ent", oldKeys["guard_ent"]);
+				ent->setOrAddKeyvalue("$s_bspguy_map_source", oldKeys["$s_bspguy_map_source"]);
+				ent->setOrAddKeyvalue("spawnflags", to_string(newFlags));
+				ent->setOrAddKeyvalue("classname", "squadmaker");
 				ent->clearEmptyKeyvalues(); // things like the model keyvalue will break the monster if it's set but empty
 
 				// re-enable when map is loading
@@ -574,12 +579,12 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 
 				string oldOrigin = ent->getKeyvalue("origin");
 				ent->clearAllKeyvalues();
-				ent->addKeyvalue("origin", oldOrigin);
-				ent->addKeyvalue("model", model);
-				ent->addKeyvalue("target", newTriggerTarget);
-				ent->addKeyvalue("$s_next_map", map);
-				ent->addKeyvalue("$s_bspguy_map_source", source_map);
-				ent->addKeyvalue("classname", "trigger_once");
+				ent->setOrAddKeyvalue("origin", oldOrigin);
+				ent->setOrAddKeyvalue("model", model);
+				ent->setOrAddKeyvalue("target", newTriggerTarget);
+				ent->setOrAddKeyvalue("$s_next_map", map);
+				ent->setOrAddKeyvalue("$s_bspguy_map_source", source_map);
+				ent->setOrAddKeyvalue("classname", "trigger_once");
 			}
 			if (!tname.empty()) { // USE Only
 				Entity* relay = ent;
@@ -590,15 +595,15 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 				}
 
 				relay->clearAllKeyvalues();
-				relay->addKeyvalue("origin", origin.toKeyvalueString());
-				relay->addKeyvalue("targetname", tname);
-				relay->addKeyvalue("target", newTriggerTarget);
-				relay->addKeyvalue("spawnflags", "1"); // remove on fire
-				relay->addKeyvalue("triggerstate", "0");
-				relay->addKeyvalue("delay", "0");
-				relay->addKeyvalue("$s_next_map", map);
-				relay->addKeyvalue("$s_bspguy_map_source", source_map);
-				relay->addKeyvalue("classname", "trigger_relay");
+				relay->setOrAddKeyvalue("origin", origin.toKeyvalueString());
+				relay->setOrAddKeyvalue("targetname", tname);
+				relay->setOrAddKeyvalue("target", newTriggerTarget);
+				relay->setOrAddKeyvalue("spawnflags", "1"); // remove on fire
+				relay->setOrAddKeyvalue("triggerstate", "0");
+				relay->setOrAddKeyvalue("delay", "0");
+				relay->setOrAddKeyvalue("$s_next_map", map);
+				relay->setOrAddKeyvalue("$s_bspguy_map_source", source_map);
+				relay->setOrAddKeyvalue("classname", "trigger_relay");
 			}
 
 			if (noscript) {
@@ -628,123 +633,123 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 					// delete entities in this map
 					{	// kill spawn points ASAP so everyone can respawn in the new map right away
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_iter);
-						cleanup_ent->addKeyvalue("classname_filter", "info_player_*");
-						cleanup_ent->addKeyvalue("target", cleanup_check1);
-						cleanup_ent->addKeyvalue("triggerstate", "2"); // toggle
-						cleanup_ent->addKeyvalue("delay_between_triggers", "0.0");
-						cleanup_ent->addKeyvalue("trigger_after_run", "bspguy_finish_clean");
-						cleanup_ent->addKeyvalue("classname", "trigger_entity_iterator");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_iter);
+						cleanup_ent->setOrAddKeyvalue("classname_filter", "info_player_*");
+						cleanup_ent->setOrAddKeyvalue("target", cleanup_check1);
+						cleanup_ent->setOrAddKeyvalue("triggerstate", "2"); // toggle
+						cleanup_ent->setOrAddKeyvalue("delay_between_triggers", "0.0");
+						cleanup_ent->setOrAddKeyvalue("trigger_after_run", "bspguy_finish_clean");
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_entity_iterator");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 28;
 					}
 					{	// kill monster entities in the map slower to reduce lag
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_iter);
-						cleanup_ent->addKeyvalue("classname_filter", "monster_*");
-						cleanup_ent->addKeyvalue("target", cleanup_check1);
-						cleanup_ent->addKeyvalue("triggerstate", "2"); // toggle
-						cleanup_ent->addKeyvalue("delay_between_triggers", "0.0");
-						cleanup_ent->addKeyvalue("trigger_after_run", "bspguy_finish_clean");
-						cleanup_ent->addKeyvalue("classname", "trigger_entity_iterator");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_iter);
+						cleanup_ent->setOrAddKeyvalue("classname_filter", "monster_*");
+						cleanup_ent->setOrAddKeyvalue("target", cleanup_check1);
+						cleanup_ent->setOrAddKeyvalue("triggerstate", "2"); // toggle
+						cleanup_ent->setOrAddKeyvalue("delay_between_triggers", "0.0");
+						cleanup_ent->setOrAddKeyvalue("trigger_after_run", "bspguy_finish_clean");
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_entity_iterator");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 24;
 					}
 					{	// check if entity is within bounds (min x)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check1);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_min.x));
-						cleanup_ent->addKeyvalue("m_iCheckType", "3"); // greater
-						cleanup_ent->addKeyvalue("netname", cleanup_check2); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_x); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check1);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_min.x));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "3"); // greater
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_check2); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_x); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// check if entity is within bounds (min y)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check2);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_min.y));
-						cleanup_ent->addKeyvalue("m_iCheckType", "3"); // greater
-						cleanup_ent->addKeyvalue("netname", cleanup_check3); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_y); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check2);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_min.y));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "3"); // greater
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_check3); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_y); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// check if entity is within bounds (min z)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check3);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_min.z));
-						cleanup_ent->addKeyvalue("m_iCheckType", "3"); // greater
-						cleanup_ent->addKeyvalue("netname", cleanup_check4); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_z); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check3);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_min.z));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "3"); // greater
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_check4); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_z); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// check if entity is within bounds (max x)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check4);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_max.x));
-						cleanup_ent->addKeyvalue("m_iCheckType", "2"); // less
-						cleanup_ent->addKeyvalue("netname", cleanup_check5); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_x); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check4);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_max.x));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "2"); // less
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_check5); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_x); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// check if entity is within bounds (max y)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check5);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_max.y));
-						cleanup_ent->addKeyvalue("m_iCheckType", "2"); // less
-						cleanup_ent->addKeyvalue("netname", cleanup_check6); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_y); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check5);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_max.y));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "2"); // less
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_check6); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_y); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// check if entity is within bounds (max z)
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_check6);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "origin");
-						cleanup_ent->addKeyvalue("m_iszCheckValue", to_string((int)map_max.z));
-						cleanup_ent->addKeyvalue("m_iCheckType", "2"); // less
-						cleanup_ent->addKeyvalue("netname", cleanup_setval); // true case
-						cleanup_ent->addKeyvalue("spawnflags", cond_use_z); // cyclic + keep !activator
-						cleanup_ent->addKeyvalue("classname", "trigger_condition");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_check6);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "origin");
+						cleanup_ent->setOrAddKeyvalue("m_iszCheckValue", to_string((int)map_max.z));
+						cleanup_ent->setOrAddKeyvalue("m_iCheckType", "2"); // less
+						cleanup_ent->setOrAddKeyvalue("netname", cleanup_setval); // true case
+						cleanup_ent->setOrAddKeyvalue("spawnflags", cond_use_z); // cyclic + keep !activator
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_condition");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
 					{	// mark the entity for killing
 						Entity* cleanup_ent = new Entity();
-						cleanup_ent->addKeyvalue("origin", entOrigin.toKeyvalueString());
-						cleanup_ent->addKeyvalue("targetname", cleanup_setval);
-						cleanup_ent->addKeyvalue("target", "!activator");
-						cleanup_ent->addKeyvalue("m_iszValueName", "targetname");
-						cleanup_ent->addKeyvalue("m_iszNewValue", "bspguy_kill_me");
-						//cleanup_ent->addKeyvalue("message", "bspguy_test");
-						cleanup_ent->addKeyvalue("classname", "trigger_changevalue");
+						cleanup_ent->setOrAddKeyvalue("origin", entOrigin.toKeyvalueString());
+						cleanup_ent->setOrAddKeyvalue("targetname", cleanup_setval);
+						cleanup_ent->setOrAddKeyvalue("target", "!activator");
+						cleanup_ent->setOrAddKeyvalue("m_iszValueName", "targetname");
+						cleanup_ent->setOrAddKeyvalue("m_iszNewValue", "bspguy_kill_me");
+						//cleanup_ent->setOrAddKeyvalue("message", "bspguy_test");
+						cleanup_ent->setOrAddKeyvalue("classname", "trigger_changevalue");
 						mergedMap->ents.push_back(cleanup_ent);
 						entOrigin.z += 18;
 					}
@@ -755,26 +760,26 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 
 	if (noscript) {
 		Entity* respawn_all_ent = new Entity();
-		respawn_all_ent->addKeyvalue("targetname", "bspguy_respawn_everyone");
-		respawn_all_ent->addKeyvalue("classname", "trigger_respawn");
-		respawn_all_ent->addKeyvalue("origin", "64 64 0");
+		respawn_all_ent->setOrAddKeyvalue("targetname", "bspguy_respawn_everyone");
+		respawn_all_ent->setOrAddKeyvalue("classname", "trigger_respawn");
+		respawn_all_ent->setOrAddKeyvalue("origin", "64 64 0");
 		mergedMap->ents.push_back(respawn_all_ent);
 
 		Entity* finish_clean_ent = new Entity();
-		finish_clean_ent->addKeyvalue("targetname", "bspguy_finish_clean");
-		//finish_clean_ent->addKeyvalue("bspguy_test", "0");
-		finish_clean_ent->addKeyvalue("bspguy_kill_me", "0#2"); // kill ents in previous map
-		finish_clean_ent->addKeyvalue("classname", "multi_manager");
-		finish_clean_ent->addKeyvalue("origin", "64 64 32");
+		finish_clean_ent->setOrAddKeyvalue("targetname", "bspguy_finish_clean");
+		//finish_clean_ent->setOrAddKeyvalue("bspguy_test", "0");
+		finish_clean_ent->setOrAddKeyvalue("bspguy_kill_me", "0#2"); // kill ents in previous map
+		finish_clean_ent->setOrAddKeyvalue("classname", "multi_manager");
+		finish_clean_ent->setOrAddKeyvalue("origin", "64 64 32");
 		mergedMap->ents.push_back(finish_clean_ent);
 
 		/*
 		{
 			Entity* cleanup_ent = new Entity();
-			cleanup_ent->addKeyvalue("targetname", "bspguy_test");
-			cleanup_ent->addKeyvalue("message", "OMG BSPGUY TEST");
-			cleanup_ent->addKeyvalue("spawnflags", "1");
-			cleanup_ent->addKeyvalue("classname", "game_text");
+			cleanup_ent->setOrAddKeyvalue("targetname", "bspguy_test");
+			cleanup_ent->setOrAddKeyvalue("message", "OMG BSPGUY TEST");
+			cleanup_ent->setOrAddKeyvalue("spawnflags", "1");
+			cleanup_ent->setOrAddKeyvalue("classname", "game_text");
 			mergedMap->ents.push_back(cleanup_ent);
 		}
 		*/
@@ -783,18 +788,18 @@ void BspMerger::update_map_series_entity_logic(Bsp* mergedMap, vector<MAPBLOCK>&
 		for (auto it = load_map_triggers.begin(); it != load_map_triggers.end(); ++it) {
 			Entity* map_setup = new Entity();
 
-			map_setup->addKeyvalue("origin", map_setup_origin.toKeyvalueString());
+			map_setup->setOrAddKeyvalue("origin", map_setup_origin.toKeyvalueString());
 
 			int triggerCount = 0;
 			for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-				map_setup->addKeyvalue(*it2, "0");
+				map_setup->setOrAddKeyvalue(*it2, "0");
 				triggerCount++;
 			}
 
-			map_setup->addKeyvalue("bspguy_respawn_everyone", "1"); // respawn in new spots
-			map_setup->addKeyvalue("bspguy_autos_" + it->first, "1"); // fire what used to be trigger_auto
-			map_setup->addKeyvalue("targetname", load_section_prefix + it->first);
-			map_setup->addKeyvalue("classname", "multi_manager");
+			map_setup->setOrAddKeyvalue("bspguy_respawn_everyone", "1"); // respawn in new spots
+			map_setup->setOrAddKeyvalue("bspguy_autos_" + it->first, "1"); // fire what used to be trigger_auto
+			map_setup->setOrAddKeyvalue("targetname", load_section_prefix + it->first);
+			map_setup->setOrAddKeyvalue("classname", "multi_manager");
 
 
 			mergedMap->ents.push_back(map_setup);
@@ -923,7 +928,9 @@ bool BspMerger::merge(Bsp& mapA, Bsp& mapB) {
 		}
 	}
 
-	mapB.shift_lightstyles(mapA.lightstyle_count());
+	if (!mapB.shift_lightstyles(mapA.lightstyle_count())) {
+		logf("Lightstyles overflowed! The output map will have broken lighting.\n");
+	}
 
 	// base structures (they don't reference any other structures)
 	if (shouldMerge[LUMP_ENTITIES])
@@ -1015,7 +1022,7 @@ void BspMerger::merge_ents(Bsp& mapA, Bsp& mapB)
 		}
 
 		int newModelIdx = atoi(modelIdxStr.c_str()) + otherModelCount;
-		mapA.ents[i]->getKeyvalue("model") = "*" + to_string(newModelIdx);
+		mapA.ents[i]->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
 
 		g_progress.tick();
 	}
@@ -1054,9 +1061,9 @@ void BspMerger::merge_ents(Bsp& mapA, Bsp& mapB)
 				}
 			}
 
-			worldspawn->getKeyvalue("wad") = "";
+			worldspawn->setOrAddKeyvalue("wad", "");
 			for (int j = 0; j < thisWads.size(); j++) {
-				worldspawn->getKeyvalue("wad") += thisWads[j] + ";";
+				worldspawn->setOrAddKeyvalue("wad", worldspawn->getKeyvalue("wad") + thisWads[j] + ";");
 			}
 
 			// include prefixed version of the other maps keyvalues
@@ -1066,7 +1073,7 @@ void BspMerger::merge_ents(Bsp& mapA, Bsp& mapB)
 					continue;
 				}
 				// TODO: unknown keyvalues crash the game? Try something else.
-				//worldspawn->addKeyvalue(Keyvalue(mapB.name + "_" + it->first, it->second));
+				//worldspawn->setOrAddKeyvalue(Keyvalue(mapB.name + "_" + it->first, it->second));
 			}
 		}
 		else {

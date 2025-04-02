@@ -53,10 +53,8 @@ public:
 	Entity(const std::string& classname);
 	~Entity(void);
 
-	string getKeyvalue(string key);
+	const string getKeyvalue(string key);
 	unordered_map<string, string> getAllKeyvalues();
-	void addKeyvalue(Keyvalue& k);
-	void addKeyvalue(const std::string& key, const std::string& value);
 	void removeKeyvalue(const std::string& key);
 	bool renameKey(string oldName, string newName);
 	void clearAllKeyvalues();

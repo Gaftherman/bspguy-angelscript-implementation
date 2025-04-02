@@ -4309,7 +4309,7 @@ void Bsp::load_ents()
 		{
 			Keyvalue k(line);
 			if (k.key.length() && k.value.length())
-				ent->addKeyvalue(k);
+				ent->setOrAddKeyvalue(k.key, k.value);
 		}
 	}
 
@@ -4425,6 +4425,23 @@ bool Bsp::isValid() {
 		&& visDataLength < g_limits.max_visdata
 		&& lightstyle_count() < g_limits.max_lightstyles
 		&& ceilf(calc_allocblock_usage()) <= g_limits.max_allocblocks;
+}
+
+bool Bsp::isWritable() {
+	// it's ok for textures, allocblock, lightstyles, visdata to overflow
+	// because the lump structures allow for much larger sizes than the engine can load
+	return modelCount < g_limits.max_models
+		&& planeCount < g_limits.max_planes
+		&& vertCount < g_limits.max_vertexes
+		&& nodeCount < g_limits.max_nodes
+		&& texinfoCount < g_limits.max_texinfos
+		&& faceCount < g_limits.max_faces
+		&& clipnodeCount < g_limits.max_clipnodes
+		&& leafCount < g_limits.max_leaves
+		&& marksurfCount < g_limits.max_marksurfaces
+		&& surfedgeCount < g_limits.max_surfedges
+		&& edgeCount < g_limits.max_edges
+		&& lightstyle_count() < 255;
 }
 
 bool Bsp::validate_vis_data() {
@@ -4680,8 +4697,8 @@ bool Bsp::validate() {
 		if (fabs(ori.x) > oob || fabs(ori.y) > oob || fabs(ori.z) > oob) {
 			/*
 			logf("Entity '%s' (%s) outside map boundary at (%d %d %d)\n",
-				ent->hasKey("targetname") ? ent->getKeyvalue("targetname"].c_str() : "",
-				ent->hasKey("classname") ? ent->getKeyvalue("classname"].c_str() : "",
+				ent->hasKey("targetname") ? ent->getKeyvalue("targetname").c_str() : "",
+				ent->hasKey("classname") ? ent->getKeyvalue("classname").c_str() : "",
 				(int)ori.x, (int)ori.y, (int)ori.z);
 				*/
 			oobCount++;

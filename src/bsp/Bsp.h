@@ -179,6 +179,7 @@ public:
 	bool shift_lightstyles(uint32_t shift);
 
 	bool isValid(); // check if any lumps are overflowed
+	bool isWritable(); // check if any lumps are overflowed which would corrupt the file
 
 	// delete structures not used by the map (needed after deleting models/hulls)
 	STRUCTCOUNT remove_unused_model_structures(bool deleteModels=true);

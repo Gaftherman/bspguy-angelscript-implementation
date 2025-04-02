@@ -1551,8 +1551,8 @@ void Gui::drawMenuBar() {
 			vec3 origin = (app->cameraOrigin + app->cameraForward * 100);
 			if (app->gridSnappingEnabled)
 				origin = app->snapToGrid(origin);
-			newEnt->addKeyvalue("origin", origin.toKeyvalueString());
-			newEnt->addKeyvalue("classname", "info_player_deathmatch");
+			newEnt->setOrAddKeyvalue("origin", origin.toKeyvalueString());
+			newEnt->setOrAddKeyvalue("classname", "info_player_deathmatch");
 			vector<Entity*> newEnts = { newEnt };
 
 			CreateEntitiesCommand* createCommand = new CreateEntitiesCommand("Create Entity", newEnts);
@@ -1570,8 +1570,8 @@ void Gui::drawMenuBar() {
 				origin = app->snapToGrid(origin);
 
 			Entity* newEnt = new Entity();
-			newEnt->addKeyvalue("origin", origin.toKeyvalueString());
-			newEnt->addKeyvalue("classname", "func_wall");
+			newEnt->setOrAddKeyvalue("origin", origin.toKeyvalueString());
+			newEnt->setOrAddKeyvalue("classname", "func_wall");
 
 			float size = pow(2.0, g_app->gridSnapLevel);
 			if (size < 16) {
@@ -1582,7 +1582,7 @@ void Gui::drawMenuBar() {
 			vec3 mins = vec3(-size, -size, -size);
 			vec3 maxs = vec3(size, size, size);
 			int modelIdx = map->create_solid(mins, maxs, aaatriggerIdx);
-			newEnt->addKeyvalue("model", "*" + to_string(modelIdx));
+			newEnt->setOrAddKeyvalue("model", "*" + to_string(modelIdx));
 			map->ents.push_back(newEnt);
 
 			command->pushUndoState();
@@ -1594,8 +1594,8 @@ void Gui::drawMenuBar() {
 			vec3 origin = (app->cameraOrigin + app->cameraForward * 100) - app->mapRenderer->mapOffset;
 			if (app->gridSnappingEnabled)
 				origin = app->snapToGrid(origin);
-			newEnt->addKeyvalue("origin", origin.toKeyvalueString());
-			newEnt->addKeyvalue("classname", "cull");
+			newEnt->setOrAddKeyvalue("origin", origin.toKeyvalueString());
+			newEnt->setOrAddKeyvalue("classname", "cull");
 			vector<Entity*> newEnts = { newEnt };
 
 			CreateEntitiesCommand* createCommand = new CreateEntitiesCommand("Create Entity", newEnts);
@@ -3710,7 +3710,7 @@ void Gui::drawKeyvalueEditor_RawEditTab() {
 				}
 				keyName = baseKeyName + "#" + to_string(i + 2);
 			}
-			ent->addKeyvalue(keyName, "");
+			ent->setOrAddKeyvalue(keyName, "");
 		}
 		
 		app->mapRenderer->refreshEnt(app->pickInfo.getEntIndex());
