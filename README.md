@@ -28,7 +28,7 @@ If the program fails to start on Windows, launch it from the Command Prompt so y
 1. Click `Settings` -> `Editor Setup` -> `Asset Paths`
 1. Set the `Game Directory` to your game folder path (e.g. `D:\Steam\steamapps\common\Half-Life`).
 1. Add mod directory names as `Asset Paths` (e.g. `valve`, `cstrike`, `svencoop`)
-    - Suffixed paths are searched automatically (adding `valve` implies `valve_addon`, `valve_hd`, and `valve_downloads`).
+    - Suffixed paths are searched automatically (adding `valve` implies `valve_addon` and `valve_downloads`).
     - Use absolute paths if you have multiple game directories (e.g. `C:\Steam\steamapps\common\Sven Co-op\svencoop`).
 1. Click the `FGDs` tab and add your mod FGD file(s). Paths can be absolute or relative to your Asset Paths.
 1. Click `Apply Changes`. This should fix missing textures, replace pink cubes, and enable the `Attributes` tab in the `Keyvalue editor`
