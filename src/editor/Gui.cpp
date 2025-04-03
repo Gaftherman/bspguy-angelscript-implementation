@@ -1279,34 +1279,34 @@ void Gui::drawMenuBar() {
 
 	if (ImGui::BeginMenu("View")) {
 		ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
-		if (ImGui::MenuItem("Textures", 0, g_render_flags & RENDER_TEXTURES)) {
-			g_render_flags ^= RENDER_TEXTURES;
+		if (ImGui::MenuItem("Textures", 0, g_settings.render_flags & RENDER_TEXTURES)) {
+			g_settings.render_flags ^= RENDER_TEXTURES;
 		}
 		tooltip(g, "Render textures for all faces.");
 
-		if (ImGui::MenuItem("Lightmaps", 0, g_render_flags & RENDER_LIGHTMAPS)) {
-			g_render_flags ^= RENDER_LIGHTMAPS;
+		if (ImGui::MenuItem("Lightmaps", 0, g_settings.render_flags & RENDER_LIGHTMAPS)) {
+			g_settings.render_flags ^= RENDER_LIGHTMAPS;
 		}
 		tooltip(g, "Render lighting textures for all faces.");
 
-		if (ImGui::MenuItem("Wireframe", 0, g_render_flags & RENDER_WIREFRAME)) {
-			g_render_flags ^= RENDER_WIREFRAME;
+		if (ImGui::MenuItem("Wireframe", 0, g_settings.render_flags & RENDER_WIREFRAME)) {
+			g_settings.render_flags ^= RENDER_WIREFRAME;
 		}
 		tooltip(g, "Outline all faces.");
 
-		if (ImGui::MenuItem("Special World Faces", 0, g_render_flags & RENDER_SPECIAL)) {
-			g_render_flags ^= RENDER_SPECIAL;
+		if (ImGui::MenuItem("Special World Faces", 0, g_settings.render_flags & RENDER_SPECIAL)) {
+			g_settings.render_flags ^= RENDER_SPECIAL;
 		}
 		tooltip(g, "Render special faces that are normally invisible and/or have special rendering properties (e.g. the SKY texture).");
 
 		if (ImGui::BeginMenu("Clipnodes")) {
-			if (ImGui::MenuItem("Clipnodes (World)", 0, g_render_flags & RENDER_WORLD_CLIPNODES)) {
-				g_render_flags ^= RENDER_WORLD_CLIPNODES;
+			if (ImGui::MenuItem("Clipnodes (World)", 0, g_settings.render_flags & RENDER_WORLD_CLIPNODES)) {
+				g_settings.render_flags ^= RENDER_WORLD_CLIPNODES;
 			}
 			tooltip(g, "Render clipnode hulls for worldspawn");
 
-			if (ImGui::MenuItem("Clipnodes (Entities)", 0, g_render_flags & RENDER_ENT_CLIPNODES)) {
-				g_render_flags ^= RENDER_ENT_CLIPNODES;
+			if (ImGui::MenuItem("Clipnodes (Entities)", 0, g_settings.render_flags & RENDER_ENT_CLIPNODES)) {
+				g_settings.render_flags ^= RENDER_ENT_CLIPNODES;
 			}
 			tooltip(g, "Render clipnode hulls for solid entities");
 
@@ -1315,7 +1315,7 @@ void Gui::drawMenuBar() {
 				g_app->mapRenderer->updateClipnodeOpacity(transparentClipnodes ? 128 : 255);
 			}
 			tooltip(g, "Render clipnode meshes with transparency.");
-			g_settings.render_flags = g_render_flags;
+			g_settings.render_flags = g_settings.render_flags;
 
 			ImGui::Separator();
 
@@ -1355,31 +1355,31 @@ void Gui::drawMenuBar() {
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Point Entities", 0, g_render_flags & RENDER_POINT_ENTS)) {
-			g_render_flags ^= RENDER_POINT_ENTS;
+		if (ImGui::MenuItem("Point Entities", 0, g_settings.render_flags & RENDER_POINT_ENTS)) {
+			g_settings.render_flags ^= RENDER_POINT_ENTS;
 		}
 		tooltip(g, "Render point-sized entities which either have no model or reference MDL/SPR files.");
 
-		if (ImGui::MenuItem("Solid Entities", 0, g_render_flags & RENDER_ENTS)) {
-			if (g_render_flags & RENDER_ENTS) {
-				g_render_flags &= ~(RENDER_ENTS | RENDER_SPECIAL_ENTS);
+		if (ImGui::MenuItem("Solid Entities", 0, g_settings.render_flags & RENDER_ENTS)) {
+			if (g_settings.render_flags & RENDER_ENTS) {
+				g_settings.render_flags &= ~(RENDER_ENTS | RENDER_SPECIAL_ENTS);
 			}
 			else {
-				g_render_flags |= RENDER_ENTS | RENDER_SPECIAL_ENTS;
+				g_settings.render_flags |= RENDER_ENTS | RENDER_SPECIAL_ENTS;
 			}
 		}
 		tooltip(g, "Render entities that reference BSP models.");
 
-		if (ImGui::MenuItem("Entity Direction Vectors", 0, g_render_flags & RENDER_ENT_DIRECTIONS)) {
-			g_render_flags ^= RENDER_ENT_DIRECTIONS;
+		if (ImGui::MenuItem("Entity Direction Vectors", 0, g_settings.render_flags & RENDER_ENT_DIRECTIONS)) {
+			g_settings.render_flags ^= RENDER_ENT_DIRECTIONS;
 			app->updateEntDirectionVectors();
 		}
 		tooltip(g, "Display direction vectors for selected entities.\n"
 			"For point entities, vectors usually represent orientation.\n"
 			"For solid entities, vectors usually represent movement direction.");
 
-		if (ImGui::MenuItem("Entity Links", 0, g_render_flags & RENDER_ENT_CONNECTIONS)) {
-			g_render_flags ^= RENDER_ENT_CONNECTIONS;
+		if (ImGui::MenuItem("Entity Links", 0, g_settings.render_flags & RENDER_ENT_CONNECTIONS)) {
+			g_settings.render_flags ^= RENDER_ENT_CONNECTIONS;
 		}
 		tooltip(g, "Show how entities connect to each other.\n\n"
 			"Yellow line = Selected entity targets the connected entity.\n"
@@ -1389,10 +1389,10 @@ void Gui::drawMenuBar() {
 			"to find connections depending on the game the map was compiled for."
 		);
 
-		if (ImGui::MenuItem("Models", 0, g_render_flags & RENDER_STUDIO_MDL)) {
-			g_render_flags ^= RENDER_STUDIO_MDL;
+		if (ImGui::MenuItem("Models", 0, g_settings.render_flags & RENDER_STUDIO_MDL)) {
+			g_settings.render_flags ^= RENDER_STUDIO_MDL;
 
-			if (!(g_render_flags & RENDER_STUDIO_MDL)) {
+			if (!(g_settings.render_flags & RENDER_STUDIO_MDL)) {
 				for (int i = 0; i < app->mapRenderer->map->ents.size(); i++) {
 					app->mapRenderer->map->ents[i]->didStudioDraw = false;
 				}
@@ -1400,10 +1400,10 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Display game models instead of colored cubes where available.");
 
-		if (ImGui::MenuItem("Sprites", 0, g_render_flags & RENDER_SPRITES)) {
-			g_render_flags ^= RENDER_SPRITES;
+		if (ImGui::MenuItem("Sprites", 0, g_settings.render_flags & RENDER_SPRITES)) {
+			g_settings.render_flags ^= RENDER_SPRITES;
 
-			if (!(g_render_flags & RENDER_SPRITES)) {
+			if (!(g_settings.render_flags & RENDER_SPRITES)) {
 				for (int i = 0; i < app->mapRenderer->map->ents.size(); i++) {
 					app->mapRenderer->map->ents[i]->didStudioDraw = false;
 				}
@@ -1413,14 +1413,14 @@ void Gui::drawMenuBar() {
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Map Boundaries", 0, g_render_flags & RENDER_MAP_BOUNDARY)) {
-			g_render_flags ^= RENDER_MAP_BOUNDARY;
+		if (ImGui::MenuItem("Map Boundaries", 0, g_settings.render_flags & RENDER_MAP_BOUNDARY)) {
+			g_settings.render_flags ^= RENDER_MAP_BOUNDARY;
 		}
 		tooltip(g, "Renders map boundaries as a transparent box around the world. Entities which leave "
 			"this box may have visual glitches depending on the engine this map runs in.");
 
-		if (ImGui::MenuItem("Origin", 0, g_render_flags & RENDER_ORIGIN)) {
-			g_render_flags ^= RENDER_ORIGIN;
+		if (ImGui::MenuItem("Origin", 0, g_settings.render_flags & RENDER_ORIGIN)) {
+			g_settings.render_flags ^= RENDER_ORIGIN;
 		}
 		tooltip(g, "Displays a colored cross at the world origin (0,0,0)");
 

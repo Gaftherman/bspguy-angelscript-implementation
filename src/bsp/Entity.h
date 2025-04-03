@@ -89,6 +89,8 @@ public:
 	// true if this type of entity can be rotated by its angles keyvalue
 	bool canRotate();
 
+	bool shouldDisplayDirectionVector();
+
 	vec3 getHullOrigin(Bsp* map);
 
 	bool hasKey(const std::string& key);

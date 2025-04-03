@@ -412,7 +412,7 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 		g_app->sprShader->modelMat->scale(scale, scale, scale);
 	}
 
-	if ((g_render_flags & RENDER_WIREFRAME) && !noOutline) {
+	if ((g_settings.render_flags & RENDER_WIREFRAME) && !noOutline) {
 		g_app->sprOutlineShader->bind();
 		*g_app->sprOutlineShader->modelMat = *g_app->sprShader->modelMat;
 		g_app->sprOutlineShader->updateMatrixes();

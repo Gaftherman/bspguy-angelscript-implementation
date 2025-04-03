@@ -1725,7 +1725,7 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 	glDepthFunc(GL_LEQUAL);
 
 	if (!wireframePass) {
-		if (g_render_flags & RENDER_LIGHTMAPS) {
+		if (g_settings.render_flags & RENDER_LIGHTMAPS) {
 			activeShader->setUniform("gamma", 1.5f);
 		}
 		else {
@@ -1767,7 +1767,7 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass && !wireframePass) {
+	if ((g_settings.render_flags & RENDER_POINT_ENTS) && !transparencyPass && !wireframePass) {
 		drawPointEntities();
 		activeShader->bind();
 	}
@@ -1776,11 +1776,11 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 	if (clipnodesLoaded && transparencyPass && !wireframePass) {
 		g_app->colorShader->bind();
 
-		if (g_render_flags & RENDER_WORLD_CLIPNODES && clipnodeHull != -1) {
+		if (g_settings.render_flags & RENDER_WORLD_CLIPNODES && clipnodeHull != -1) {
 			drawModelClipnodes(0, false, clipnodeHull);
 		}
 
-		if ((g_render_flags & RENDER_ENTS) && (g_render_flags & RENDER_ENT_CLIPNODES)) {
+		if ((g_settings.render_flags & RENDER_ENTS) && (g_settings.render_flags & RENDER_ENT_CLIPNODES)) {
 			g_app->colorShader->pushMatrix(MAT_MODEL);
 			for (int i = 0, sz = orderedEnts.size(); i < sz; i++) {
 				const OrderedEnt& orderEnt = orderedEnts[i];
@@ -1824,7 +1824,7 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 }
 
 void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
-	if (!(g_render_flags & RENDER_ENTS))
+	if (!(g_settings.render_flags & RENDER_ENTS))
 		return;
 
 	if (renderModels[modelIdx].wireframeBuffer) {
@@ -1840,7 +1840,7 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 }
 
 bool BspRenderer::willDrawModel(Entity* ent, int modelIdx, bool transparent) {
-	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
 		return false;
 	}
 
@@ -1868,12 +1868,12 @@ bool BspRenderer::willDrawModel(Entity* ent, int modelIdx, bool transparent) {
 			continue;
 
 		if (rgroup.transparent) {
-			if (modelIdx == 0 && !(g_render_flags & RENDER_SPECIAL))
+			if (modelIdx == 0 && !(g_settings.render_flags & RENDER_SPECIAL))
 				continue;
-			else if (modelIdx != 0 && !(g_render_flags & RENDER_SPECIAL_ENTS))
+			else if (modelIdx != 0 && !(g_settings.render_flags & RENDER_SPECIAL_ENTS))
 				continue;
 		}
-		else if (modelIdx != 0 && !(g_render_flags & RENDER_ENTS))
+		else if (modelIdx != 0 && !(g_settings.render_flags & RENDER_ENTS))
 			continue;
 
 		return true;
@@ -1887,7 +1887,7 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 	bool isTransparent = false;
 	bool useLightmaps = true;
 
-	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
 		return;
 	}
 
@@ -1945,17 +1945,17 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 			continue;
 
 		if (rgroup.transparent) {
-			if (modelIdx == 0 && !(g_render_flags & RENDER_SPECIAL))
+			if (modelIdx == 0 && !(g_settings.render_flags & RENDER_SPECIAL))
 				continue;
-			else if (modelIdx != 0 && !(g_render_flags & RENDER_SPECIAL_ENTS))
+			else if (modelIdx != 0 && !(g_settings.render_flags & RENDER_SPECIAL_ENTS))
 				continue;
 		}
-		else if (modelIdx != 0 && !(g_render_flags & RENDER_ENTS))
+		else if (modelIdx != 0 && !(g_settings.render_flags & RENDER_ENTS))
 			continue;
 
 		// bind the texture
 		glActiveTexture(GL_TEXTURE0);
-		if (texturesLoaded && (g_render_flags & RENDER_TEXTURES))
+		if (texturesLoaded && (g_settings.render_flags & RENDER_TEXTURES))
 			rgroup.texture->bind();
 		else {
 			if (g_opengl_3d_texture_support || g_opengl_texture_array_support) {
@@ -1973,7 +1973,7 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 			if (highlight) {
 				redTex->bind();
 			}
-			else if (!(g_render_flags & RENDER_LIGHTMAPS) || !useLightmaps) {
+			else if (!(g_settings.render_flags & RENDER_LIGHTMAPS) || !useLightmaps) {
 				if (s == 0) {
 					whiteTex->bind();
 				}
@@ -2022,7 +2022,7 @@ void BspRenderer::drawPointEntities() {
 	g_app->colorShader->bind();
 	g_app->colorShader->updateMatrixes();
 
-	if (g_app->pickInfo.ents.empty() && !(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
+	if (g_app->pickInfo.ents.empty() && !(g_settings.render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES))) {
 		if (pointEnts->numVerts > 0)
 			pointEnts->draw(GL_TRIANGLES);
 		return;
@@ -2103,9 +2103,9 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 				}
 			}
 
-			if (isSpecial && !(g_render_flags & RENDER_SPECIAL_ENTS)) {
+			if (isSpecial && !(g_settings.render_flags & RENDER_SPECIAL_ENTS)) {
 				continue;
-			} else if (!isSpecial && !(g_render_flags & RENDER_ENTS)) {
+			} else if (!isSpecial && !(g_settings.render_flags & RENDER_ENTS)) {
 				continue;
 			}
 
@@ -2116,7 +2116,7 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 				foundBetterPick = true;
 			}
 		}
-		else if (i > 0 && g_render_flags & RENDER_POINT_ENTS) {
+		else if (i > 0 && g_settings.render_flags & RENDER_POINT_ENTS) {
 			vec3 mins = renderEnts[i].offset + renderEnts[i].pointEntCube->mins;
 			vec3 maxs = renderEnts[i].offset + renderEnts[i].pointEntCube->maxs;
 
@@ -2154,14 +2154,14 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 	int testEntidx, int& faceIdx, float& bestDist) {
 	BSPMODEL& model = map->models[modelIdx];
 
-	if (!(g_render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
 		return false;
 	}
 
 	start -= offset;
 
 	bool foundBetterPick = false;
-	bool skipSpecial = !(g_render_flags & RENDER_SPECIAL);
+	bool skipSpecial = !(g_settings.render_flags & RENDER_SPECIAL);
 
 	bool hasAngles = rot != vec3();
 	mat4x4 angleTransform = map->ents[testEntidx]->getRotationMatrix(true);
@@ -2201,8 +2201,8 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 		}
 	}
 
-	bool selectWorldClips = modelIdx == 0 && (g_render_flags & RENDER_WORLD_CLIPNODES) && hullIdx != -1;
-	bool selectEntClips = modelIdx > 0 && (g_render_flags & RENDER_ENT_CLIPNODES);
+	bool selectWorldClips = modelIdx == 0 && (g_settings.render_flags & RENDER_WORLD_CLIPNODES) && hullIdx != -1;
+	bool selectEntClips = modelIdx > 0 && (g_settings.render_flags & RENDER_ENT_CLIPNODES);
 
 	if (hullIdx == -1 && renderModels[modelIdx].groupCount == 0) {
 		// clipnodes are visible for this model because it has no faces

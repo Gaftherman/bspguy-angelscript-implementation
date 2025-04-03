@@ -420,6 +420,27 @@ bool Entity::canRotate() {
 	return false;
 }
 
+bool Entity::shouldDisplayDirectionVector() {
+	if (!(g_settings.render_flags & RENDER_ENT_DIRECTIONS)) {
+		return false;
+	}
+
+	// don't show vectors for point entities or solids that can rotate normally
+	// don't show for sprites either unless force rotation is on (the vector makes no sense)
+	if ((!isBspModel() || !canRotate()) && (!isSprite() || g_app->forceAngleRotation)) {
+		string cname = getClassname();
+		FgdClass* clazz = g_app->mergedFgd ? g_app->mergedFgd->getFgdClass(cname) : NULL;
+		// show if the FGD says the ent uses angles, or if the fgd is missing and the ent has angles,
+		// or if force angles are on
+		bool classUsesAngle = clazz ? (clazz->hasKey("angles") || clazz->hasKey("angle")) : false;
+		if (classUsesAngle || (!clazz && (hasKey("angles") || hasKey("angle"))) || g_app->forceAngleRotation) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 vec3 Entity::getHullOrigin(Bsp* map) {
 	vec3 ori = getOrigin();
 	int modelIdx = getBspModelIdx();

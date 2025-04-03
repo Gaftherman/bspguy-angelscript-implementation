@@ -517,7 +517,7 @@ void Renderer::renderLoop() {
 		glCheckError("Rendering BSP (opaque pass)");
 
 		// wireframe pass
-		if (g_render_flags & RENDER_WIREFRAME) {
+		if (g_settings.render_flags & RENDER_WIREFRAME) {
 			mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, false, true);
 			glCheckError("Rendering BSP (wireframe pass)");
 		}
@@ -569,14 +569,14 @@ void Renderer::renderLoop() {
 
 			glCheckError("Rendering debug clipnodes");
 
-			if ((g_render_flags & (RENDER_ORIGIN | RENDER_MAP_BOUNDARY)) || hasCullbox) {
+			if ((g_settings.render_flags & (RENDER_ORIGIN | RENDER_MAP_BOUNDARY)) || hasCullbox) {
 				colorShader->bind();
 				model.loadIdentity();
 				colorShader->pushMatrix(MAT_MODEL);
 				colorShader->updateMatrixes();
 				glDisable(GL_CULL_FACE);
 				
-				if ((g_render_flags & RENDER_MAP_BOUNDARY) && !emptyMapLoaded) {
+				if ((g_settings.render_flags & RENDER_MAP_BOUNDARY) && !emptyMapLoaded) {
 					glDepthFunc(GL_LESS);
 
 					COLOR4 red = COLOR4(255, 0, 0, 64);
@@ -629,7 +629,7 @@ void Renderer::renderLoop() {
 					drawBox(cullMins, cullMaxs, COLOR4(255, 0, 0, 64));
 				}
 
-				if (g_render_flags & RENDER_ORIGIN) {
+				if (g_settings.render_flags & RENDER_ORIGIN) {
 					drawLine(debugPoint - vec3(32, 0, 0), debugPoint + vec3(32, 0, 0), { 128, 128, 255, 255 });
 					drawLine(debugPoint - vec3(0, 32, 0), debugPoint + vec3(0, 32, 0), { 0, 255, 0, 255 });
 					drawLine(debugPoint - vec3(0, 0, 32), debugPoint + vec3(0, 0, 32), { 0, 0, 255, 255 });
@@ -643,7 +643,7 @@ void Renderer::renderLoop() {
 		}
 
 		drawEntConnections();
-		if (entConnectionPoints && (g_render_flags & RENDER_ENT_CONNECTIONS)) {
+		if (entConnectionPoints && (g_settings.render_flags & RENDER_ENT_CONNECTIONS)) {
 			model.loadIdentity();
 			colorShader->updateMatrixes();
 			glDisable(GL_DEPTH_TEST);
@@ -1240,7 +1240,7 @@ void Renderer::saveSettings() {
 	g_settings.verboseLogs = g_verbose;
 	g_settings.zfar = zFar;
 	g_settings.fov = fov;
-	g_settings.render_flags = g_render_flags;
+	g_settings.render_flags = g_settings.render_flags;
 	g_settings.undoLevels = undoLevels;
 	g_settings.moveSpeed = moveSpeed;
 	g_settings.rotSpeed = rotationSpeed;
@@ -1264,7 +1264,7 @@ void Renderer::loadSettings() {
 	zFar = g_settings.zfar;
 	zFarMdl = g_settings.zFarMdl;
 	fov = g_settings.fov;
-	g_render_flags = g_settings.render_flags;
+	g_settings.render_flags = g_settings.render_flags;
 	undoLevels = g_settings.undoLevels;
 	rotationSpeed = g_settings.rotSpeed;
 	moveSpeed = g_settings.moveSpeed;
@@ -1452,7 +1452,14 @@ void Renderer::drawTransformAxes() {
 	}
 	if (transformMode == TRANSFORM_MOVE) {
 		vec3 ori = moveAxes.origin;
-		float offset = (g_render_flags & RENDER_ENT_DIRECTIONS) ? 64 : 0;
+
+		bool shouldOffset = false;
+		for (Entity* ent : pickInfo.getEnts()) {
+			shouldOffset = ent->shouldDisplayDirectionVector();
+			break;
+		}
+
+		float offset = shouldOffset ? 64 : 0;
 		model.translate(ori.x, ori.z + offset, -ori.y);
 		colorShader->updateMatrixes();
 		moveAxes.buffer->upload();
@@ -1461,7 +1468,7 @@ void Renderer::drawTransformAxes() {
 }
 
 void Renderer::drawEntConnections() {
-	if (entConnections && (g_render_flags & RENDER_ENT_CONNECTIONS)) {
+	if (entConnections && (g_settings.render_flags & RENDER_ENT_CONNECTIONS)) {
 		model.loadIdentity();
 		model.translate(mapRenderer->renderOffset.x, mapRenderer->renderOffset.y, mapRenderer->renderOffset.z);
 		colorShader->updateMatrixes();
@@ -1475,7 +1482,7 @@ void Renderer::updateEntDirectionVectors() {
 		entDirectionVectors = NULL;
 	}
 	
-	if (!(g_render_flags & RENDER_ENT_DIRECTIONS)) {
+	if (!(g_settings.render_flags & RENDER_ENT_DIRECTIONS)) {
 		return;
 	}
 
@@ -1488,17 +1495,8 @@ void Renderer::updateEntDirectionVectors() {
 	vector<Entity*> directEnts;
 
 	for (Entity* ent : pickEnts) {
-		// don't show vectors for point entities or solids that can rotate normally
-		// don't show for sprites either unless force rotation is on (the vector makes no sense)
-		if ((!ent->isBspModel() || !ent->canRotate()) && (!ent->isSprite() || g_app->forceAngleRotation)) {
-			string cname = ent->getClassname();
-			FgdClass* clazz = mergedFgd ? mergedFgd->getFgdClass(cname) : NULL;
-			// show if the FGD says the ent uses angles, or if the fgd is missing and the ent has angles,
-			// or if force angles are on
-			bool classUsesAngle = clazz ? (clazz->hasKey("angles") || clazz->hasKey("angle")) : false;
-			if (classUsesAngle || (!clazz && (ent->hasKey("angles") || ent->hasKey("angle"))) || g_app->forceAngleRotation)
-				directEnts.push_back(ent);
-		}
+		if (ent->shouldDisplayDirectionVector())
+			directEnts.push_back(ent);
 	}
 
 	if (directEnts.empty())
@@ -2053,7 +2051,13 @@ void Renderer::cameraObjectHovering() {
 		getPickRay(pickStart, pickDir);
 		float bestDist = FLT_MAX;
 
-		vec3 offset = (g_render_flags & RENDER_ENT_DIRECTIONS) && transformMode == TRANSFORM_MOVE ? vec3(0, 0, 64) : vec3();
+		bool shouldOffset = false;
+		for (Entity* ent : pickInfo.getEnts()) {
+			shouldOffset = ent->shouldDisplayDirectionVector();
+			break;
+		}
+
+		vec3 offset = shouldOffset && transformMode == TRANSFORM_MOVE ? vec3(0, 0, 64) : vec3();
 		pickStart -= offset;
 
 		Bsp* map = mapRenderer->map;
@@ -2869,7 +2873,7 @@ BaseRenderer* Renderer::loadModel(Entity* ent) {
 }
 
 bool Renderer::drawModelsAndSprites() {
-	if (!(g_render_flags & RENDER_POINT_ENTS))
+	if (!(g_settings.render_flags & RENDER_POINT_ENTS))
 		return false;
 
 	if (mapRenderer->map->ents.empty()) {
@@ -2881,7 +2885,7 @@ bool Renderer::drawModelsAndSprites() {
 	colorShader->bind();
 	colorShader->setUniform("colorMult", vec4(1, 1, 1, 1));
 
-	if (!(g_render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES)))
+	if (!(g_settings.render_flags & (RENDER_STUDIO_MDL | RENDER_SPRITES)))
 		return false;
 
 	glEnable(GL_CULL_FACE);
@@ -3017,8 +3021,8 @@ bool Renderer::drawModelsAndSprites() {
 
 		bool isSelected = selectedEnts.count(entidx);
 
-		bool skipRender = mdl->isStudioModel() && !(g_render_flags & RENDER_STUDIO_MDL)
-			|| mdl->isSprite() && !(g_render_flags & RENDER_SPRITES);
+		bool skipRender = mdl->isStudioModel() && !(g_settings.render_flags & RENDER_STUDIO_MDL)
+			|| mdl->isSprite() && !(g_settings.render_flags & RENDER_SPRITES);
 
 		if (skipRender)
 			continue;
@@ -3489,7 +3493,7 @@ void Renderer::updateEntConnections() {
 		entConnectionLinks.clear();
 	}
 
-	if (!(g_render_flags & RENDER_ENT_CONNECTIONS)) {
+	if (!(g_settings.render_flags & RENDER_ENT_CONNECTIONS)) {
 		return;
 	}
 
