@@ -1675,8 +1675,10 @@ void Renderer::controls() {
 
 	oldWantTextInput = io.WantTextInput;
 
-	if (!io.WantTextInput)
+	if (!io.WantTextInput) {
 		globalShortcutControls();
+		shortcutControls();
+	}
 
 	if (!io.WantCaptureMouse) {
 		double xpos, ypos;
@@ -1694,8 +1696,6 @@ void Renderer::controls() {
 		vertexEditControls();
 
 		cameraPickingControls();
-
-		shortcutControls();
 	}
 
 	oldLeftMouse = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
