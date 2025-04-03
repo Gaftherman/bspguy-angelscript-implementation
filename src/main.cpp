@@ -18,11 +18,9 @@
 // expand input text for multiline
 // speed up clipnode gen ?
 // box selection for entities
-// add glew to a repo somewhere so fresh building is easier
 // scale axes and vertex editing in wrong place for rotated solids
 // - ! textures dont count toward allocblock?
 // alt instead of ctrl for slow movement, then can use hotkeys
-// figure out mdl asan corruption. maybe a false positive it doesn't really make sense. disabling external sequence loads fixes
 // invalid solid undo not reverting plane vertex positions sometimes
 // dbm_14 invisible triggers not showing clipndoes.
 // can't select by clipnodes when manually toggled on and rendering disabled for ents
@@ -39,17 +37,14 @@
 // highlight non-planar faces in vertex edit mode
 // subdivided faces can't be transformed in verte edit mode
 // auto-clean after a while? Unused data will pile up after a lot of face splitting
-// scale fps overlay + toolbar offset with font size
 // reference aaatrigger from wad instead of embedding it if it doesnt exist
-// invalid solid log spam
 // scaling allowing concave solids (merge0.bsp angled wedge)
 // transforms gradually waste more and more planes+clipnodes until the map overflows (need smarter updates)
 // "Validate" doesn't return any response.. -Sparks (add a results window or something for that + clean/optimize)
 // copy-paste ents from Jack -Outerbeast
 // clipnode models sometimes missing faces or extending to infinity
-// floating point inaccuracies probably. Changing starting cube size also changes the model
+//   floating point inaccuracies probably. Changing starting cube size also changes the model
 // show tooltip when hovering over ent target/caller
-// export embedded textures
 // texture browser/import
 
 // minor todo:

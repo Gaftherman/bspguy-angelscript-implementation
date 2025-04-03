@@ -1765,6 +1765,8 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 	}
 	activeShader->popMatrix(MAT_MODEL);
 
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	if ((g_render_flags & RENDER_POINT_ENTS) && !transparencyPass && !wireframePass) {
 		drawPointEntities();
 		activeShader->bind();

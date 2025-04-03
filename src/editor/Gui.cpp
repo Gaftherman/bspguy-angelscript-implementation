@@ -1765,11 +1765,11 @@ void Gui::drawMenuBar() {
 				"on the positive X axis",
 				"on the negative X axis",
 				//"on the Y axis"
-				"on the negative Y axis",
-				"on the positive Y Axis",
+				"on the positive Y axis",
+				"on the negative Y Axis",
 				//"on the Y Axis",
-				"on the negative Z Axis",
 				"on the positive Z Axis",
+				"on the negative Z Axis",
 			};
 
 			static int clipFlags[7] = {
