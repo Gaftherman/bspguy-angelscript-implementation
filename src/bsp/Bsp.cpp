@@ -148,7 +148,7 @@ void Bsp::get_model_vertex_bounds(int modelIdx, vec3& mins, vec3& maxs) {
 
 	BSPMODEL& model = models[modelIdx];
 
-	for (int i = 0; i < model.nFaces; i++) {
+	for (int i = 0; i < model.nFaces && model.iFirstFace + i < faceCount; i++) {
 		BSPFACE& face = faces[model.iFirstFace + i];
 
 		for (int e = 0; e < face.nEdges; e++) {
@@ -203,6 +203,51 @@ void Bsp::get_model_vertex_bounds(int modelIdx, vec3& mins, vec3& maxs) {
 		}
 	}
 }
+
+void Bsp::get_model_hull_bounds(int modelIdx, int hull, vec3& mins, vec3& maxs) {
+	mins = vec3(FLT_MAX, FLT_MAX, FLT_MAX);
+	maxs = vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+	Clipper clipper;
+	vector<NodeVolumeCuts> solidNodes = get_model_leaf_volume_cuts(modelIdx, hull, CONTENTS_SOLID);
+
+	vector<CMesh> solidMeshes;
+	for (int k = 0; k < solidNodes.size(); k++) {
+		solidMeshes.push_back(clipper.clip(solidNodes[k].cuts));
+	}
+
+	for (int m = 0; m < solidMeshes.size(); m++) {
+		CMesh& mesh = solidMeshes[m];
+
+		for (int i = 0; i < mesh.faces.size(); i++) {
+
+			if (!mesh.faces[i].visible) {
+				continue;
+			}
+
+			set<int> uniqueFaceVerts;
+
+			for (int k = 0; k < mesh.faces[i].edges.size(); k++) {
+				for (int v = 0; v < 2; v++) {
+					int vertIdx = mesh.edges[mesh.faces[i].edges[k]].verts[v];
+					if (!mesh.verts[vertIdx].visible) {
+						continue;
+					}
+					expandBoundingBox(mesh.verts[vertIdx].pos, mins, maxs);
+				}
+			}
+		}
+	}
+}
+
+void Bsp::get_model_merge_bounds(int modelIdx, vec3& mins, vec3& maxs) {
+	get_model_vertex_bounds(modelIdx, mins, maxs);
+
+	// allow a tiny bit of overlap for models that are touching each other
+	mins += vec3(EPSILON, EPSILON, EPSILON);
+	maxs -= vec3(EPSILON, EPSILON, EPSILON);
+}
+
 
 vector<TransformVert> Bsp::getModelVerts(int modelIdx) {
 	vector<TransformVert> allVerts;
@@ -4658,6 +4703,13 @@ bool Bsp::validate() {
 				models[i].nMaxs.x, models[i].nMaxs.y, models[i].nMaxs.z);
 			isValid = false;
 		}
+
+		STRUCTUSAGE usage = STRUCTUSAGE(this);
+		mark_model_structures(i, &usage, false);
+		usage.compute_sum();
+		if (usage.sum.faces != models[i].nFaces) {
+			logf("Bad face count in model %d: %d / %d\n", i, usage.sum.faces, models[i].nFaces);
+		}
 	}
 	if (totalVisLeaves != leafCount) {
 		logf("Bad model vis leaf sum: %d / %d\n", totalVisLeaves, leafCount);
@@ -4852,7 +4904,7 @@ void Bsp::print_clipnode_tree(int iNode, int depth) {
 	}
 	else {
 		BSPPLANE& plane = planes[clipnodes[iNode].iPlane];
-		logf("NODE (%.2f, %.2f, %.2f) @ %.2f\n", plane.vNormal.x, plane.vNormal.y, plane.vNormal.z, plane.fDist);
+		logf("NODE %d (%.2f, %.2f, %.2f) @ %.2f\n", iNode, plane.vNormal.x, plane.vNormal.y, plane.vNormal.z, plane.fDist);
 	}
 	
 
@@ -4938,7 +4990,7 @@ int32_t Bsp::pointContents(int iNode, vec3 p, int hull, vector<int>& nodeBranch,
 		childIdx = -1;
 		return iNode;
 	}
-	
+
 	if (hull == 0) {
 		while (iNode >= 0 && iNode < nodeCount)
 		{
@@ -4961,7 +5013,7 @@ int32_t Bsp::pointContents(int iNode, vec3 p, int hull, vector<int>& nodeBranch,
 		return leaves[~iNode].nContents;
 	}
 	else {
-		while (iNode >= 0 && iNode < nodeCount)
+		while (iNode >= 0 && iNode < clipnodeCount)
 		{
 			nodeBranch.push_back(iNode);
 			BSPCLIPNODE& node = clipnodes[iNode];
@@ -5298,6 +5350,9 @@ int Bsp::count_visible_polys(vec3 pos, vec3 angles) {
 }
 
 void Bsp::mark_face_structures(int iFace, STRUCTUSAGE* usage) {
+	if (iFace >= faceCount)
+		return;
+
 	BSPFACE& face = faces[iFace];
 	usage->faces[iFace] = true;
 
@@ -5369,6 +5424,32 @@ void Bsp::mark_model_structures(int modelIdx, STRUCTUSAGE* usage, bool skipLeave
 			mark_clipnode_structures(model.iHeadnodes[k], usage);
 	}
 }
+
+void Bsp::unlink_model_leaf_faces(int modelIdx) {
+	BSPMODEL& model = models[modelIdx];
+
+	if (model.iHeadnodes[0] >= 0 && model.iHeadnodes[0] < nodeCount)
+		unlink_model_leaf_faces_by_node(model.iHeadnodes[0]);
+}
+
+void Bsp::unlink_model_leaf_faces_by_node(int iNode) {
+	BSPNODE& node = nodes[iNode];
+
+	for (int i = 0; i < 2; i++) {
+		if (node.iChildren[i] >= 0) {
+			unlink_model_leaf_faces_by_node(node.iChildren[i]);
+		}
+		else {
+			BSPLEAF& leaf = leaves[~node.iChildren[i]];
+
+			// submodels don't use the faces linked to leaves, so deleting the references
+			// should cause no harm...
+			leaf.iFirstMarkSurface = 0;
+			leaf.nMarkSurfaces = 0;
+		}
+	}
+}
+
 
 void Bsp::remap_face_structures(int faceIdx, STRUCTREMAP* remap) {
 	if (remap->visitedFaces[faceIdx]) {
@@ -6452,29 +6533,265 @@ int Bsp::duplicate_model(int modelIdx) {
 	}
 	newModel.nVisLeafs = 0; // techinically should match the old model, but leaves aren't duplicated yet
 
+	// will fix "bad model face sum" after a clean due to old face references in leaves that weren't duplicated
+	unlink_model_leaf_faces(newModelIdx);
+
 	return newModelIdx;
 }
 
-int Bsp::merge_models(int modelIdxA, int modelIdxB) {
+int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
+	// remove point entities
+
+	struct MergedEntity {
+		Entity* ent;
+		vec3 min[MAX_MAP_HULLS];
+		vec3 max[MAX_MAP_HULLS];
+	};
+
+	vector<MergedEntity> mergedEnts;
+
+	for (Entity* ent : mergeEnts) {
+		int idx = ent->getBspModelIdx();
+		if (idx >= 0) {
+			MergedEntity ment;
+			get_model_merge_bounds(idx, ment.min[0], ment.max[0]);
+			for (int i = 1; i < MAX_MAP_HULLS; i++)
+				get_model_hull_bounds(idx, i, ment.min[i], ment.max[i]);
+
+			vec3 ori = ent->getOrigin();
+			for (int i = 0; i < MAX_MAP_HULLS; i++) {
+				ment.min[i] += ori;
+				ment.max[i] += ori;
+			}
+
+			ment.ent = ent;
+			mergedEnts.push_back(ment);
+		}
+		if (idx >= modelCount) {
+			logf("Merge failed. Invalid model selected for merging: %d\n", idx);
+			return -1;
+		}
+	}
+
+	if (mergedEnts.size() <= 1) {
+		logf("no models to merge\n");
+		return -1;
+	}
+
+	bool clipnodesOverlap = false;
+	// check if any bounds overlap
+	for (MergedEntity& enta : mergedEnts) {
+		for (MergedEntity& entb : mergedEnts) {
+			if (enta.ent == entb.ent)
+				continue;
+
+			for (int i = 0; i < MAX_MAP_HULLS; i++) {
+				if (boxesIntersect(enta.min[i] + enta.ent->getOrigin(), enta.max[i] + enta.ent->getOrigin(),
+					entb.min[i] + entb.ent->getOrigin(), entb.max[i] + entb.ent->getOrigin())) {
+					
+					if (i == 0) {
+						logf("Merge failed. Selected entities are intersecting or can't be divided by an axis-aligned plane.\n");
+						return -1;
+					}
+					
+					clipnodesOverlap = true;
+				}
+			}
+		}
+	}
+
+	if (!allowClipnodeOverlap && clipnodesOverlap) {
+		return -2;
+	}
+
+	// create a BSP tree of the models by expanding a bounding box to enclose
+	// 1 additional object at each step. Multiple bounding boxes can be expanding in parallel
+
+	struct MergeOp {
+		Entity* enta;
+		Entity* entb;
+	};
+	vector<MergeOp> mergeOperations;
+
+	int hullOrder[MAX_MAP_HULLS] = { 1, 2, 3, 0 }; // biggest to smallest
+
+	// do a dry run in case the merger can't find the right order to merge things
+	while (mergedEnts.size() > 1) {
+
+		// find the best next expansion. Something that will not intersect more than one new entity
+		// and which creates the smallest bounding box.
+		bool foundMerge = false;
+		for (int h = 0; h < MAX_MAP_HULLS; h++) {
+			int hull = hullOrder[h];
+
+			if (h != 0) {
+				clipnodesOverlap = true;
+			}
+
+			for (int i = 0; i < mergedEnts.size(); i++) {
+				MergedEntity& enta = mergedEnts[i];
+
+				int bestMerge = -1;
+				Entity* bestMergeEnt = NULL;
+				float bestVolume = FLT_MAX;
+				
+				vec3 amin = enta.min[hull];
+				vec3 amax = enta.max[hull];
+
+				for (int k = 0; k < mergedEnts.size(); k++) {
+					MergedEntity& entb = mergedEnts[k];
+					if (enta.ent == entb.ent)
+						continue;
+
+					vec3 bmin = entb.min[hull];
+					vec3 bmax = entb.max[hull];
+					vec3 mergedMins = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
+					vec3 mergedMaxs = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
+					vec3 mergedSize = mergedMaxs - mergedMins;
+
+					float volume = mergedSize.x * mergedSize.y * mergedSize.z;
+					if (volume >= bestVolume) {
+						//logf("Merge %d to %d would be bigger than to %d\n", enta.ent->getBspModelIdx(), entb.ent->getBspModelIdx(), bestMergeEnt->getBspModelIdx());
+						continue;
+					}
+
+					BSPPLANE separator = get_separation_plane(amin, amax, bmin, bmax);
+					if (separator.nType == -1) {
+						// can't find a separating plane
+						//logf("No sep plane with %d and %d\n", enta.ent->getBspModelIdx(), entb.ent->getBspModelIdx());
+						continue;
+					}
+
+					bool wouldMergeIntersectOtherEnts = false;
+					for (const MergedEntity& entc : mergedEnts) {
+						if (entc.ent == enta.ent || entc.ent == entb.ent)
+							continue;
+
+						if (boxesIntersect(mergedMins, mergedMaxs, entc.min[hull], entc.max[hull])) {
+							wouldMergeIntersectOtherEnts = true;
+							break;
+						}
+					}
+
+					if (!wouldMergeIntersectOtherEnts) {
+						bestVolume = volume;
+						bestMerge = k;
+						bestMergeEnt = entb.ent;
+					}
+				}
+
+				if (bestMerge != -1) {
+					//logf("will merge %d into %d\n", enta.ent->getBspModelIdx(), mergedEnts[bestMerge].ent->getBspModelIdx());
+
+					// A absorbs B
+					for (int h = 0; h < MAX_MAP_HULLS; h++) {
+						vec3 amin = enta.min[h];
+						vec3 amax = enta.max[h];
+						vec3 bmin = mergedEnts[bestMerge].min[h];
+						vec3 bmax = mergedEnts[bestMerge].max[h];
+						enta.min[h] = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
+						enta.max[h] = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
+					}
+					mergedEnts.erase(mergedEnts.begin() + bestMerge); // goodbye, B
+
+					MergeOp op;
+					op.enta = enta.ent;
+					op.entb = bestMergeEnt;
+					mergeOperations.push_back(op);
+
+					foundMerge = true;
+					break;
+				}
+			}
+		}
+
+		if (!foundMerge) {
+			logf("The model merger is not smart enough to merge these models. Try merging a smaller group.\n");
+			return -1;
+		}
+	}
+
+	if (!allowClipnodeOverlap && clipnodesOverlap) {
+		return -2;
+	}
+
+	remove_unused_model_structures();
+
+	Entity* finalEnt = NULL;
+	for (const MergeOp& op : mergeOperations) {
+		int newIdx = merge_models(op.enta, op.entb);
+		if (newIdx == -1)
+			return -3; // shouldn't happen, but does. Special value meaning to make this undoable
+		op.enta->setOrAddKeyvalue("model", "*" + to_string(newIdx));
+		op.entb->removeKeyvalue("model");
+		remove_unused_model_structures();
+		finalEnt = op.enta;
+	}
+
+	return finalEnt->getBspModelIdx();
+}
+
+int Bsp::merge_models(Entity* enta, Entity* entb) {
+	int modelIdxA = enta->getBspModelIdx();
+	int modelIdxB = entb->getBspModelIdx();
+
 	if (modelIdxA < 0 || modelIdxB < 0 || modelIdxA >= modelCount || modelIdxB >= modelCount) {
 		logf("Invalid model indexes selected for merging\n");
 		return -1;
 	}
 
-	// a lazy way to make the faces contiguous, but this can cause overflows for big models
+	BSPPLANE separator;
+	{
+		BSPMODEL& modelA = models[modelIdxA];
+		BSPMODEL& modelB = models[modelIdxB];
+
+		vec3 mina, minb, maxa, maxb;
+		get_model_merge_bounds(modelIdxA, mina, maxa);
+		get_model_merge_bounds(modelIdxB, minb, maxb);
+
+		separator = get_separation_plane(mina + enta->getOrigin(), maxa + enta->getOrigin(),
+			minb + entb->getOrigin(), maxb + entb->getOrigin());
+
+		if (separator.nType == -1) {
+			logf("Merge failed. Model bounds overlap.\n");
+			return -1;
+		}
+	}
+
+	// reserve space for new headnodes.
+	// hlds expects the headnode index to be smaller than any child node indexes.
+	// So these nodes need to come first, before the model clipnodes are duplicated
+	const int newHeadnodeCount = 3;
+	int newClipnodeHeadnodesOffset = clipnodeCount;
+	BSPCLIPNODE appendClipNodes[newHeadnodeCount];
+	memset(appendClipNodes, 0, newHeadnodeCount * sizeof(BSPCLIPNODE));
+	append_lump(LUMP_CLIPNODES, appendClipNodes, newHeadnodeCount * sizeof(BSPCLIPNODE));
+
+	// and reserve space for the non-clipnode headnode
+	BSPNODE newHull0Node;
+	memset(&newHull0Node, 0, sizeof(BSPNODE));
+	int hull0headnodeOffset = nodeCount;
+	append_lump(LUMP_NODES, &newHull0Node, sizeof(BSPNODE));
+	
+	// lazy way to make the faces contiguous. They probably need duplicating for movement anyway
 	modelIdxA = duplicate_model(modelIdxA);
 	modelIdxB = duplicate_model(modelIdxB);
+
+	g_progress.hide = true;
+	if (enta->hasKey("origin")) {
+		move(enta->getOrigin(), modelIdxA);
+		enta->removeKeyvalue("origin");
+	}
+	if (entb->hasKey("origin")) {
+		move(entb->getOrigin(), modelIdxB);
+		entb->removeKeyvalue("origin");
+	}
+	g_progress.hide = false;	
+
 	int newIndex = create_model();
 
 	BSPMODEL& modelA = models[modelIdxA];
 	BSPMODEL& modelB = models[modelIdxB];
-
-	BSPPLANE separator = get_separation_plane(modelA.nMins, modelA.nMaxs, modelB.nMins, modelB.nMaxs);
-
-	if (separator.nType == -1) {
-		logf("Merge failed. Model bounds overlap.\n");
-		return -1;
-	}
 
 	vec3 amin = modelA.nMins;
 	vec3 amax = modelA.nMaxs;
@@ -6484,16 +6801,17 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 	BSPMODEL& mergedModel = models[newIndex];
 	mergedModel.nMins = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
 	mergedModel.nMaxs = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
-	mergedModel.nVisLeafs = 0; // ?
-	mergedModel.iFirstFace = modelA.iFirstFace; // i hope this isn't a problem! Merged faces will not be contiguous
+	mergedModel.nVisLeafs = modelA.nVisLeafs + modelB.nVisLeafs;
+	mergedModel.iFirstFace = min(modelA.iFirstFace, modelB.iFirstFace);
 	mergedModel.nFaces = modelA.nFaces + modelB.nFaces;
 	mergedModel.nVisLeafs = modelA.nVisLeafs + modelB.nVisLeafs; // also hope this isn't a problem
 	mergedModel.vOrigin = vec3();
 
 	// planes with negative normals mess up VIS and lighting stuff, so swap children instead
 	bool swapNodeChildren = separator.vNormal.x < 0 || separator.vNormal.y < 0 || separator.vNormal.z < 0;
-	if (swapNodeChildren)
+	if (swapNodeChildren) {
 		separator.vNormal = separator.vNormal.invert();
+	}
 
 	//logf("Separating plane: (%.0f, %.0f, %.0f) %.0f\n", separationPlane.vNormal.x, separationPlane.vNormal.y, separationPlane.vNormal.z, separationPlane.fDist);
 
@@ -6524,21 +6842,16 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 			headNode.iChildren[1] = temp;
 		}
 
-		BSPNODE* newThisNodes = new BSPNODE[nodeCount + 1];
-		memcpy(newThisNodes, nodes, nodeCount * sizeof(BSPNODE));
-		newThisNodes[nodeCount] = headNode;
-		mergedModel.iHeadnodes[0] = nodeCount;
-
-		replace_lump(LUMP_NODES, newThisNodes, (nodeCount + 1) * sizeof(BSPNODE));		
+		nodes[hull0headnodeOffset] = headNode;
+		mergedModel.iHeadnodes[0] = hull0headnodeOffset;
 	}
-
-	return newIndex;
 
 	// write new head node (clipnode BSP)
 	{
 		const int NEW_NODE_COUNT = MAX_MAP_HULLS - 1;
 
-		BSPCLIPNODE newHeadNodes[NEW_NODE_COUNT];
+		BSPCLIPNODE* newHeadNodes = clipnodes + newClipnodeHeadnodesOffset;
+
 		for (int i = 0; i < NEW_NODE_COUNT; i++) {
 			//logf("HULL %d starts at %d\n", i+1, thisWorld.iHeadnodes[i+1]);
 			newHeadNodes[i] = {
@@ -6556,65 +6869,76 @@ int Bsp::merge_models(int modelIdxA, int modelIdxB) {
 				newHeadNodes[i].iChildren[1] = CONTENTS_EMPTY;
 			}
 
-
 			if (swapNodeChildren) {
 				int16_t temp = newHeadNodes[i].iChildren[0];
 				newHeadNodes[i].iChildren[0] = newHeadNodes[i].iChildren[1];
 				newHeadNodes[i].iChildren[1] = temp;
 			}
 
-			mergedModel.iHeadnodes[i] = clipnodeCount + i;
+			mergedModel.iHeadnodes[i+1] = newClipnodeHeadnodesOffset + i;
 		}
-
-		BSPCLIPNODE* newNodes = new BSPCLIPNODE[clipnodeCount + NEW_NODE_COUNT];
-		int oldClipNodeByte = clipnodeCount * sizeof(BSPCLIPNODE);
-		memcpy(newNodes, clipnodes, oldClipNodeByte);
-		memcpy(newNodes + oldClipNodeByte, newHeadNodes, NEW_NODE_COUNT * sizeof(BSPCLIPNODE));
-
-		replace_lump(LUMP_CLIPNODES, newNodes, (clipnodeCount + NEW_NODE_COUNT) * sizeof(BSPCLIPNODE));
 	}
 
 	return newIndex;
 }
 
 BSPPLANE Bsp::get_separation_plane(vec3 minsA, vec3 maxsA, vec3 minsB, vec3 maxsB) {
-	BSPPLANE separationPlane;
-	memset(&separationPlane, 0, sizeof(BSPPLANE));
+	BSPPLANE separationPlane = {};
 
-	// separating plane points toward the other map (b)
+	struct AxisTest {
+		int type;
+		vec3 normal;
+		float gap;
+		float dist;
+	};
+
+	std::vector<AxisTest> candidates;
+
+	// X axis
 	if (minsB.x >= maxsA.x) {
-		separationPlane.nType = PLANE_X;
-		separationPlane.vNormal = { 1, 0, 0 };
-		separationPlane.fDist = maxsA.x + (minsB.x - maxsA.x) * 0.5f;
+		float gap = minsB.x - maxsA.x;
+		candidates.push_back({ PLANE_X, {1, 0, 0}, gap, maxsA.x + gap * 0.5f });
 	}
 	else if (maxsB.x <= minsA.x) {
-		separationPlane.nType = PLANE_X;
-		separationPlane.vNormal = { -1, 0, 0 };
-		separationPlane.fDist = maxsB.x + (minsA.x - maxsB.x) * 0.5f;
+		float gap = minsA.x - maxsB.x;
+		candidates.push_back({ PLANE_X, {-1, 0, 0}, gap, maxsB.x + gap * 0.5f });
 	}
-	else if (minsB.y >= maxsA.y) {
-		separationPlane.nType = PLANE_Y;
-		separationPlane.vNormal = { 0, 1, 0 };
-		separationPlane.fDist = minsB.y;
+
+	// Y axis
+	if (minsB.y >= maxsA.y) {
+		float gap = minsB.y - maxsA.y;
+		candidates.push_back({ PLANE_Y, {0, 1, 0}, gap, maxsA.y + gap * 0.5f });
 	}
 	else if (maxsB.y <= minsA.y) {
-		separationPlane.nType = PLANE_Y;
-		separationPlane.vNormal = { 0, -1, 0 };
-		separationPlane.fDist = maxsB.y;
+		float gap = minsA.y - maxsB.y;
+		candidates.push_back({ PLANE_Y, {0, -1, 0}, gap, maxsB.y + gap * 0.5f });
 	}
-	else if (minsB.z >= maxsA.z) {
-		separationPlane.nType = PLANE_Z;
-		separationPlane.vNormal = { 0, 0, 1 };
-		separationPlane.fDist = minsB.z;
+
+	// Z axis
+	if (minsB.z >= maxsA.z) {
+		float gap = minsB.z - maxsA.z;
+		candidates.push_back({ PLANE_Z, {0, 0, 1}, gap, maxsA.z + gap * 0.5f });
 	}
 	else if (maxsB.z <= minsA.z) {
-		separationPlane.nType = PLANE_Z;
-		separationPlane.vNormal = { 0, 0, -1 };
-		separationPlane.fDist = maxsB.z;
+		float gap = minsA.z - maxsB.z;
+		candidates.push_back({ PLANE_Z, {0, 0, -1}, gap, maxsB.z + gap * 0.5f });
 	}
-	else {
-		separationPlane.nType = -1; // no simple separating axis
+
+	if (candidates.empty()) {
+		separationPlane.nType = -1; // No separating axis
+		return separationPlane;
 	}
+
+	// Choose the axis with the largest gap
+	const AxisTest* best = &candidates[0];
+	for (const AxisTest& test : candidates) {
+		if (test.gap > best->gap)
+			best = &test;
+	}
+
+	separationPlane.nType = best->type;
+	separationPlane.vNormal = best->normal;
+	separationPlane.fDist = best->dist;
 
 	return separationPlane;
 }

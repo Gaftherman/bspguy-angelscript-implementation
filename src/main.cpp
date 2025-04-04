@@ -5,6 +5,8 @@
 #include "Renderer.h"
 #include "globals.h"
 
+// fix:
+// - log spam when moving model origin while clipnode rendering on
 
 // todo:
 // ripent saftey warning
@@ -79,7 +81,7 @@
 // Removing HULL 0 from solid model crashes game when standing on it
 
 
-const char* g_version_string = "bspguy v5 (April 2025)";
+const char* g_version_string = "bspguy v6 WIP (April 2025)";
 
 bool g_verbose = false;
 

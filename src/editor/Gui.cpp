@@ -289,7 +289,10 @@ void Gui::pasteLightmap() {
 
 void Gui::draw3dContextMenus() {
 	ImGuiContext& g = *GImGui;
+	ImGuiIO& io = ImGui::GetIO();
 
+	static int confirmMerge = 0;
+	
 	if (app->originHovered) {
 		if (ImGui::BeginPopup("ent_context") || ImGui::BeginPopup("empty_context")) {
 			if (ImGui::MenuItem("Center", "")) {
@@ -638,71 +641,25 @@ void Gui::draw3dContextMenus() {
 				tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
 					"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
 					"This also prevents model edits from affecting multiple entities at once.");
-			
-				/*
+
 				if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
-					int numPoint = 0;
-					int numSolids = 0;
-					for (Entity* ent : app->pickInfo.getEnts()) {
-						if (ent->getBspModelIdx() != -1) {
-							numSolids++;
-						}
-						else {
-							numPoint++;
-						}
-					}
-					if (numSolids != 2 || numPoint > 0) {
-						logf("Exactly 2 solid entities must be selected for merging\n");
+					LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+
+					// remove origins from models so that they merge at offsets seen in the editor
+					int newIndex = map->merge_models(app->pickInfo.getEnts(), false);
+
+					if (newIndex >= 0 || newIndex == -3) {
+						command->pushUndoState();
 					}
 					else {
-						int idxA = map->ents[app->pickInfo.ents[0]]->getBspModelIdx();
-						int idxB = map->ents[app->pickInfo.ents[1]]->getBspModelIdx();
+						delete command;
 
-						int numIdxA = 0;
-						int numIdxB = 0;
-						for (Entity* ent : map->ents) {
-							int idx = ent->getBspModelIdx();
-							if (idx == idxA) {
-								numIdxA++;
-							}
-							else if (idx == idxB) {
-								numIdxB++;
-							}
+						if (newIndex == -2) {
+							confirmMerge = 2;
 						}
-
-						if (numIdxA > 1) {
-							logf("Merge aborted. Model %d is shared by multiple entities.", idxA);
-						}
-						else if (numIdxB > 1) {
-							logf("Merge aborted. Model %d is shared by multiple entities.", idxB);
-						}
-						else {
-							LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
-
-							int newIndex = map->merge_models(idxA, idxB);
-							logf("Merged models %d and %d into new model *%d\n", newIndex);
-
-							for (int i = 0; i < map->ents.size(); i++) {
-								Entity* ent = map->ents[i];
-								int idx = ent->getBspModelIdx();
-								if (idx == idxA) {
-									ent->setOrAddKeyvalue("model", "*" + to_string(newIndex));
-								}
-								else if (idx == idxB) {
-									delete ent;
-									map->ents.erase(map->ents.begin() + i);
-									i--;
-								}
-							}
-
-							map->remove_unused_model_structures();
-
-							command->pushUndoState();
-						}
-					}					
+					}			
 				}
 				tooltip(g, "Merge solid entity models together.");
-				*/
 			}
 
 			if (ImGui::MenuItem(app->movingEnt ? "Ungrab" : "Grab", "G")) {
@@ -917,6 +874,41 @@ void Gui::draw3dContextMenus() {
 
 			ImGui::EndPopup();
 		}
+	}
+
+	if (confirmMerge == 2) {
+		ImGui::OpenPopup("Confirm Merge");
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y*0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Confirm Merge", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("The selected models have clipnodes that are overlapping or can't be merged simply.\n\n"
+			"Inspect clipnodes after merging. They will likely be broken.");
+		
+		ImGui::Dummy(ImVec2(0, 10));
+		
+		if (ImGui::Button("Merge")) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+			Bsp* map = app->mapRenderer->map;
+			int newIndex = map->merge_models(app->pickInfo.getEnts(), true);
+
+			if (newIndex >= 0 || newIndex == -3) {
+				command->pushUndoState();
+			}
+			else {
+				delete command;
+			}
+
+			confirmMerge = 0;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			confirmMerge = 0;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 }
 
@@ -2791,6 +2783,9 @@ void Gui::drawKeyvalueEditor() {
 								for (Entity* ent : pickEnts) {
 									ent->setOrAddKeyvalue("classname", group.classes[k]->name);
 									app->mapRenderer->refreshEnt(app->pickInfo.getEntIndex());
+									app->updateSelectionSize();
+									app->updateEntConnections();
+									app->updateEntDirectionVectors();
 								}
 								app->pushEntityUndoState("Change Class");
 								entityReportFilterNeeded = true;

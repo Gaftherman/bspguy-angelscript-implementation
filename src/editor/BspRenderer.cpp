@@ -593,6 +593,10 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 
 	for (int i = 0; i < model.nFaces; i++) {
 		int faceIdx = model.iFirstFace + i;
+		if (faceIdx >= map->faceCount) {
+			logf("Failed to refresh model with invalid faces\n");
+			break;
+		}
 		BSPFACE& face = map->faces[faceIdx];
 		BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
 		int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
@@ -721,6 +725,8 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		verts = newVerts;
 		vertCount = newCount;
 
+		Texture* gltex = texturesLoaded && numLoadedTextures > 0 ? glTextures[min((uint)numLoadedTextures-1, texinfo.iMiptex)] : greyTex;
+
 		// add face to a render group (faces that share that same texture array, lightmaps, and opacity flag)
 		bool isTransparent = opacity < 1.0f;
 		int groupIdx = -1;
@@ -729,7 +735,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 				renderGroups[k].arrayTextureIdx == miptexToTexArray[texinfo.iMiptex].arrayIdx;
 
 			if (!g_opengl_texture_array_support && !g_opengl_3d_texture_support) {
-				textureMatch = !texturesLoaded || renderGroups[k].texture == glTextures[texinfo.iMiptex];
+				textureMatch = !texturesLoaded || renderGroups[k].texture == gltex;
 			}
 
 			if (textureMatch && renderGroups[k].transparent == isTransparent) {
@@ -754,7 +760,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 			newGroup.verts = NULL;
 			newGroup.transparent = isTransparent;
 			newGroup.arrayTextureIdx = miptexToTexArray[texinfo.iMiptex].arrayIdx;
-			newGroup.texture = texturesLoaded ? glTextures[texinfo.iMiptex] : greyTex;
+			newGroup.texture = texturesLoaded ? gltex : greyTex;
 			for (int s = 0; s < MAXLIGHTMAPS; s++) {
 				newGroup.lightmapAtlas[s] = lightmapAtlas[s];
 			}
@@ -1427,6 +1433,11 @@ void BspRenderer::refreshFace(int faceIdx) {
 	const vec3 world_x = vec3(1, 0, 0);
 	const vec3 world_y = vec3(0, 1, 0);
 	const vec3 world_z = vec3(0, 0, 1);
+
+	if (faceIdx >= map->faceCount) {
+		logf("Failed to refresh invalid face %d / %d\n", faceIdx, map->faceCount);
+		return;
+	}
 
 	FaceMath& faceMath = faceMaths[faceIdx];
 	BSPFACE& face = map->faces[faceIdx];
@@ -2166,7 +2177,7 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 	bool hasAngles = rot != vec3();
 	mat4x4 angleTransform = map->ents[testEntidx]->getRotationMatrix(true);
 
-	for (int k = 0; k < model.nFaces; k++) {
+	for (int k = 0; k < model.nFaces && model.iFirstFace + k < map->faceCount; k++) {
 		FaceMath faceMath = faceMaths[model.iFirstFace + k];
 
 		if (hasAngles) {

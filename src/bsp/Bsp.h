@@ -125,6 +125,11 @@ public:
 	// get the bounding box for all vertexes in a BSP tree
 	void get_model_vertex_bounds(int modelIdx, vec3& mins, vec3& maxs);
 
+	void get_model_hull_bounds(int modelIdx, int hull, vec3& mins, vec3& maxs);
+
+	// slighty shrunk to allow merging models that touch each other
+	void get_model_merge_bounds(int modelIdx, vec3& mins, vec3& maxs);
+
 	// get all verts used by this model
 	// TODO: split any verts shared with other models!
 	vector<TransformVert> getModelVerts(int modelIdx);
@@ -326,7 +331,13 @@ public:
 
 	int duplicate_model(int modelIdx);
 
-	int merge_models(int modelIdxA, int modelIdxB);
+	// for each entity, duplicate its BSP model, remove its origin offset.
+	// merge all models together into one, if none of their bounds overlap, even if this means
+	// duplicating model data (2 entities share the same model).
+	int merge_models(vector<Entity*> ents, bool allowClipnodeOverlap);
+
+	// merge 2 models if their bounds don't overlap
+	int merge_models(Entity* enta, Entity* entb);
 
 	// returns a plane which bisects the area between the 2 bounding boxes.
 	// returns a plane with nType -1 if the boxes overlap
@@ -391,6 +402,13 @@ private:
 	void mark_face_structures(int iFace, STRUCTUSAGE* usage);
 	void mark_node_structures(int iNode, STRUCTUSAGE* usage, bool skipLeaves);
 	void mark_clipnode_structures(int iNode, STRUCTUSAGE* usage);
+	
+	// remove links to faces in leaves used by a submodel.
+	// This is a loss of data. The compiler generated leaves for submodels, for some reason.
+	// I don't know why. The game doesn't use leaves besides checking contents. This may bite me later.
+	// Relinking the faces is hopefully simple if needed. One face per leaf? Taken from the parent node?
+	void unlink_model_leaf_faces(int modelIdx);
+	void unlink_model_leaf_faces_by_node(int iNode);
 
 	// remaps structure indexes to new locations
 	void remap_face_structures(int faceIdx, STRUCTREMAP* remap);
