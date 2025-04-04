@@ -41,6 +41,9 @@ char const* bspFilterPatterns[1] = { "*.bsp" };
 char const* entFilterPatterns[1] = { "*.ent" };
 char const* wadFilterPatterns[1] = { "*.wad" };
 
+int confirmMerge = 0;
+bool editWasOpen = false;
+
 void tooltip(ImGuiContext& g, const char* text) {
 	if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
 		ImGui::BeginTooltip();
@@ -290,8 +293,6 @@ void Gui::pasteLightmap() {
 void Gui::draw3dContextMenus() {
 	ImGuiContext& g = *GImGui;
 	ImGuiIO& io = ImGui::GetIO();
-
-	static int confirmMerge = 0;
 	
 	if (app->originHovered) {
 		if (ImGui::BeginPopup("ent_context") || ImGui::BeginPopup("empty_context")) {
@@ -348,349 +349,7 @@ void Gui::draw3dContextMenus() {
 
 		if (ImGui::BeginPopup("ent_context"))
 		{
-			if (ImGui::MenuItem("Cut", "Ctrl+X")) {
-				app->cutEnts();
-			}
-			if (ImGui::MenuItem("Copy", "Ctrl+C")) {
-				app->copyEnts();
-			}
-			if (ImGui::MenuItem("Delete", "Del")) {
-				app->deleteEnts();
-			}
-			ImGui::Separator();
-			
-			Bsp* map = app->pickInfo.getMap();
-			bool anyBspModelSelected = false;
-			bool anyValidHeadnode[MAX_MAP_HULLS] = {false};
-			bool anyRedirectValid[MAX_MAP_HULLS] = { false };
-			bool anyCanRedirect = false;
-			vector<Entity*> pickEnts = app->pickInfo.getEnts();
-			vector<int> modelIndexes;
-			for (Entity* ent : pickEnts) {
-				int modelIdx = ent->getBspModelIdx();
-
-				if (modelIdx < 0)
-					continue;
-
-				BSPMODEL& model = map->models[modelIdx];
-				anyBspModelSelected = true;
-				modelIndexes.push_back(modelIdx);
-				for (int i = 0; i < MAX_MAP_HULLS; i++) {
-					if (model.iHeadnodes[i] >= 0) {
-						anyValidHeadnode[i] = true;
-					}
-				}
-				if (model.iHeadnodes[1] != model.iHeadnodes[2] || model.iHeadnodes[1] != model.iHeadnodes[3]) {
-					anyCanRedirect = true;
-				}
-				for (int i = 1; i < MAX_MAP_HULLS; i++) {
-					for (int k = 1; k < MAX_MAP_HULLS; k++) {
-						if (model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i]) {
-							anyRedirectValid[i] = true;
-						}
-					}
-				}
-			}
-
-
-			if (anyBspModelSelected) {
-				
-
-				if (ImGui::BeginMenu("Create Hull", !app->invalidSolid && app->isTransformableSolid && anyValidHeadnode[0])) {
-					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Create Model Clipnodes", modelIndexes);
-
-						for (int idx : modelIndexes) {
-							BSPMODEL& model = map->models[idx];
-							if (model.iHeadnodes[0] >= 0) {
-								map->regenerate_clipnodes(idx, -1);
-								logf("Regenerated hulls 1-3 on model %d\n", idx);
-							}
-							else {
-								logf("Model %d has no nodes. Skipping.\n", idx);
-							}
-						}
-						checkValidHulls();
-						
-						// don't delete models so that indexes don't shift which would require a full refresh
-						map->remove_unused_model_structures(false).print_delete_stats(1);
-						reloadLimits();
-
-						command->pushUndoState();
-					}
-
-					ImGui::Separator();
-
-					for (int i = 1; i < MAX_MAP_HULLS; i++) {
-						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str())) {
-							ModelEditCommand* command = new ModelEditCommand("Create Model Hull", modelIndexes);
-
-							for (int idx : modelIndexes) {
-								BSPMODEL& model = map->models[idx];
-								if (model.iHeadnodes[0] >= 0) {
-									map->regenerate_clipnodes(idx, i);
-									logf("Regenerated hull %d on model %d\n", i, idx);
-								}
-								else {
-									logf("Model %d has no nodes. Skipping.\n", idx);
-								}
-							}
-							checkValidHulls();
-
-							map->remove_unused_model_structures(false).print_delete_stats(1);
-							reloadLimits();
-
-							command->pushUndoState();
-						}
-					}
-					ImGui::EndMenu();
-				}
-				tooltip(g, "Creates a clipnode hull for the selected model by extending the planes of Hull 0.\nClipnodes are used for entity collision detection.");
-
-				if (ImGui::BeginMenu("Delete Hull", !app->isLoading)) {
-					if (ImGui::MenuItem("All Hulls")) {
-						ModelEditCommand* command = new ModelEditCommand("Delete Model Hulls", modelIndexes);
-
-						for (int idx : modelIndexes) {
-							BSPMODEL& model = map->models[idx];
-							if (model.iHeadnodes[0] >= 0 || model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
-								map->delete_hull(0, idx, -1);
-								map->delete_hull(1, idx, -1);
-								map->delete_hull(2, idx, -1);
-								map->delete_hull(3, idx, -1);
-								logf("Deleted all hulls on model %d\n", idx);
-							}
-							else {
-								logf("Model %d has no hulls. Skipping.\n", idx);
-							}
-						}
-						checkValidHulls();
-
-						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures(false).print_delete_stats(1);
-						reloadLimits();
-
-						command->pushUndoState();
-					}
-					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Delete Model Clipnodes", modelIndexes);
-
-						for (int idx : modelIndexes) {
-							BSPMODEL& model = map->models[idx];
-							if (model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
-								map->delete_hull(1, idx, -1);
-								map->delete_hull(2, idx, -1);
-								map->delete_hull(3, idx, -1);
-								logf("Deleted hulls 1-3 on model %d\n", idx);
-							}
-							else {
-								logf("Model %d has no clipnodes. Skipping.\n", idx);
-							}
-						}
-						checkValidHulls();
-
-						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures(false).print_delete_stats(1);
-						reloadLimits();
-
-						command->pushUndoState();
-					}
-
-					ImGui::Separator();
-
-					for (int i = 0; i < MAX_MAP_HULLS; i++) {
-
-						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
-							ModelEditCommand* command = new ModelEditCommand("Delete Model Hull", modelIndexes);
-
-							for (int idx : modelIndexes) {
-								BSPMODEL& model = map->models[idx];
-								if (model.iHeadnodes[i] >= 0) {
-									map->delete_hull(i, idx, -1);
-									logf("Deleted hull %d on model %d\n", i, idx);
-								}
-								else {
-									logf("Model %d has no hull %d. Skipping.\n", idx, i);
-								}
-							}
-							checkValidHulls();
-
-							logf("Cleaning %s\n", map->name.c_str());
-							map->remove_unused_model_structures(false).print_delete_stats(1);
-							reloadLimits();
-
-							command->pushUndoState();
-						}
-					}
-
-					ImGui::EndMenu();
-				}
-				tooltip(g, "Deletes a hull from the selected model. Run the Clean command afterward to reduce the clipnode count for the map. Be careful using this as it can cause crashes if the entity needs the deleted hull.");
-
-				if (ImGui::BeginMenu("Simplify Hull", !app->isLoading && (anyValidHeadnode[1] || anyValidHeadnode[2] || anyValidHeadnode[3]))) {
-					if (ImGui::MenuItem("Clipnodes")) {
-						ModelEditCommand* command = new ModelEditCommand("Simplify Model Clipnodes", modelIndexes);
-
-						for (int idx : modelIndexes) {
-							BSPMODEL& model = map->models[idx];
-							map->simplify_model_collision(idx, 1);
-							map->simplify_model_collision(idx, 2);
-							map->simplify_model_collision(idx, 3);
-							logf("Replaced hulls 1-3 on model %d with a box-shaped hull.\n", idx);
-						}
-
-						logf("Cleaning %s\n", map->name.c_str());
-						map->remove_unused_model_structures(false).print_delete_stats(1);
-						reloadLimits();
-
-						command->pushUndoState();
-					}
-
-					ImGui::Separator();
-
-					for (int i = 1; i < MAX_MAP_HULLS; i++) {
-						if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
-							ModelEditCommand* command = new ModelEditCommand("Simplify Model Hull", modelIndexes);
-
-							for (int idx : modelIndexes) {
-								BSPMODEL& model = map->models[idx];
-								if (model.iHeadnodes[i] >= 0) {
-									map->simplify_model_collision(idx, 1);
-									logf("Replaced hull %d on model %d with a box-shaped hull\n", i, idx);
-								}
-								else {
-									logf("Model %d has no hull %d. Skipping.\n", idx, i);
-								}
-							}
-
-							logf("Cleaning %s\n", map->name.c_str());
-							map->remove_unused_model_structures(false).print_delete_stats(1);
-							reloadLimits();
-
-							command->pushUndoState();
-						}
-					}
-
-					ImGui::EndMenu();
-				}
-				tooltip(g, "Replaces a clipnode hull with a simple box. Run the Clean command afterward to reduce the clipnode count for the map.");
-
-				if (ImGui::BeginMenu("Redirect Hull", anyCanRedirect && !app->isLoading)) {
-					for (int i = 1; i < MAX_MAP_HULLS; i++) {
-						if (ImGui::BeginMenu(("Hull " + to_string(i)).c_str())) {
-
-							for (int k = 1; k < MAX_MAP_HULLS; k++) {
-								if (i == k)
-									continue;
-
-								if (ImGui::MenuItem(("Hull " + to_string(k)).c_str(), 0, false, anyRedirectValid[i])) {
-									ModelEditCommand* command = new ModelEditCommand("Redirect Model Hull", modelIndexes);
-
-									for (int idx : modelIndexes) {
-										BSPMODEL& model = map->models[idx];
-										bool canRedirect = model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i];
-										if (canRedirect) {
-											model.iHeadnodes[i] = model.iHeadnodes[k];
-											logf("Redirected hull %d to hull %d on model %d\n", i, k, idx);
-										}
-										else {
-											logf("Model %d has no hull %d or it was already redirected to %d. Skipping.\n", idx, k, i);
-										}
-									}
-									checkValidHulls();
-									
-									logf("Cleaning %s\n", map->name.c_str());
-									map->remove_unused_model_structures(false).print_delete_stats(1);
-									reloadLimits();
-
-									command->pushUndoState();
-								}
-							}
-
-							ImGui::EndMenu();
-						}
-					}
-
-					ImGui::EndMenu();
-				}
-				tooltip(g, "Redirect a clipnode hull to another clipnode hull. Run the Clean command afterward to reduce the clipnode count for the map. This is safer than deleting but makes collision detection less accurate.");
-				ImGui::Separator();
-
-				bool anySolidSelected = false;
-				vector<Entity*> pickEnts = app->pickInfo.getEnts();
-				if (app->pickInfo.getEntIndex() > 0) {
-
-					for (Entity* ent : pickEnts) {
-						if (ent->getBspModelIdx() != -1) {
-							anySolidSelected = app->pickInfo.getEntIndex() != 0;
-							break;
-						}
-					}
-				}
-				if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
-					LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
-
-					for (Entity* ent : pickEnts) {
-						int oldModelIdx = ent->getBspModelIdx();
-						int newModelIdx = map->duplicate_model(oldModelIdx);
-						ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
-					}
-
-					command->pushUndoState();
-				}
-				tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
-					"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
-					"This also prevents model edits from affecting multiple entities at once.");
-
-				if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
-					LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
-
-					// remove origins from models so that they merge at offsets seen in the editor
-					int newIndex = map->merge_models(app->pickInfo.getEnts(), false);
-
-					if (newIndex >= 0 || newIndex == -3) {
-						command->pushUndoState();
-					}
-					else {
-						delete command;
-
-						if (newIndex == -2) {
-							confirmMerge = 2;
-						}
-					}			
-				}
-				tooltip(g, "Merge solid entity models together.");
-			}
-
-			if (ImGui::MenuItem(app->movingEnt ? "Ungrab" : "Grab", "G")) {
-				if (!app->movingEnt)
-					app->grabEnts();
-				else {
-					app->ungrabEnts();
-				}
-			}
-			tooltip(g, "Attach the entity to your camera for easy movement.\n"
-				"Mouse wheel scrolling controls the distance from the camera."
-				"\nHold Shift/Ctrl for faster/slower distance adjustments.");
-
-			bool shouldHide = app->pickInfo.shouldHideSelection();
-
-			if (ImGui::MenuItem(shouldHide ? "Hide" : "Unhide", "H", false, app->pickInfo.ents.size() != 0)) {
-				if (shouldHide) {
-					app->hideSelectedEnts();
-				}
-				else {
-					app->unhideSelectedEnts();
-				}
-			}
-			if (ImGui::MenuItem("Transform", "Ctrl+M")) {
-				showTransformWidget = !showTransformWidget;
-			}
-			ImGui::Separator();
-			if (ImGui::MenuItem("Properties", "Alt+Enter")) {
-				showKeyvalueWidget = !showKeyvalueWidget;
-			}
-
+			drawEditOptions(false);
 
 			ImGui::EndPopup();
 		}
@@ -912,16 +571,392 @@ void Gui::draw3dContextMenus() {
 	}
 }
 
+void Gui::drawEditOptions(bool isMainMenu) {
+	ImGuiContext& g = *GImGui;
+	ImGuiIO& io = ImGui::GetIO();
+
+	bool entSelected = app->pickInfo.getEnt();
+	bool nonWorldspawnEntSelected = entSelected && app->pickInfo.getEntIndex() != 0;
+
+	if (ImGui::MenuItem("Cut", "Ctrl+X", false, nonWorldspawnEntSelected)) {
+		app->cutEnts();
+	}
+	if (ImGui::MenuItem("Copy", "Ctrl+C", false, nonWorldspawnEntSelected)) {
+		app->copyEnts();
+	}
+
+	if (isMainMenu) {
+		static bool canPaste = false;
+		if (!editWasOpen)
+			canPaste = app->canPasteEnts();
+		editWasOpen = true;
+
+		if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste)) {
+			app->pasteEnts(false);
+		}
+		tooltip(g, "Paste entities from your clipboard. Entity data is stored as text which you "
+			"can transfer to text editors or other bspguy windows.");
+		if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste)) {
+			app->pasteEnts(true);
+		}
+		tooltip(g, "Pastes entities at the locations they were copied from.");
+	}
+
+	if (ImGui::MenuItem("Delete", "Del", false, nonWorldspawnEntSelected)) {
+		app->deleteEnts();
+	}
+	ImGui::Separator();
+
+	Bsp* map = app->pickInfo.getMap();
+	bool anyBspModelSelected = false;
+	bool anyValidHeadnode[MAX_MAP_HULLS] = { false };
+	bool anyRedirectValid[MAX_MAP_HULLS][MAX_MAP_HULLS] = { false };
+	bool anyCanRedirect = false;
+	vector<Entity*> pickEnts = app->pickInfo.getEnts();
+	vector<int> modelIndexes;
+	for (Entity* ent : pickEnts) {
+		int modelIdx = ent->getBspModelIdx();
+
+		if (modelIdx < 0)
+			continue;
+
+		BSPMODEL& model = map->models[modelIdx];
+		anyBspModelSelected = true;
+		modelIndexes.push_back(modelIdx);
+		for (int i = 0; i < MAX_MAP_HULLS; i++) {
+			if (model.iHeadnodes[i] >= 0) {
+				anyValidHeadnode[i] = true;
+			}
+		}
+		if (model.iHeadnodes[1] != model.iHeadnodes[2] || model.iHeadnodes[1] != model.iHeadnodes[3]) {
+			anyCanRedirect = true;
+		}
+		for (int i = 1; i < MAX_MAP_HULLS; i++) {
+			for (int k = 1; k < MAX_MAP_HULLS; k++) {
+				if (model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i]) {
+					anyRedirectValid[i][k] = true;
+				}
+			}
+		}
+	}
+
+	if (anyBspModelSelected) {
+		bool anySolidSelected = false;
+		vector<Entity*> pickEnts = app->pickInfo.getEnts();
+		if (app->pickInfo.getEntIndex() > 0) {
+
+			for (Entity* ent : pickEnts) {
+				if (ent->getBspModelIdx() != -1) {
+					anySolidSelected = app->pickInfo.getEntIndex() != 0;
+					break;
+				}
+			}
+		}
+		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
+
+			for (Entity* ent : pickEnts) {
+				int oldModelIdx = ent->getBspModelIdx();
+				int newModelIdx = map->duplicate_model(oldModelIdx);
+				ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+			}
+
+			command->pushUndoState();
+		}
+		tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
+			"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
+			"This also prevents model edits from affecting multiple entities at once.");
+
+		if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+
+			// remove origins from models so that they merge at offsets seen in the editor
+			int newIndex = map->merge_models(app->pickInfo.getEnts(), false);
+
+			if (newIndex >= 0 || newIndex == -3) {
+				command->pushUndoState();
+			}
+			else {
+				delete command;
+
+				if (newIndex == -2) {
+					confirmMerge = 2;
+				}
+			}
+		}
+		tooltip(g, "Merge solid entity models together.");
+
+		if (ImGui::BeginMenu("Edit BSP Hulls", !app->isLoading)) {
+			if (ImGui::BeginMenu("Create", !app->invalidSolid && app->isTransformableSolid && anyValidHeadnode[0])) {
+				if (ImGui::MenuItem("Clipnodes")) {
+					ModelEditCommand* command = new ModelEditCommand("Create Model Clipnodes", modelIndexes);
+
+					for (int idx : modelIndexes) {
+						BSPMODEL& model = map->models[idx];
+						if (model.iHeadnodes[0] >= 0) {
+							map->regenerate_clipnodes(idx, -1);
+							logf("Regenerated hulls 1-3 on model %d\n", idx);
+						}
+						else {
+							logf("Model %d has no nodes. Skipping.\n", idx);
+						}
+					}
+					checkValidHulls();
+
+					// don't delete models so that indexes don't shift which would require a full refresh
+					map->remove_unused_model_structures(false).print_delete_stats(1);
+					reloadLimits();
+
+					command->pushUndoState();
+				}
+				tooltip(g, "Creates clipnode hulls for the selected model by extending the planes of Hull 0.\nClipnodes are used for entity collision detection.");
+
+				ImGui::Separator();
+
+				for (int i = 1; i < MAX_MAP_HULLS; i++) {
+					if (ImGui::MenuItem(("Hull " + to_string(i)).c_str())) {
+						ModelEditCommand* command = new ModelEditCommand("Create Model Hull", modelIndexes);
+
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[0] >= 0) {
+								map->regenerate_clipnodes(idx, i);
+								logf("Regenerated hull %d on model %d\n", i, idx);
+							}
+							else {
+								logf("Model %d has no nodes. Skipping.\n", idx);
+							}
+						}
+						checkValidHulls();
+
+						map->remove_unused_model_structures(false).print_delete_stats(1);
+						reloadLimits();
+
+						command->pushUndoState();
+					}
+					tooltip(g, "Creates a clipnode hull for the selected model by extending the planes of Hull 0.\nClipnodes are used for entity collision detection.");
+				}
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Delete", !app->isLoading)) {
+				if (ImGui::MenuItem("All Hulls")) {
+					ModelEditCommand* command = new ModelEditCommand("Delete Model Hulls", modelIndexes);
+
+					for (int idx : modelIndexes) {
+						BSPMODEL& model = map->models[idx];
+						if (model.iHeadnodes[0] >= 0 || model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
+							map->delete_hull(0, idx, -1);
+							map->delete_hull(1, idx, -1);
+							map->delete_hull(2, idx, -1);
+							map->delete_hull(3, idx, -1);
+							logf("Deleted all hulls on model %d\n", idx);
+						}
+						else {
+							logf("Model %d has no hulls. Skipping.\n", idx);
+						}
+					}
+					checkValidHulls();
+
+					logf("Cleaning %s\n", map->name.c_str());
+					map->remove_unused_model_structures(false).print_delete_stats(1);
+					reloadLimits();
+
+					command->pushUndoState();
+				}
+				tooltip(g, "Deletes all hulls from the selected model. Be careful using this as it can cause crashes if the entity needs a deleted hull.");
+
+				if (ImGui::MenuItem("Clipnodes")) {
+					ModelEditCommand* command = new ModelEditCommand("Delete Model Clipnodes", modelIndexes);
+
+					for (int idx : modelIndexes) {
+						BSPMODEL& model = map->models[idx];
+						if (model.iHeadnodes[1] >= 0 || model.iHeadnodes[2] >= 0 || model.iHeadnodes[3] >= 0) {
+							map->delete_hull(1, idx, -1);
+							map->delete_hull(2, idx, -1);
+							map->delete_hull(3, idx, -1);
+							logf("Deleted hulls 1-3 on model %d\n", idx);
+						}
+						else {
+							logf("Model %d has no clipnodes. Skipping.\n", idx);
+						}
+					}
+					checkValidHulls();
+
+					logf("Cleaning %s\n", map->name.c_str());
+					map->remove_unused_model_structures(false).print_delete_stats(1);
+					reloadLimits();
+
+					command->pushUndoState();
+				}
+				tooltip(g, "Deletes all clipnode hulls from the selected model. Be careful using this as it can cause crashes if the entity needs a deleted hull.");
+
+				ImGui::Separator();
+
+				for (int i = 0; i < MAX_MAP_HULLS; i++) {
+
+					if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
+						ModelEditCommand* command = new ModelEditCommand("Delete Model Hull", modelIndexes);
+
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[i] >= 0) {
+								map->delete_hull(i, idx, -1);
+								logf("Deleted hull %d on model %d\n", i, idx);
+							}
+							else {
+								logf("Model %d has no hull %d. Skipping.\n", idx, i);
+							}
+						}
+						checkValidHulls();
+
+						logf("Cleaning %s\n", map->name.c_str());
+						map->remove_unused_model_structures(false).print_delete_stats(1);
+						reloadLimits();
+
+						command->pushUndoState();
+					}
+					tooltip(g, "Deletes a hull from the selected model. Be careful using this as it can cause crashes if the entity needs the deleted hull.");
+				}
+
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Simplify", !app->isLoading && (anyValidHeadnode[1] || anyValidHeadnode[2] || anyValidHeadnode[3]))) {
+				if (ImGui::MenuItem("Clipnodes")) {
+					ModelEditCommand* command = new ModelEditCommand("Simplify Model Clipnodes", modelIndexes);
+
+					for (int idx : modelIndexes) {
+						BSPMODEL& model = map->models[idx];
+						map->simplify_model_collision(idx, 1);
+						map->simplify_model_collision(idx, 2);
+						map->simplify_model_collision(idx, 3);
+						logf("Replaced hulls 1-3 on model %d with a box-shaped hull.\n", idx);
+					}
+
+					logf("Cleaning %s\n", map->name.c_str());
+					map->remove_unused_model_structures(false).print_delete_stats(1);
+					reloadLimits();
+
+					command->pushUndoState();
+				}
+				tooltip(g, "Replaces all clipnode hulls with a simple box.");
+
+				ImGui::Separator();
+
+				for (int i = 1; i < MAX_MAP_HULLS; i++) {
+					if (ImGui::MenuItem(("Hull " + to_string(i)).c_str(), 0, false, anyValidHeadnode[i])) {
+						ModelEditCommand* command = new ModelEditCommand("Simplify Model Hull", modelIndexes);
+
+						for (int idx : modelIndexes) {
+							BSPMODEL& model = map->models[idx];
+							if (model.iHeadnodes[i] >= 0) {
+								map->simplify_model_collision(idx, 1);
+								logf("Replaced hull %d on model %d with a box-shaped hull\n", i, idx);
+							}
+							else {
+								logf("Model %d has no hull %d. Skipping.\n", idx, i);
+							}
+						}
+
+						logf("Cleaning %s\n", map->name.c_str());
+						map->remove_unused_model_structures(false).print_delete_stats(1);
+						reloadLimits();
+
+						command->pushUndoState();
+					}
+					tooltip(g, "Replaces a clipnode hull with a simple box.");
+				}
+
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Redirect", anyCanRedirect && !app->isLoading)) {
+				for (int i = 1; i < MAX_MAP_HULLS; i++) {
+					for (int k = 1; k < MAX_MAP_HULLS; k++) {
+						if (i == k)
+							continue;
+
+						if (ImGui::MenuItem(("Hull " + to_string(i) + " --> Hull " + to_string(k)).c_str(), 0, false, anyRedirectValid[i][k])) {
+							ModelEditCommand* command = new ModelEditCommand("Redirect Model Hull", modelIndexes);
+
+							for (int idx : modelIndexes) {
+								BSPMODEL& model = map->models[idx];
+								bool canRedirect = model.iHeadnodes[k] >= 0 && model.iHeadnodes[k] != model.iHeadnodes[i];
+								if (canRedirect) {
+									model.iHeadnodes[i] = model.iHeadnodes[k];
+									logf("Redirected hull %d to hull %d on model %d\n", i, k, idx);
+								}
+								else {
+									logf("Model %d has no hull %d or is already linked to hull %d. Skipping.\n", idx, k, i);
+								}
+							}
+							checkValidHulls();
+
+							logf("Cleaning %s\n", map->name.c_str());
+							map->remove_unused_model_structures(false).print_delete_stats(1);
+							reloadLimits();
+
+							command->pushUndoState();
+						}
+						tooltip(g, "Redirect a clipnode hull to another clipnode hull. This is safer than deleting but can make collision detection less accurate.");
+					}
+
+					if (i != MAX_MAP_HULLS-1)
+						ImGui::Separator();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMenu();
+		}
+	}
+
+	ImGui::Separator();
+
+	if (ImGui::MenuItem(app->movingEnt ? "Ungrab" : "Grab", "G", false, nonWorldspawnEntSelected)) {
+		if (!app->movingEnt)
+			app->grabEnts();
+		else {
+			app->ungrabEnts();
+		}
+	}
+	tooltip(g, "Attach the entity to your camera for easy movement.\n"
+		"Mouse wheel scrolling controls the distance from the camera."
+		"\nHold Shift/Ctrl for faster/slower distance adjustments.");
+
+	bool shouldHide = app->pickInfo.shouldHideSelection();
+
+	if (ImGui::MenuItem(shouldHide ? "Hide" : "Unhide", "H", false, nonWorldspawnEntSelected)) {
+		if (shouldHide) {
+			app->hideSelectedEnts();
+		}
+		else {
+			app->unhideSelectedEnts();
+		}
+	}
+	if (isMainMenu) {
+		if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts)) {
+			app->unhideEnts();
+		}
+	}
+	if (ImGui::MenuItem("Transform", "Ctrl+M")) {
+		showTransformWidget = !showTransformWidget;
+	}
+	ImGui::Separator();
+	if (ImGui::MenuItem("Properties", "Alt+Enter")) {
+		showKeyvalueWidget = !showKeyvalueWidget;
+	}
+}
+
 void Gui::drawMenuBar() {
 	ImGuiContext& g = *GImGui;
 
 	ImGui::BeginMainMenuBar();
 
-	static bool editWasOpen = false;
-
 	if (ImGui::BeginMenu("File"))
 	{
-
 		if (ImGui::MenuItem("Open", "Ctrl+O", false, !app->isLoading)) {
 			g_app->openMap(NULL);
 		}
@@ -1177,91 +1212,7 @@ void Gui::drawMenuBar() {
 
 		ImGui::Separator();
 
-		static bool canPaste = false;
-		if (!editWasOpen)
-			canPaste = app->canPasteEnts();
-		editWasOpen = true;
-
-		if (ImGui::MenuItem("Cut", "Ctrl+X", false, nonWorldspawnEntSelected)) {
-			app->cutEnts();
-		}
-		if (ImGui::MenuItem("Copy", "Ctrl+C", false, nonWorldspawnEntSelected)) {
-			app->copyEnts();
-		}
-		if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste)) {
-			app->pasteEnts(false);
-		}
-		tooltip(g, "Paste entities from your clipboard. Entity data is stored as text which you "
-			"can transfer to text editors or other bspguy windows.");
-		if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste)) {
-			app->pasteEnts(true);
-		}
-		tooltip(g, "Pastes entities at the locations they were copied from.");
-
-		if (ImGui::MenuItem("Delete", "Del", false, nonWorldspawnEntSelected)) {
-			app->deleteEnts();
-		}
-
-		ImGui::Separator();
-
-		bool anySolidSelected = false;
-		vector<Entity*> pickEnts = app->pickInfo.getEnts();
-		if (app->pickInfo.getEntIndex() > 0) {
-
-			for (Entity* ent : pickEnts) {
-				if (ent->getBspModelIdx() != -1) {
-					anySolidSelected = app->pickInfo.getEntIndex() != 0;
-					break;
-				}
-			}
-		}
-		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
-
-			for (Entity* ent : pickEnts) {
-				int oldModelIdx = ent->getBspModelIdx();
-				int newModelIdx = map->duplicate_model(oldModelIdx);
-				ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
-			}
-
-			command->pushUndoState();
-		}
-
-		if (ImGui::MenuItem(app->movingEnt ? "Ungrab" : "Grab", "G", false, nonWorldspawnEntSelected)) {
-			if (!app->movingEnt)
-				app->grabEnts();
-			else {
-				app->ungrabEnts();
-			}
-		}
-		tooltip(g, "Attach the entity to your camera for easy movement.\n"
-			"Mouse wheel scrolling controls the distance from the camera."
-			"\nHold Shift/Ctrl for faster/slower distance adjustments.");
-
-		bool shouldHide = app->pickInfo.shouldHideSelection();
-
-		if (ImGui::MenuItem(shouldHide ? "Hide" : "Unhide", "H", false, app->pickInfo.ents.size() != 0)) {
-			if (shouldHide) {
-				app->hideSelectedEnts();
-			}
-			else {
-				app->unhideSelectedEnts();
-			}
-		}
-		if (ImGui::MenuItem("Unhide All", "", false, app->anyHiddenEnts)) {
-			app->unhideEnts();
-		}
-		tooltip(g, "Unhides entities you previously marked as hidden.");
-
-		if (ImGui::MenuItem("Transform", "Ctrl+M", false, entSelected)) {
-			showTransformWidget = !showTransformWidget;
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem("Properties", "Alt+Enter", false, entSelected)) {
-			showKeyvalueWidget = !showKeyvalueWidget;
-		}
+		drawEditOptions(true);
 
 		ImGui::EndDisabled();
 		ImGui::EndMenu();

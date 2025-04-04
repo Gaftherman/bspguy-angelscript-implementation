@@ -124,6 +124,7 @@ private:
 	float mainMenuBarHeight;
 
 	void draw3dContextMenus();
+	void drawEditOptions(bool isMainMenu);
 	void drawMenuBar();
 	void drawStatusBar();
 	void drawPopups();
