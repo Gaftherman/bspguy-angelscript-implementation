@@ -1444,32 +1444,38 @@ void MdlRenderer::draw(vec3 origin, vec3 angles, Entity* ent, vec3 viewerOrigin,
 	glBlendFunc(GL_ONE, GL_ONE);
 	shader->bind();
 
-	switch (opts.rendermode) {
-	default:
-	case RENDER_MODE_NORMAL:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		shader->setUniform("colorMult", vec4(1,1,1,1));
-		break;
-	case RENDER_MODE_SOLID:
+	if (g_settings.render_flags & RENDER_RENDER_MODES) {
+		switch (opts.rendermode) {
+		default:
+		case RENDER_MODE_NORMAL:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			shader->setUniform("colorMult", vec4(1, 1, 1, 1));
+			break;
+		case RENDER_MODE_SOLID:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			shader->setUniform("colorMult", vec4(1, 1, 1, 1));
+			break;
+		case RENDER_MODE_COLOR:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			shader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
+			break;
+		case RENDER_MODE_TEXTURE:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			break;
+		case RENDER_MODE_GLOW:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			break;
+		case RENDER_MODE_ADDITIVE:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			break;
+		}
+	}
+	else {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		shader->setUniform("colorMult", vec4(1, 1, 1, 1));
-		break;
-	case RENDER_MODE_COLOR:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		shader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
-		break;
-	case RENDER_MODE_TEXTURE:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		break;
-	case RENDER_MODE_GLOW:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		break;
-	case RENDER_MODE_ADDITIVE:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		shader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		break;
 	}
 
 	shader->setUniform("sTex", 0);

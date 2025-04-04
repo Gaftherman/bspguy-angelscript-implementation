@@ -227,7 +227,7 @@ bool SprRenderer::pick(vec3 start, vec3 rayDir, Entity* ent, float& bestDist) {
 	float dist = (ori - g_app->cameraOrigin).length();
 
 	float scale = renderOpts.scale;
-	if (renderOpts.rendermode == RENDER_MODE_GLOW) {
+	if (renderOpts.rendermode == RENDER_MODE_GLOW && (g_settings.render_flags & RENDER_RENDER_MODES)) {
 		scale *= dist * 0.02f;
 		scale *= 1.0f / scale;
 	}
@@ -306,35 +306,40 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 	float framerate = opts.framerate != 0 ? opts.framerate : 10.0f;
 	float scale = opts.scale;
 
-	switch (opts.rendermode) {
-	default:
-	case RENDER_MODE_NORMAL:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		break;
-	case RENDER_MODE_COLOR:
-		color = COLOR4(opts.rendercolor, opts.renderamt);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		break;
-	case RENDER_MODE_GLOW:
-	{
-		const float GLARE_FALLOFF = 19000.0f;
-		float dist = (ori - g_app->cameraOrigin).length();
-		float brightness = clamp(GLARE_FALLOFF / (dist * dist), 0.05f, 1.0f);
-		scale *= dist * 0.02f;
-		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt * brightness);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		glDisable(GL_DEPTH_TEST);
-		break;
+	if (g_settings.render_flags & RENDER_RENDER_MODES) {
+		switch (opts.rendermode) {
+		default:
+		case RENDER_MODE_NORMAL:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		case RENDER_MODE_COLOR:
+			color = COLOR4(opts.rendercolor, opts.renderamt);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		case RENDER_MODE_GLOW:
+		{
+			const float GLARE_FALLOFF = 19000.0f;
+			float dist = (ori - g_app->cameraOrigin).length();
+			float brightness = clamp(GLARE_FALLOFF / (dist * dist), 0.05f, 1.0f);
+			scale *= dist * 0.02f;
+			color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt * brightness);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			glDisable(GL_DEPTH_TEST);
+			break;
+		}
+		case RENDER_MODE_ADDITIVE:
+			color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			break;
+		case RENDER_MODE_TEXTURE:
+		case RENDER_MODE_SOLID:
+			color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		}
 	}
-	case RENDER_MODE_ADDITIVE:
-		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		break;
-	case RENDER_MODE_TEXTURE:
-	case RENDER_MODE_SOLID:
-		color = COLOR4(tint.r, tint.g, tint.b, opts.renderamt);
+	else {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		break;
 	}
 
 	glEnable(GL_BLEND);
@@ -406,7 +411,7 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 		glDisable(GL_ALPHA_TEST);
 	}
 
-	if (opts.rendermode == RENDER_MODE_GLOW) {
+	if (opts.rendermode == RENDER_MODE_GLOW && (g_settings.render_flags & RENDER_RENDER_MODES)) {
 		glEnable(GL_DEPTH_TEST);
 		scale = 1.0f / scale; // the growing sprite borders are distracting
 		g_app->sprShader->modelMat->scale(scale, scale, scale);

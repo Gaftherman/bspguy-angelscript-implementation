@@ -1858,18 +1858,23 @@ bool BspRenderer::willDrawModel(Entity* ent, int modelIdx, bool transparent) {
 	EntRenderOpts opts = ent->getRenderOpts();
 	bool isTransparent = false;
 
-	switch (opts.rendermode) {
-	case RENDER_MODE_SOLID:
-		isTransparent = true;
-		break;
-	case RENDER_MODE_COLOR:
-	case RENDER_MODE_TEXTURE:
-	case RENDER_MODE_GLOW:
-	case RENDER_MODE_ADDITIVE:
-		isTransparent = opts.renderamt < 255;
-		break;
-	default:
-		break;
+	if (g_settings.render_flags & RENDER_RENDER_MODES) {
+		switch (opts.rendermode) {
+		case RENDER_MODE_SOLID:
+			isTransparent = true;
+			break;
+		case RENDER_MODE_COLOR:
+		case RENDER_MODE_TEXTURE:
+		case RENDER_MODE_GLOW:
+		case RENDER_MODE_ADDITIVE:
+			isTransparent = opts.renderamt < 255;
+			break;
+		default:
+			break;
+		}
+	}
+	else {
+		isTransparent = false;
 	}
 
 	for (int i = 0; i < renderModels[modelIdx].groupCount; i++) {
@@ -1902,51 +1907,61 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 		return;
 	}
 
-	switch (opts.rendermode) {
-	default:
-	case RENDER_MODE_NORMAL:
+	activeShader->setUniform("gamma", 1.5f);
+
+	if (g_settings.render_flags & RENDER_RENDER_MODES) {
+		switch (opts.rendermode) {
+		default:
+		case RENDER_MODE_NORMAL:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
+			activeShader->setUniform("alphaTest", 0);
+			isTransparent = false;
+			useLightmaps = true;
+			break;
+		case RENDER_MODE_SOLID:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
+			activeShader->setUniform("alphaTest", 1);
+			isTransparent = true;
+			useLightmaps = true;
+			break;
+		case RENDER_MODE_COLOR:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			activeShader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
+			activeShader->setUniform("alphaTest", 0);
+			isTransparent = opts.renderamt < 255;
+			useLightmaps = false;
+			break;
+		case RENDER_MODE_TEXTURE:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			activeShader->setUniform("alphaTest", 0);
+			isTransparent = opts.renderamt < 255;
+			useLightmaps = true;
+			break;
+		case RENDER_MODE_GLOW:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			activeShader->setUniform("alphaTest", 0);
+			isTransparent = opts.renderamt < 255;
+			useLightmaps = false;
+			break;
+		case RENDER_MODE_ADDITIVE:
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
+			activeShader->setUniform("alphaTest", 0);
+			isTransparent = opts.renderamt < 255;
+			useLightmaps = false;
+			break;
+		}
+	}
+	else {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		activeShader->setUniform("gamma", 1.5f);
 		activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
 		activeShader->setUniform("alphaTest", 0);
 		isTransparent = false;
 		useLightmaps = true;
-		break;
-	case RENDER_MODE_SOLID:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		activeShader->setUniform("colorMult", vec4(1.0f, 1.0f, 1.0f, 1.0f));
-		activeShader->setUniform("alphaTest", 1);
-		isTransparent = true;
-		useLightmaps = true;
-		break;
-	case RENDER_MODE_COLOR:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		activeShader->setUniform("colorMult", vec4(opts.rendercolor.toVec(), opts.renderamt / 255.0f));
-		activeShader->setUniform("alphaTest", 0);
-		isTransparent = opts.renderamt < 255;
-		useLightmaps = false;
-		break;
-	case RENDER_MODE_TEXTURE:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		activeShader->setUniform("alphaTest", 0);
-		isTransparent = opts.renderamt < 255;
-		useLightmaps = true;
-		break;
-	case RENDER_MODE_GLOW:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		activeShader->setUniform("alphaTest", 0);
-		isTransparent = opts.renderamt < 255;
-		useLightmaps = false;
-		break;
-	case RENDER_MODE_ADDITIVE:
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		activeShader->setUniform("colorMult", vec4(1, 1, 1, opts.renderamt / 255.0f));
-		activeShader->setUniform("alphaTest", 0);
-		isTransparent = opts.renderamt < 255;
-		useLightmaps = false;
-		break;
 	}
 	
 	for (int i = 0; i < renderModels[modelIdx].groupCount; i++) {

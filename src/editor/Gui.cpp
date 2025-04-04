@@ -605,7 +605,6 @@ void Gui::drawEditOptions(bool isMainMenu) {
 	if (ImGui::MenuItem("Delete", "Del", false, nonWorldspawnEntSelected)) {
 		app->deleteEnts();
 	}
-	ImGui::Separator();
 
 	Bsp* map = app->pickInfo.getMap();
 	bool anyBspModelSelected = false;
@@ -641,6 +640,8 @@ void Gui::drawEditOptions(bool isMainMenu) {
 	}
 
 	if (anyBspModelSelected) {
+		ImGui::Separator();
+
 		bool anySolidSelected = false;
 		vector<Entity*> pickEnts = app->pickInfo.getEnts();
 		if (app->pickInfo.getEntIndex() > 0) {
@@ -1330,6 +1331,14 @@ void Gui::drawMenuBar() {
 			"Green line = Selected entity and connected entity target each other.\n\n"
 			"Not all connections are displayed. You may still need to use the Entity Report "
 			"to find connections depending on the game the map was compiled for."
+		);
+
+		if (ImGui::MenuItem("Entity Render Modes", 0, g_settings.render_flags & RENDER_RENDER_MODES)) {
+			g_settings.render_flags ^= RENDER_RENDER_MODES;
+		}
+		tooltip(g, "Respect entity rendermode, renderamt, and rendercolor keys.\n\n"
+			"This enables transparent textures and models. In some cases it makes "
+			"entities completely invisible which can make selection difficult."
 		);
 
 		if (ImGui::MenuItem("Models", 0, g_settings.render_flags & RENDER_STUDIO_MDL)) {
