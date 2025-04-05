@@ -822,7 +822,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 	}
 
 	if (refreshClipnodes) {
-		generateClipnodeBuffer(modelIdx);
+		refreshModelClipnodes(modelIdx);
 	}
 
 	return renderModel->groupCount;
