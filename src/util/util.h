@@ -9,6 +9,7 @@
 #include <string.h>
 #include "mat4x4.h"
 #include "colors.h"
+#include <stdint.h>
 
 #define PRINT_BLUE		1
 #define PRINT_GREEN		2
@@ -155,3 +156,7 @@ string getFolderPath(string path);
 vec3 VecToAngles(const vec3& forward);
 vec3 rotateAroundAxis(const vec3& v, const vec3& axis, float angle);
 float signedAngle(const vec3& u, const vec3& v, const vec3& n);
+
+string base64encode(const uint8_t* data, size_t len);
+
+vector<uint8_t> base64decode(const string& input);

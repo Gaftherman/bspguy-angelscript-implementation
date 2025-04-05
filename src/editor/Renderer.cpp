@@ -2158,13 +2158,18 @@ void Renderer::shortcutControls() {
 			}
 		}
 		if (anyCtrlPressed && pressed[GLFW_KEY_C] && !oldPressed[GLFW_KEY_C]) {
-			copyEnts();
+			copyEnts(false);
 		}
 		if (anyCtrlPressed && pressed[GLFW_KEY_X] && !oldPressed[GLFW_KEY_X]) {
 			cutEnts();
 		}
 		if (anyCtrlPressed && pressed[GLFW_KEY_V] && !oldPressed[GLFW_KEY_V]) {
-			pasteEnts(false);
+			if (isLoading) {
+				logf("Can't paste while map is loading!\n");
+			}
+			else {
+				pasteEnts(false);
+			}
 		}
 		if (anyCtrlPressed && pressed[GLFW_KEY_M] && !oldPressed[GLFW_KEY_M]) {
 			gui->showTransformWidget = !gui->showTransformWidget;
@@ -4264,7 +4269,7 @@ void Renderer::cutEnts() {
 	ImGui::SetClipboardText(serialized.c_str());
 }
 
-void Renderer::copyEnts() {
+void Renderer::copyEnts(bool stringifyBspModels) {
 	if (pickInfo.getEntIndex() <= 0)
 		return;
 
@@ -4275,7 +4280,7 @@ void Renderer::copyEnts() {
 	for (int i = 0; i < pickInfo.ents.size(); i++) {
 		Entity* copy = new Entity();
 		*copy = *map->ents[pickInfo.ents[i]];
-		serialized += copy->serialize();
+		serialized += copy->serialize(stringifyBspModels);
 	}
 
 	ImGui::SetClipboardText(serialized.c_str());
@@ -4308,17 +4313,17 @@ void Renderer::pasteEnts(bool noModifyOrigin) {
 		logf("No entity data in clipboard\n");
 		return;
 	}
-	else {
-		logf("Pasted %d entities from clipboard\n", createCommand->createdEnts);
-	}
 
 	logf("Pasted %d entities from clipboard\n", createCommand->createdEnts);
 
 	pushUndoCommand(createCommand);
 
+	bool shouldReload = false;
+
 	vec3 centroid;
 	for (int i = 0; i < createCommand->createdEnts; i++) {
 		Entity* ent = map->ents[map->ents.size() - (1 + i)];
+		shouldReload |= ent->deserialize();
 		centroid += getEntOrigin(map, ent);
 	}
 	centroid /= (float)createCommand->createdEnts;
@@ -4341,8 +4346,13 @@ void Renderer::pasteEnts(bool noModifyOrigin) {
 		pickInfo.selectEnt(map->ents.size() - (1 + i));
 	}
 
+	if (shouldReload) {
+		mapRenderer->reload();
+	}
+
 	if (createCommand->createdEnts)
 		createCommand->refresh();
+
 	postSelectEnt();
 }
 

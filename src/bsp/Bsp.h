@@ -7,6 +7,9 @@
 #include "Polygon3D.h"
 #include <streambuf>
 #include <set>
+#include <vector>
+#include "colors.h"
+#include "Wad.h"
 
 class Entity;
 class Wad;
@@ -24,6 +27,33 @@ struct membuf : std::streambuf
 	membuf(char* begin, int len) {
 		this->setg(begin, begin, begin + len);
 	}
+};
+
+#define BSPGUY_DATA_VERSION 1
+
+enum BspguyDataTypes {
+	BSPGUY_BSP_MODEL
+};
+
+struct BspModelData {
+	vector<BSPPLANE> planes;
+	vector<vec3> verts;
+	vector<BSPEDGE> edges;
+	vector<int32_t> surfEdges;
+	vector<BSPTEXTUREINFO> texinfos;
+	vector<BSPFACE> faces;
+	vector<COLOR3> lightmaps;
+	vector<BSPNODE> nodes;
+	vector<BSPCLIPNODE> clipnodes;
+	vector<BSPLEAF> leaves;
+	vector<WADTEX> textures;
+	BSPMODEL model;
+
+	BspModelData();
+	~BspModelData();
+
+	string serialize();
+	bool deserialize(string dat);
 };
 
 class Bsp
@@ -250,6 +280,9 @@ public:
 	// returns an iMipTex for use in texture infos
 	int add_texture_from_wad(WADTEX* tex);
 
+	// returns the embedded texture data or texture data from WAD, if it exists
+	WADTEX load_texture(int textureIdx);
+
 	vector<string> get_wad_names();
 
 	// returns the WAD or BSP name the texture is loaded from
@@ -311,6 +344,10 @@ public:
 	// Returns -1 on failure, else the new texture index
 	int add_texture(const char* name, byte* data, int width, int height);
 
+	// add the texture only if does not replace an existing texture,
+	// otherwise return the existing texture index
+	int add_texture(WADTEX texture);
+
 	void replace_lump(int lumpIdx, void* newData, int newLength);
 	void append_lump(int lumpIdx, void* newData, int appendLength);
 
@@ -330,6 +367,10 @@ public:
 	int create_texinfo();
 
 	int duplicate_model(int modelIdx);
+
+	string stringify_model(int modelIdx);
+
+	int add_model(string serialized);
 
 	// for each entity, duplicate its BSP model, remove its origin offset.
 	// merge all models together into one, if none of their bounds overlap, even if this means
@@ -363,7 +404,7 @@ public:
 
 	int delete_embedded_textures();
 
-	BSPMIPTEX * find_embedded_texture(const char * name);
+	int find_texture(const char* name);
 
 	void update_lump_pointers();
 
@@ -386,8 +427,8 @@ private:
 	void get_lightmap_shift(const LIGHTMAP& oldLightmap, const LIGHTMAP& newLightmap, int& srcOffsetX, int& srcOffsetY);
 
 	void print_model_bsp(int modelIdx);
-	void print_leaf(BSPLEAF leaf);
-	void print_node(BSPNODE node);
+	void print_leaf(int leafidx);
+	void print_node(int nodeidx);
 	void print_stat(string name, uint val, uint max, bool isMem);
 	void print_model_stat(STRUCTUSAGE* modelInfo, uint val, uint max, bool isMem);
 

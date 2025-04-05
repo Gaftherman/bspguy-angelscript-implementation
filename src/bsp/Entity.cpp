@@ -828,19 +828,40 @@ bool Entity::isEverVisible() {
 	return true;
 }
 
-string Entity::serialize() {
+string Entity::serialize(bool serializeBspModel) {
 	stringstream ent_data;
 
 	ent_data << "{\n";
 
+	int bspModel = getBspModelIdx();
+
 	for (int k = 0; k < keyOrder.size(); k++) {
 		string key = keyOrder[k];
-		ent_data << "\"" << key << "\" \"" << keyvalues[key] << "\"\n";
+		string value = getKeyvalue(key);
+
+		ent_data << "\"" << key << "\" \"" << value << "\"\n";
+	}
+
+	if (serializeBspModel && bspModel >= 0) {
+		string value = g_app->mapRenderer->map->stringify_model(bspModel);
+		ent_data << "\"bspguy_binary_data\" \"" << value << "\"\n";
 	}
 
 	ent_data << "}\n";
 
 	return ent_data.str();
+}
+
+bool Entity::deserialize() {
+	if (hasKey("bspguy_binary_data")) {
+		int modelIdx = g_app->mapRenderer->map->add_model(getKeyvalue("bspguy_binary_data"));
+		if (modelIdx != -1)
+			setOrAddKeyvalue("model", "*" + to_string(modelIdx));
+		removeKeyvalue("bspguy_binary_data");
+		return true;
+	}
+
+	return false;
 }
 
 void Entity::clearCache() {

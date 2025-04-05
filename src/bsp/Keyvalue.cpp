@@ -12,7 +12,7 @@ Keyvalue::Keyvalue(string line)
 
 	for (uint i = 0; i < line.length(); i++)
 	{
-		if (line[i] == '/')
+		if (line[i] == '/' && begin == -1)
 		{
 			if (++comment >= 2)
 			{

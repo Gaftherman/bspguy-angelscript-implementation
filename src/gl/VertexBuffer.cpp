@@ -229,6 +229,7 @@ void VertexBuffer::drawRange(int primitive, int start, int end)
 {
 	if (vboId == -1) {
 		logf("Attempted to draw VBO before upload\n");
+		upload();
 		return;
 	}
 

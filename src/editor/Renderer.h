@@ -316,7 +316,7 @@ private:
 
 	void grabEnts();
 	void cutEnts();
-	void copyEnts();
+	void copyEnts(bool stringifyBspModels);
 	bool canPasteEnts();
 	void pasteEnts(bool noModifyOrigin);
 	void pasteEntsFromText(string text, bool noModifyOrigin);

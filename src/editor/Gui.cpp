@@ -362,10 +362,10 @@ void Gui::draw3dContextMenus() {
 				canPaste = app->canPasteEnts();
 			emptyWasOpen = true;
 
-			if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste)) {
+			if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste && !app->isLoading)) {
 				app->pasteEnts(false);
 			}
-			if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste)) {
+			if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste && !app->isLoading)) {
 				app->pasteEnts(true);
 			}
 			if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts)) {
@@ -582,7 +582,7 @@ void Gui::drawEditOptions(bool isMainMenu) {
 		app->cutEnts();
 	}
 	if (ImGui::MenuItem("Copy", "Ctrl+C", false, nonWorldspawnEntSelected)) {
-		app->copyEnts();
+		app->copyEnts(false);
 	}
 
 	if (isMainMenu) {
@@ -591,12 +591,12 @@ void Gui::drawEditOptions(bool isMainMenu) {
 			canPaste = app->canPasteEnts();
 		editWasOpen = true;
 
-		if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste)) {
+		if (ImGui::MenuItem("Paste", "Ctrl+V", false, canPaste && !app->isLoading)) {
 			app->pasteEnts(false);
 		}
 		tooltip(g, "Paste entities from your clipboard. Entity data is stored as text which you "
 			"can transfer to text editors or other bspguy windows.");
-		if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste)) {
+		if (ImGui::MenuItem("Paste at original origin", 0, false, canPaste && !app->isLoading)) {
 			app->pasteEnts(true);
 		}
 		tooltip(g, "Pastes entities at the locations they were copied from.");
@@ -653,6 +653,13 @@ void Gui::drawEditOptions(bool isMainMenu) {
 				}
 			}
 		}
+
+		if (ImGui::MenuItem("Copy BSP model", 0, false, !app->isLoading && anySolidSelected)) {
+			app->copyEnts(true);
+		}
+		tooltip(g, "Stores the entity and BSP model to the clipboard. Used to transfer BSP models between maps.\n\n"
+			"Textures are included and embedded after pasting, except for textures that already exist in the map. ");
+
 		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
 
@@ -2583,6 +2590,9 @@ void Gui::drawDebugWidget() {
 					Bsp* map = app->pickInfo.getMap();
 
 					vec3 localCamera = app->cameraOrigin - app->mapRenderer->mapOffset;
+					if (app->pickInfo.getEnt()) {
+						localCamera -= app->pickInfo.getEnt()->getOrigin();
+					}
 
 					static ImVec4 hullColors[] = {
 						ImVec4(1, 1, 1, 1),
@@ -3536,7 +3546,8 @@ void Gui::drawKeyvalueEditor_RawEditTab() {
 		{
 			bool invalidKey = ignoreErrors == 0 && lastPickCount == app->pickCount && key != keyNames[i];
 
-			strcpy(keyNames[i], key.c_str());
+			strncpy(keyNames[i], key.c_str(), MAX_KEY_LEN);
+			keyNames[i][MAX_KEY_LEN - 1] = 0;
 
 			keyIds[i].idx = i;
 			keyIds[i].bspRenderer = app->mapRenderer;
@@ -3587,7 +3598,8 @@ void Gui::drawKeyvalueEditor_RawEditTab() {
 
 		// value column
 		{
-			strcpy(keyValues[i], value.c_str());
+			strncpy(keyValues[i], value.c_str(), MAX_VAL_LEN);
+			keyValues[i][MAX_VAL_LEN - 1] = 0;
 
 			valueIds[i].idx = i;
 			valueIds[i].bspRenderer = app->mapRenderer;

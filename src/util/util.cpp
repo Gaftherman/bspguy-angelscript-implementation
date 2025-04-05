@@ -1227,3 +1227,75 @@ float signedAngle(const vec3& u, const vec3& v, const vec3& n) {
 
 	return (angle * sign) * (180.0f / PI);
 }
+
+std::string base64encode(const uint8_t* data, size_t len) {
+	static const char encode_table[] =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+	std::string encoded;
+	encoded.reserve(((len + 2) / 3) * 4);
+
+	size_t i = 0;
+	while (i < len) {
+		uint32_t octet_a = i < len ? data[i++] : 0;
+		uint32_t octet_b = i < len ? data[i++] : 0;
+		uint32_t octet_c = i < len ? data[i++] : 0;
+
+		uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+		encoded.push_back(encode_table[(triple >> 18) & 0x3F]);
+		encoded.push_back(encode_table[(triple >> 12) & 0x3F]);
+		encoded.push_back(i > len + 1 ? '=' : encode_table[(triple >> 6) & 0x3F]);
+		encoded.push_back(i > len ? '=' : encode_table[triple & 0x3F]);
+	}
+
+	return encoded;
+}
+
+std::vector<uint8_t> base64decode(const std::string& input) {
+	static const uint8_t decode_table[256] = {
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 0–15
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, // 16–31
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 64, 64, 63, // 32–47
+		52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64,  0, 64, 64, // 48–63
+		64, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,           // 64–79
+		15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 64, // 80–95
+		64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, // 96–111
+		41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51                      // 112–122
+		// rest is zeroed implicitly
+	};
+
+	size_t len = input.size();
+	if (len % 4 != 0) {
+		throw std::runtime_error("Invalid base64 input length");
+	}
+
+	size_t padding = 0;
+	if (len >= 1 && input[len - 1] == '=') padding++;
+	if (len >= 2 && input[len - 2] == '=') padding++;
+
+	std::vector<uint8_t> decoded;
+	decoded.reserve((len / 4) * 3 - padding);
+
+	for (size_t i = 0; i < len;) {
+		uint32_t sextet_a = decode_table[static_cast<unsigned char>(input[i++])];
+		uint32_t sextet_b = decode_table[static_cast<unsigned char>(input[i++])];
+		uint32_t sextet_c = decode_table[static_cast<unsigned char>(input[i++])];
+		uint32_t sextet_d = decode_table[static_cast<unsigned char>(input[i++])];
+
+		if (sextet_a > 63 || sextet_b > 63 ||
+			(sextet_c > 63 && input[i - 2] != '=') ||
+			(sextet_d > 63 && input[i - 1] != '=')) {
+			throw std::runtime_error("Invalid base64 character");
+		}
+
+		uint32_t triple = (sextet_a << 18) | (sextet_b << 12) |
+			((sextet_c & 0x3F) << 6) | (sextet_d & 0x3F);
+
+		decoded.push_back((triple >> 16) & 0xFF);
+		if (input[i - 2] != '=') decoded.push_back((triple >> 8) & 0xFF);
+		if (input[i - 1] != '=') decoded.push_back(triple & 0xFF);
+	}
+
+	return decoded;
+}

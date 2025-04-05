@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include "Renderer.h"
 #include "icons/aaatrigger.h"
+#include "mstream.h"
 
 typedef map< string, vec3 > mapStringToVector;
 
@@ -3654,6 +3655,66 @@ int Bsp::add_texture_from_wad(WADTEX* tex) {
 	return textureCount-1;
 }
 
+WADTEX Bsp::load_texture(int textureIdx) {
+	WADTEX out;
+	memset(&out, 0, sizeof(WADTEX));
+
+	if (textureIdx < 0 || textureIdx >= textureCount) {
+		return out;
+	}
+
+	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
+	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	memcpy(&out, &tex, sizeof(BSPMIPTEX));
+
+	int sz = out.getDataSize();
+	out.data = new byte[sz];
+
+	if (tex.nOffsets[0] != 0) {
+		// embedded texture
+		memcpy(out.data, ((byte*)&tex) + tex.nOffsets[0], sz);
+	}
+	else {
+		// try loading from WAD
+		static vector<Wad*> emptyWads;
+		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
+
+		bool foundTex = false;
+
+		for (int k = 0; k < wads.size(); k++) {
+			if (wads[k]->hasTexture(tex.szName)) {
+				
+				WADTEX* wadtex = wads[k]->readTexture(tex.szName);
+
+				if (!wadtex) {
+					logf("Failed to read texture %s from WAD: %s\n", wads[k]->filename.c_str());
+					continue;
+				}
+
+				if (wadtex->nHeight != out.nHeight || wadtex->nWidth != out.nWidth) {
+					debugf("Not using texture %s from wad because dimensions don't match: %s\n",
+						tex.szName, wads[k]->filename.c_str());
+					delete wadtex;
+					continue;
+				}
+
+				memcpy(&out, wadtex, sizeof(BSPMIPTEX));
+				memcpy(out.data, wadtex->data, sz);
+				delete wadtex;
+				foundTex = true;
+				break;
+			}
+		}
+
+		if (!foundTex) {
+			delete[] out.data;
+			out.data = NULL;
+		}
+	}
+
+	return out;
+}
+
 void Bsp::adjust_resized_texture_coordinates(int textureId, int oldWidth, int oldHeight) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
@@ -4960,13 +5021,11 @@ void Bsp::recurse_node(int16_t nodeIdx, int depth) {
 	}
 
 	if (nodeIdx < 0) {
-		BSPLEAF& leaf = leaves[~nodeIdx];
-		print_leaf(leaf);
-		logf(" (LEAF %d)\n", ~nodeIdx);
+		print_leaf(~nodeIdx);
 		return;
 	}
 	else {
-		print_node(nodes[nodeIdx]);
+		print_node(nodeIdx);
 		logf("\n");
 	}
 	
@@ -4974,10 +5033,12 @@ void Bsp::recurse_node(int16_t nodeIdx, int depth) {
 	recurse_node(nodes[nodeIdx].iChildren[1], depth+1);
 }
 
-void Bsp::print_node(BSPNODE node) {
+void Bsp::print_node(int nodeidx) {
+	BSPNODE& node = nodes[nodeidx];
 	BSPPLANE& plane = planes[node.iPlane];
 
-	logf("Plane (%f %f %f) d: %f, Faces: %d, Min(%d, %d, %d), Max(%d, %d, %d)",
+	logf("Node %d, Plane (%f %f %f) d: %f, Faces: %d, Min(%d, %d, %d), Max(%d, %d, %d)",
+		nodeidx,
 		plane.vNormal.x, plane.vNormal.y, plane.vNormal.z,
 		plane.fDist, node.nFaces,
 		node.nMins[0], node.nMins[1], node.nMins[2],
@@ -5641,41 +5702,37 @@ void Bsp::add_model(Bsp* sourceMap, int modelIdx) {
 	logf("");
 }
 
-BSPMIPTEX * Bsp::find_embedded_texture(const char* name) {
+int Bsp::find_texture(const char* name) {
 	if (!name || name[0] == '\0')
-		return nullptr;
+		return -1;
+
 	for (int i = 0; i < textureCount; i++) {
 		int32_t oldOffset = ((int32_t*)textures)[i + 1];
 		BSPMIPTEX* oldTex = (BSPMIPTEX*)(textures + oldOffset);
-		if (strcmp(name, oldTex->szName) == 0)
-		{
-			return oldTex;
+		if (strcasecmp(name, oldTex->szName) == 0) {
+			return i;
 		}
 	}
-	return nullptr;
+
+	return -1;
 }
 
-int Bsp::add_texture(const char* name, byte* data, int width, int height) {
+int Bsp::add_texture(const char* texname, byte* data, int width, int height) {
 	if (width % 16 != 0 || height % 16 != 0) {
-		logf("Texture %s dimensions are not divisible by 16.", name);
+		logf("Texture %s dimensions are not divisible by 16.", texname);
 		return -1;
 	}
 	if (width * height > g_limits.max_texturepixels) {
-		logf("Texture %s is too big to add.", name);
+		logf("Texture %s is too big to add.", texname);
 		return -1;
 	}
 
-	BSPMIPTEX* oldtex = find_embedded_texture(name);
+	int existingIdx = find_texture(texname);
 
-	if (oldtex)
+	if (existingIdx != -1)
 	{
-		logf("Texture with name %s found in map. Just replace it.\n", name);
-		if (oldtex->nWidth != width || oldtex->nHeight != height)
-		{
-			sprintf(oldtex->szName, "%s", "-unused_texture");
-			logf("Warning! Texture size different. Need rename old texture.\n");
-			oldtex = NULL;
-		}
+		debugf("A texture with the name %s already exists in this map.\n", texname);
+		return existingIdx;
 	}
 
 	COLOR3 palette[256];
@@ -5739,19 +5796,6 @@ int Bsp::add_texture(const char* name, byte* data, int width, int height) {
 		}
 	}
 
-	if (oldtex != nullptr)
-	{
-		memcpy((byte*)oldtex + oldtex->nOffsets[0], mip[0], width * height);
-		memcpy((byte*)oldtex + oldtex->nOffsets[1], mip[1], (width >> 1) * (height >> 1));
-		memcpy((byte*)oldtex + oldtex->nOffsets[2], mip[2], (width >> 2) * (height >> 2));
-		memcpy((byte*)oldtex + oldtex->nOffsets[3], mip[3], (width >> 3) * (height >> 3));
-		memcpy((byte*)oldtex + (oldtex->nOffsets[3] + (width >> 3) * (height >> 3) + 2), palette, sizeof(COLOR3) * 256);
-		for (int i = 0; i < MIPLEVELS; i++) {
-			delete[] mip[i];
-		}
-		return 0;
-	}
-
 	int newTexLumpSize = header.lump[LUMP_TEXTURES].nLength + sizeof(int32_t) + sizeof(BSPMIPTEX) + texDataSize;
 	byte* newTexData = new byte[newTexLumpSize];
 	memset(newTexData, 0, sizeof(newTexLumpSize));
@@ -5777,7 +5821,7 @@ int Bsp::add_texture(const char* name, byte* data, int width, int height) {
 	BSPMIPTEX* newMipTex = (BSPMIPTEX*)(newTexData + newTexOffset);
 	newMipTex->nWidth = width;
 	newMipTex->nHeight = height;
-	strncpy(newMipTex->szName, name, MAXTEXTURENAME);
+	strncpy(newMipTex->szName, texname, MAXTEXTURENAME);
 	
 	newMipTex->nOffsets[0] = sizeof(BSPMIPTEX);
 	newMipTex->nOffsets[1] = newMipTex->nOffsets[0] + width*height;
@@ -5800,6 +5844,48 @@ int Bsp::add_texture(const char* name, byte* data, int width, int height) {
 	replace_lump(LUMP_TEXTURES, newTexData, newTexLumpSize);
 
 	return textureCount-1;
+}
+
+int Bsp::add_texture(WADTEX texture) {
+	int existingIdx = find_texture(texture.szName);
+
+	if (existingIdx != -1)
+	{
+		debugf("A texture with the name %s already exists in this map.\n", texture.szName);
+		return existingIdx;
+	}
+
+	int newTexLumpSize = header.lump[LUMP_TEXTURES].nLength + sizeof(int32_t) + sizeof(BSPMIPTEX) + texture.getDataSize();
+	byte* newTexData = new byte[newTexLumpSize];
+	memset(newTexData, 0, sizeof(newTexLumpSize));
+
+	// create new texture lump header
+	int32_t* newLumpHeader = (int32_t*)newTexData;
+	int32_t* oldLumpHeader = (int32_t*)lumps[LUMP_TEXTURES];
+	*newLumpHeader = textureCount + 1;
+
+	for (int i = 0; i < textureCount; i++) {
+		*(newLumpHeader + i + 1) = *(oldLumpHeader + i + 1) + sizeof(int32_t); // make room for the new offset
+	}
+
+	// copy old texture data
+	int oldTexHeaderSize = (textureCount + 1) * sizeof(int32_t);
+	int newTexHeaderSize = oldTexHeaderSize + sizeof(int32_t);
+	int oldTexDatSize = header.lump[LUMP_TEXTURES].nLength - (textureCount + 1) * sizeof(int32_t);
+	memcpy(newTexData + newTexHeaderSize, lumps[LUMP_TEXTURES] + oldTexHeaderSize, oldTexDatSize);
+
+	// add new texture to the end of the lump
+	int newTexOffset = newTexHeaderSize + oldTexDatSize;
+	newLumpHeader[textureCount + 1] = newTexOffset;
+
+	memcpy(newTexData + newTexOffset, (BSPMIPTEX*)&texture, sizeof(BSPMIPTEX));
+	memcpy(newTexData + newTexOffset + sizeof(BSPMIPTEX), texture.data, texture.getDataSize());
+
+	replace_lump(LUMP_TEXTURES, newTexData, newTexLumpSize);
+
+	logf("Embedded new texture: %s (%dx%d)\n", texture.szName, texture.nWidth, texture.nHeight);
+
+	return textureCount - 1;
 }
 
 int Bsp::create_leaf(int contents) {
@@ -6539,6 +6625,622 @@ int Bsp::duplicate_model(int modelIdx) {
 	return newModelIdx;
 }
 
+BspModelData::BspModelData() {}
+
+BspModelData::~BspModelData() {
+	for (WADTEX& tex : textures) {
+		if (tex.data) {
+			delete[] tex.data;
+			tex.data = NULL;
+		}
+	}
+}
+
+string BspModelData::serialize() {
+	uint32_t dataVersion = BSPGUY_DATA_VERSION;
+	uint32_t dataType = BSPGUY_BSP_MODEL;
+
+	uint32_t planeCount = planes.size();
+	uint32_t vertCount = verts.size();
+	uint32_t edgeCount = edges.size();
+	uint32_t surfedgeCount = surfEdges.size();
+	uint32_t texturesCount = textures.size();
+	uint32_t texinfosCount = texinfos.size();
+	uint32_t facesCount = faces.size();
+	uint32_t lightmapsCount = lightmaps.size();
+	uint32_t nodesCount = nodes.size();
+	uint32_t clipnodesCount = clipnodes.size();
+	uint32_t leavesCount = leaves.size();
+
+	int textureDataSz = 0;
+	for (WADTEX& tex : textures) {
+		if (tex.nOffsets[0] != 0)
+			textureDataSz += tex.getDataSize();
+	}
+
+	int totalBytes = planeCount * sizeof(BSPPLANE) + vertCount * sizeof(vec3)
+		+ edgeCount * sizeof(BSPEDGE) + surfedgeCount * sizeof(int32_t)
+		+ texinfosCount * sizeof(BSPTEXTUREINFO) + facesCount * sizeof(BSPFACE)
+		+ lightmapsCount * sizeof(COLOR3) + nodesCount * sizeof(BSPNODE)
+		+ clipnodesCount * sizeof(BSPCLIPNODE) + leavesCount * sizeof(BSPLEAF)
+		+ texturesCount * sizeof(BSPMIPTEX) + textureDataSz
+		+ sizeof(BSPMODEL) + sizeof(uint32_t)*13;
+
+	uint8_t* serialBytes = new uint8_t[totalBytes];
+	mstream data = mstream((char*)serialBytes, totalBytes);
+
+	data.write(&dataVersion, sizeof(uint32_t));
+	data.write(&dataType, sizeof(uint32_t));
+
+	data.write(&planeCount, sizeof(uint32_t));
+	data.write(&planes[0], planeCount*sizeof(BSPPLANE));
+
+	data.write(&vertCount, sizeof(uint32_t));
+	data.write(&verts[0], vertCount * sizeof(vec3));
+
+	data.write(&edgeCount, sizeof(uint32_t));
+	data.write(&edges[0], edgeCount * sizeof(BSPEDGE));
+
+	data.write(&surfedgeCount, sizeof(uint32_t));
+	data.write(&surfEdges[0], surfedgeCount * sizeof(int32_t));
+
+	data.write(&texturesCount, sizeof(uint32_t));
+	for (WADTEX& tex : textures) {
+		data.write(&tex, sizeof(BSPMIPTEX));
+		if (tex.nOffsets[0] != 0)
+			data.write(tex.data, tex.getDataSize());
+	}
+
+	data.write(&texinfosCount, sizeof(uint32_t));
+	data.write(&texinfos[0], texinfosCount * sizeof(BSPTEXTUREINFO));
+
+	data.write(&facesCount, sizeof(uint32_t));
+	data.write(&faces[0], facesCount * sizeof(BSPFACE));
+
+	data.write(&lightmapsCount, sizeof(uint32_t));
+	data.write(&lightmaps[0], lightmapsCount * sizeof(COLOR3));
+
+	data.write(&nodesCount, sizeof(uint32_t));
+	data.write(&nodes[0], nodesCount * sizeof(BSPNODE));
+
+	data.write(&clipnodesCount, sizeof(uint32_t));
+	data.write(&clipnodes[0], clipnodesCount * sizeof(BSPCLIPNODE));
+
+	data.write(&leavesCount, sizeof(uint32_t));
+	data.write(&leaves[0], leavesCount * sizeof(BSPLEAF));
+
+	data.write(&model, sizeof(BSPMODEL));
+
+	if (data.eom()) {
+		delete[] serialBytes;
+		logf("Failed to serialize model\n");
+		return "";
+	}
+
+	string encoded = base64encode(serialBytes, totalBytes);
+
+	delete[] serialBytes;
+	return encoded;
+}
+
+bool BspModelData::deserialize(string serialized) {
+	vector<uint8_t> bytes = base64decode(serialized);
+	mstream data((char*)&bytes[0], bytes.size());
+
+	const uint32_t maxDataSize = 131072; // prevent invalid data using up all memory
+
+	uint32_t dataVersion;
+	uint32_t dataType;
+	uint32_t planeCount;
+	uint32_t vertCount;
+	uint32_t edgeCount;
+	uint32_t surfedgeCount;
+	uint32_t texturesCount;
+	uint32_t texinfosCount;
+	uint32_t facesCount;
+	uint32_t lightmapsCount;
+	uint32_t nodesCount;
+	uint32_t clipnodesCount;
+	uint32_t leavesCount;
+
+	data.read(&dataVersion, 4);
+	if (dataVersion != BSPGUY_DATA_VERSION) {
+		logf("Unexpected data version %d in serialized entity data. Ignoring data.\n");
+		return false;
+	}
+
+	data.read(&dataType, 4);
+	if (dataType != BSPGUY_BSP_MODEL) {
+		logf("Unexpected data type %d in serialized entity data. Ignoring data.\n");
+		return false;
+	}
+
+	data.read(&planeCount, 4);
+	if (planeCount > maxDataSize) {
+		logf("Unexpected plane count %u in serialized BSP model data. Ignoring data.\n", planeCount);
+		return false;
+	}
+	BSPPLANE* planeData = new BSPPLANE[planeCount];
+	data.read(planeData, planeCount * sizeof(BSPPLANE));
+	planes.insert(planes.end(), planeData, planeData + planeCount);
+	delete[] planeData;
+
+	data.read(&vertCount, 4);
+	if (vertCount > maxDataSize) {
+		logf("Unexpected vert count %u in serialized BSP model data. Ignoring data.\n", vertCount);
+		return false;
+	}
+	vec3* vertData = new vec3[vertCount];
+	data.read(vertData, vertCount * sizeof(vec3));
+	verts.insert(verts.end(), vertData, vertData + vertCount);
+	delete[] vertData;
+
+	data.read(&edgeCount, 4);
+	if (edgeCount > maxDataSize) {
+		logf("Unexpected edge count %u in serialized BSP model data. Ignoring data.\n", edgeCount);
+		return false;
+	}
+	BSPEDGE* edgeData = new BSPEDGE[edgeCount];
+	data.read(edgeData, edgeCount * sizeof(BSPEDGE));
+	edges.insert(edges.end(), edgeData, edgeData + edgeCount);
+	delete[] edgeData;
+
+	data.read(&surfedgeCount, 4);
+	if (surfedgeCount > maxDataSize) {
+		logf("Unexpected surfedge count %u in serialized BSP model data. Ignoring data.\n", surfedgeCount);
+		return false;
+	}
+	int32_t* surfedgeData = new int32_t[surfedgeCount];
+	data.read(surfedgeData, surfedgeCount * sizeof(int32_t));
+	surfEdges.insert(surfEdges.end(), surfedgeData, surfedgeData + surfedgeCount);
+	delete[] surfedgeData;
+
+	data.read(&texturesCount, 4);
+	if (texturesCount > maxDataSize) {
+		logf("Unexpected texture count %u in serialized BSP model data. Ignoring data.\n", texturesCount);
+		return false;
+	}
+	for (int i = 0; i < texturesCount; i++) {
+		WADTEX tex;
+		data.read(&tex, sizeof(BSPMIPTEX));
+
+		if (tex.nOffsets[0] != 0) {
+			int sz = tex.getDataSize();
+			if (sz > 1024 * 1024 * 4) {
+				logf("Unexpected texture size %d in serialized BSP model data. Ignoring data.\n", sz);
+				return false;
+			}
+
+			tex.data = new byte[sz];
+			data.read(tex.data, sz);
+		}
+		else {
+			tex.data = NULL;
+		}
+		
+		textures.push_back(tex);
+	}
+
+	data.read(&texinfosCount, 4);
+	if (texinfosCount > maxDataSize) {
+		logf("Unexpected texinfo count %u in serialized BSP model data. Ignoring data.\n", texinfosCount);
+		return false;
+	}
+	BSPTEXTUREINFO* texinfosData = new BSPTEXTUREINFO[texinfosCount];
+	data.read(texinfosData, texinfosCount * sizeof(BSPTEXTUREINFO));
+	texinfos.insert(texinfos.end(), texinfosData, texinfosData + texinfosCount);
+	delete[] texinfosData;
+
+	data.read(&facesCount, 4);
+	if (facesCount > maxDataSize) {
+		logf("Unexpected face count %u in serialized BSP model data. Ignoring data.\n", facesCount);
+		return false;
+	}
+	BSPFACE* facesData = new BSPFACE[facesCount];
+	data.read(facesData, facesCount * sizeof(BSPFACE));
+	faces.insert(faces.end(), facesData, facesData + facesCount);
+	delete[] facesData;
+
+	data.read(&lightmapsCount, 4);
+	if (lightmapsCount > 1024*1024*64) {
+		logf("Unexpected lightmap color count %u in serialized BSP model data. Ignoring data.\n", lightmapsCount);
+		return false;
+	}
+	COLOR3* lightmapData = new COLOR3[lightmapsCount];
+	data.read(lightmapData, lightmapsCount * sizeof(COLOR3));
+	lightmaps.insert(lightmaps.end(), lightmapData, lightmapData + lightmapsCount);
+	delete[] lightmapData;
+
+	data.read(&nodesCount, 4);
+	if (nodesCount > maxDataSize) {
+		logf("Unexpected node count %u in serialized BSP model data. Ignoring data.\n", lightmapsCount);
+		return false;
+	}
+	BSPNODE* nodeData = new BSPNODE[nodesCount];
+	data.read(nodeData, nodesCount * sizeof(BSPNODE));
+	nodes.insert(nodes.end(), nodeData, nodeData + nodesCount);
+	delete[] nodeData;
+
+	data.read(&clipnodesCount, 4);
+	if (clipnodesCount > maxDataSize) {
+		logf("Unexpected clipnode count %u in serialized BSP model data. Ignoring data.\n", lightmapsCount);
+		return false;
+	}
+	BSPCLIPNODE* clipnodesData = new BSPCLIPNODE[clipnodesCount];
+	data.read(clipnodesData, clipnodesCount * sizeof(BSPCLIPNODE));
+	clipnodes.insert(clipnodes.end(), clipnodesData, clipnodesData + clipnodesCount);
+	delete[] clipnodesData;
+
+	data.read(&leavesCount, 4);
+	if (leavesCount > maxDataSize) {
+		logf("Unexpected leaf count %u in serialized BSP model data. Ignoring data.\n", lightmapsCount);
+		return false;
+	}
+	BSPLEAF* leavesData = new BSPLEAF[leavesCount];
+	data.read(leavesData, leavesCount * sizeof(BSPLEAF));
+	leaves.insert(leaves.end(), leavesData, leavesData + leavesCount);
+	delete[] leavesData;
+
+	data.read(&model, sizeof(BSPMODEL));
+
+	if (data.eom()) {
+		logf("Unexpected EOM in serialized BSP model data. Ignoring data.\n", lightmapsCount);
+		return false;
+	}
+
+	return true;
+}
+
+string Bsp::stringify_model(int modelIdx) {
+	STRUCTUSAGE usage(this);
+	mark_model_structures(modelIdx, &usage, true);
+
+	STRUCTREMAP remap(this);
+
+	BspModelData model;
+
+	for (int i = 0; i < usage.count.planes; i++) {
+		if (usage.planes[i]) {
+			remap.planes[i] = model.planes.size();
+			model.planes.push_back(planes[i]);
+		}
+	}
+
+	for (int i = 0; i < usage.count.verts; i++) {
+		if (usage.verts[i]) {
+			remap.verts[i] = model.verts.size();
+			model.verts.push_back(verts[i]);
+		}
+	}
+
+	// surfedges use sign to index into the edge. You can't have a signed index into edge 0.
+	// So, forbid index 0 being used in the cloned edges.
+	BSPEDGE dummyEdge = { 0, 0 };
+	model.edges.push_back(dummyEdge);
+
+	for (int i = 0; i < usage.count.edges; i++) {
+		if (usage.edges[i]) {
+			remap.edges[i] = model.edges.size();
+
+			BSPEDGE edge = edges[i];
+			for (int k = 0; k < 2; k++) {
+				edge.iVertex[k] = remap.verts[edge.iVertex[k]];
+			}
+			model.edges.push_back(edge);
+		}
+	}
+
+	for (int i = 0; i < usage.count.surfEdges; i++) {
+		if (usage.surfEdges[i]) {
+			remap.surfEdges[i] = model.surfEdges.size();
+
+			int32_t surfedge = remap.edges[abs(surfedges[i])];
+			if (surfedges[i] < 0)
+				surfedge = -surfedge;
+
+			model.surfEdges.push_back(surfedge);
+		}
+	}
+
+	for (int i = 0; i < usage.count.textures; i++) {
+		if (usage.textures[i]) {
+			remap.textures[i] = model.textures.size();
+			WADTEX tex = load_texture(i);
+			model.textures.push_back(tex);
+		}
+	}
+
+	for (int i = 0; i < usage.count.texInfos; i++) {
+		if (usage.texInfo[i]) {
+			remap.texInfo[i] = model.texinfos.size();
+
+			BSPTEXTUREINFO tinfo = texinfos[i];
+			tinfo.iMiptex = remap.textures[tinfo.iMiptex];
+			model.texinfos.push_back(tinfo);
+		}
+	}
+
+	int lightmapAppendSz = 0;
+	for (int i = 0; i < usage.count.faces; i++) {
+		if (usage.faces[i]) {
+			remap.faces[i] = model.faces.size();
+
+			BSPFACE face = faces[i];
+
+			face.iFirstEdge = remap.surfEdges[face.iFirstEdge];
+			face.iPlane = remap.planes[face.iPlane];
+			face.iTextureInfo = remap.texInfo[face.iTextureInfo];
+
+			// TODO: Check if face even has lighting
+			int size[2];
+			GetFaceLightmapSize(this, i, size);
+			int lightmapCount = lightmap_count(i);
+			int lightmapSz = size[0] * size[1] * lightmapCount;
+			COLOR3* lightmapSrc = (COLOR3*)(lightdata + face.nLightmapOffset);
+			for (int k = 0; k < lightmapSz; k++) {
+				model.lightmaps.push_back(lightmapSrc[k]);
+			}
+
+			face.nLightmapOffset = lightmapCount != 0 ? lightmapAppendSz : -1;
+			model.faces.push_back(face);
+
+			lightmapAppendSz += lightmapSz * sizeof(COLOR3);
+		}
+	}
+
+	for (int i = 0; i < usage.count.nodes; i++) {
+		if (usage.nodes[i]) {
+			remap.nodes[i] = model.nodes.size();
+			model.nodes.push_back(nodes[i]);
+		}
+	}
+	for (int i = 0; i < model.nodes.size(); i++) {
+		BSPNODE& node = model.nodes[i];
+		node.firstFace = remap.faces[node.firstFace];
+		node.iPlane = remap.planes[node.iPlane];
+
+		for (int k = 0; k < 2; k++) {
+			if (node.iChildren[k] >= 0) {
+				node.iChildren[k] = remap.nodes[node.iChildren[k]];
+			}
+			else {
+				BSPLEAF leaf = leaves[~node.iChildren[k]];
+				leaf.iFirstMarkSurface = 0;
+				leaf.nMarkSurfaces = 0;
+				node.iChildren[k] = ~((int16_t)model.leaves.size());
+				model.leaves.push_back(leaf);
+			}
+		}
+	}
+
+	for (int i = 0; i < usage.count.clipnodes; i++) {
+		if (usage.clipnodes[i]) {
+			remap.clipnodes[i] = model.clipnodes.size();
+			model.clipnodes.push_back(clipnodes[i]);
+		}
+	}
+	for (int i = 0; i < model.clipnodes.size(); i++) {
+		BSPCLIPNODE& clipnode = model.clipnodes[i];
+		clipnode.iPlane = remap.planes[clipnode.iPlane];
+
+		for (int k = 0; k < 2; k++) {
+			if (clipnode.iChildren[k] > 0) {
+				clipnode.iChildren[k] = remap.clipnodes[clipnode.iChildren[k]];
+			}
+		}
+	}
+
+	BSPMODEL& oldModel = models[modelIdx];
+	memcpy(&model.model, &oldModel, sizeof(BSPMODEL));
+
+	model.model.iFirstFace = remap.faces[oldModel.iFirstFace];
+	model.model.iHeadnodes[0] = oldModel.iHeadnodes[0] < 0 ? -1 : remap.nodes[oldModel.iHeadnodes[0]];
+	for (int i = 1; i < MAX_MAP_HULLS; i++) {
+		model.model.iHeadnodes[i] = oldModel.iHeadnodes[i] < 0 ? -1 : remap.clipnodes[oldModel.iHeadnodes[i]];
+	}
+	model.model.nVisLeafs = 0; // techinically should match the old model, but leaves aren't duplicated yet
+
+	return model.serialize();
+}
+
+int Bsp::add_model(string serialized) {
+	BspModelData dat;
+	if (!dat.deserialize(serialized)) {
+		return -1;
+	}
+
+	for (int i = 0; i < dat.edges.size(); i++) {
+		dat.edges[i].iVertex[0] += vertCount;
+		dat.edges[i].iVertex[1] += vertCount;
+	}
+
+	for (int i = 0; i < dat.surfEdges.size(); i++) {
+		int32_t& surfedge = dat.surfEdges[i];
+		if (surfedge >= 0) {
+			surfedge += edgeCount;
+		}
+		else {
+			surfedge -= edgeCount;
+		}
+	}
+
+	vector<int> textureIndexes;
+	for (WADTEX& tex : dat.textures) {
+		textureIndexes.push_back(add_texture(tex));
+	}
+
+	for (int i = 0; i < dat.texinfos.size(); i++) {
+		BSPTEXTUREINFO& tinfo = dat.texinfos[i];
+		tinfo.iMiptex = textureIndexes[tinfo.iMiptex];
+	}
+
+	for (int i = 0; i < dat.faces.size(); i++) {
+		BSPFACE& face = dat.faces[i];
+		face.iFirstEdge += surfedgeCount;
+		face.iPlane += planeCount;
+		face.iTextureInfo += texinfoCount;
+		face.nLightmapOffset += lightDataLength;
+	}
+
+	for (int i = 0; i < dat.nodes.size(); i++) {
+		BSPNODE& node = dat.nodes[i];
+		node.firstFace += faceCount;
+		node.iPlane += planeCount;
+
+		for (int k = 0; k < 2; k++) {
+			if (node.iChildren[k] >= 0) {
+				node.iChildren[k] += nodeCount;
+			}
+			else {
+				int16_t leafidx = ~node.iChildren[k];
+				leafidx += leafCount;
+				node.iChildren[k] = ~leafidx;
+			}
+		}
+	}
+
+	for (int i = 0; i < dat.clipnodes.size(); i++) {
+		BSPCLIPNODE& clipnode = dat.clipnodes[i];
+		clipnode.iPlane += planeCount;
+
+		for (int k = 0; k < 2; k++) {
+			if (clipnode.iChildren[k] >= 0) {
+				clipnode.iChildren[k] += clipnodeCount;
+			}
+		}
+	}
+
+	for (int i = 0; i < dat.leaves.size(); i++) {
+		BSPLEAF& leaf = dat.leaves[i];
+		leaf.iFirstMarkSurface = 0;
+		leaf.nMarkSurfaces = 0;
+		leaf.nVisOffset = 0;
+	}
+
+	dat.model.iFirstFace += faceCount;
+	dat.model.iHeadnodes[0] += nodeCount;
+	for (int i = 1; i < MAX_MAP_HULLS; i++) {
+		dat.model.iHeadnodes[i] += clipnodeCount;
+	}
+	dat.model.nVisLeafs = 0; // techinically should match the old model, but leaves aren't duplicated yet
+	
+	//
+	// Validate data
+	//
+
+	bool invalidRefs = false;
+	for (int i = 0; i < dat.edges.size(); i++) {
+		for (int k = 0; k < 2; k++)
+			invalidRefs |= dat.edges[i].iVertex[k] >= vertCount + dat.verts.size();
+	}
+
+	for (int i = 0; i < dat.surfEdges.size(); i++) {
+		invalidRefs |= abs(dat.surfEdges[i]) >= edgeCount + dat.edges.size();
+	}
+
+	for (int i = 0; i < dat.faces.size(); i++) {
+		BSPFACE& face = dat.faces[i];
+		invalidRefs |= face.iFirstEdge >= surfedgeCount + dat.surfEdges.size();
+		invalidRefs |= face.iPlane >= planeCount + dat.planes.size();
+		invalidRefs |= face.iTextureInfo >= texinfoCount + dat.texinfos.size();
+		invalidRefs |= face.nLightmapOffset >= lightDataLength + dat.lightmaps.size()*sizeof(COLOR3);
+	}
+
+	for (int i = 0; i < dat.nodes.size(); i++) {
+		BSPNODE& node = dat.nodes[i];
+		invalidRefs |= node.firstFace >= surfedgeCount + dat.surfEdges.size();
+		invalidRefs |= node.iPlane >= planeCount + dat.planes.size();
+
+		for (int k = 0; k < 2; k++) {
+			if (node.iChildren[k] >= 0) {
+				invalidRefs |= node.iChildren[k] >= nodeCount + dat.nodes.size();
+			}
+			else {
+				int16_t leafidx = ~node.iChildren[k];
+				invalidRefs |= leafidx >= leafCount + dat.leaves.size();
+			}
+		}
+	}
+
+	for (int i = 0; i < dat.clipnodes.size(); i++) {
+		BSPCLIPNODE& clipnode = dat.clipnodes[i];
+		invalidRefs |= clipnode.iPlane >= planeCount + dat.planes.size();
+
+		for (int k = 0; k < 2; k++) {
+			if (clipnode.iChildren[k] >= 0) {
+				invalidRefs |= clipnode.iChildren[k] >= clipnodeCount + dat.clipnodes.size();
+			}
+		}
+	}
+
+	invalidRefs |= dat.model.iFirstFace + dat.model.nFaces > faceCount + dat.faces.size();
+	invalidRefs |= dat.model.iHeadnodes[0] >= nodeCount + dat.nodes.size();
+	for (int i = 1; i < MAX_MAP_HULLS; i++) {
+		invalidRefs |= dat.model.iHeadnodes[i] >= clipnodeCount + dat.clipnodes.size();
+	}
+	
+	if (invalidRefs) {
+		logf("Invalid BSP structure references in serialized data. Ignoring data.\n");
+		return -1;
+	}
+
+	append_lump(LUMP_PLANES, &dat.planes[0], dat.planes.size() * sizeof(BSPPLANE));
+	append_lump(LUMP_VERTICES, &dat.verts[0], dat.verts.size() * sizeof(vec3));
+	append_lump(LUMP_LIGHTING, &dat.lightmaps[0], dat.lightmaps.size() * sizeof(COLOR3));
+	append_lump(LUMP_EDGES, &dat.edges[0], dat.edges.size() * sizeof(BSPEDGE));
+	append_lump(LUMP_SURFEDGES, &dat.surfEdges[0], dat.surfEdges.size() * sizeof(int32_t));
+	append_lump(LUMP_TEXINFO, &dat.texinfos[0], dat.texinfos.size() * sizeof(BSPTEXTUREINFO));
+	append_lump(LUMP_FACES, &dat.faces[0], dat.faces.size() * sizeof(BSPFACE));
+	append_lump(LUMP_NODES, &dat.nodes[0], dat.nodes.size() * sizeof(BSPNODE));
+	append_lump(LUMP_CLIPNODES, &dat.clipnodes[0], dat.clipnodes.size() * sizeof(BSPCLIPNODE));
+	append_lump(LUMP_LEAVES, &dat.leaves[0], dat.leaves.size() * sizeof(BSPLEAF));
+	append_lump(LUMP_MODELS, &dat.model, sizeof(BSPMODEL));
+
+	// recompressing VIS data with a larger visrow size doesn't seem to be necessary.
+	// Either the model leaves are being ignored or the visrow size only affects decompressed data.
+	// The lump isn't always identical if using the code below though. Needs more testing.
+
+	/*
+	int oldLeafCount = leafCount - dat.leaves.size();
+	uint oldVisRowSize = ((oldLeafCount + 63) & ~63) >> 3;
+	uint newVisRowSize = ((leafCount + 63) & ~63) >> 3;
+
+	// TODO: this doesn't seem necessary. I can skip this and VIS works fine. Why?
+	if (oldVisRowSize != newVisRowSize) {
+		logf("O SHID GOTTA REDO VIS DATA\n");
+		int decompressedVisSize = leafCount * newVisRowSize;
+
+		byte* decompressedVis = new byte[decompressedVisSize];
+		memset(decompressedVis, 0, decompressedVisSize);
+
+		// decompress this map's world leaves
+		// model leaves don't need to be decompressed because the game ignores VIS for them.
+		decompress_vis_lump(leaves, visdata, visDataLength, decompressedVis,
+			models[0].nVisLeafs, oldLeafCount-1, leafCount-1);
+
+		// recompress with new vis row size
+		byte* compressedVis = new byte[decompressedVisSize];
+		memset(compressedVis, 0, decompressedVisSize);
+		int newVisLen = CompressAll(leaves, decompressedVis, compressedVis, leafCount-1, decompressedVisSize);
+
+		byte* compressedVisResize = new byte[newVisLen];
+		memcpy(compressedVisResize, compressedVis, newVisLen);
+
+		if (newVisLen == visDataLength && memcmp(compressedVisResize, visdata, visDataLength) == 0) {
+			logf("WTF SAME VIS DATA\n");
+		}
+
+		replace_lump(LUMP_VISIBILITY, compressedVisResize, newVisLen);
+
+		delete[] decompressedVis;
+		delete[] compressedVis;
+	}
+	*/
+
+	logf("deserialized BSP model to index %d\n", modelCount-1);
+	return modelCount - 1;
+}
+
 int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 	// remove point entities
 
@@ -7272,9 +7974,11 @@ void Bsp::write_csg_polys(int16_t nodeIdx, FILE* polyfile, int flipPlaneSkip, bo
 	}
 }
 
-void Bsp::print_leaf(BSPLEAF leaf) {
+void Bsp::print_leaf(int leafidx) {
+	BSPLEAF& leaf = leaves[leafidx];
 	logf(getLeafContentsName(leaf.nContents));
-	logf(" %d surfs, Min(%d, %d, %d), Max(%d %d %d)", leaf.nMarkSurfaces, 
+	logf(" (LEAF %d), %d surfs, Min(%d, %d, %d), Max(%d %d %d)",
+		leafidx, leaf.nMarkSurfaces, 
 		leaf.nMins[0], leaf.nMins[1], leaf.nMins[2],
 		leaf.nMaxs[0], leaf.nMaxs[1], leaf.nMaxs[2]);
 }

@@ -107,7 +107,9 @@ public:
 
 	bool isEverVisible();
 
-	string serialize();
+	string serialize(bool serializeBspModel=false);
+
+	bool deserialize();
 
 	void clearCache();
 

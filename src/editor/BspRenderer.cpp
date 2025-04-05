@@ -649,7 +649,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		for (int e = 0; e < face.nEdges; e++) {
 			int32_t edgeIdx = map->surfedges[face.iFirstEdge + e];
 			BSPEDGE& edge = map->edges[abs(edgeIdx)];
-			int vertIdx = edgeIdx < 0 ? edge.iVertex[1] : edge.iVertex[0];
+			int vertIdx = min(edgeIdx < 0 ? edge.iVertex[1] : edge.iVertex[0], (uint16_t)(map->vertCount-1));
 
 			vec3& vert = map->verts[vertIdx];
 			verts[e].x = vert.x;
@@ -1453,7 +1453,7 @@ void BspRenderer::refreshFace(int faceIdx) {
 	for (int e = 0; e < face.nEdges; e++) {
 		int32_t edgeIdx = map->surfedges[face.iFirstEdge + e];
 		BSPEDGE& edge = map->edges[abs(edgeIdx)];
-		int vertIdx = edgeIdx < 0 ? edge.iVertex[1] : edge.iVertex[0];
+		int vertIdx = min(edgeIdx < 0 ? edge.iVertex[1] : edge.iVertex[0], (uint16_t)(map->vertCount-1));
 		allVerts[e] = map->verts[vertIdx];
 
 		// 2 verts can share the same position on a face, so need to find one that isn't shared (aomdc_1intro)
@@ -1699,6 +1699,9 @@ void BspRenderer::getRenderEnts(vector<OrderedEnt>& ents) {
 		OrderedEnt ent;
 		ent.ent = map->ents[i];
 		ent.modelIdx = map->ents[i]->getBspModelIdx();
+		if (ent.modelIdx >= map->modelCount) {
+			continue;
+		}
 		ent.transform = renderEnts[i].modelMat;
 		ent.transform.translate(renderOffset.x, renderOffset.y, renderOffset.z);
 		ent.transform = ent.transform * map->ents[i]->getRotationMatrix(false);
@@ -1838,7 +1841,7 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 	if (!(g_settings.render_flags & RENDER_ENTS))
 		return;
 
-	if (renderModels[modelIdx].wireframeBuffer) {
+	if (renderModels[modelIdx].wireframeBuffer && modelIdx < numRenderModels) {
 		if (highlight)
 			g_app->vec3Shader->setUniform("color", vec4(1, 1, 0, 1));
 		else if (modelIdx > 0)
@@ -1852,6 +1855,9 @@ void BspRenderer::drawModelWireframe(int modelIdx, bool highlight) {
 
 bool BspRenderer::willDrawModel(Entity* ent, int modelIdx, bool transparent) {
 	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
+		return false;
+	}
+	if (modelIdx >= numRenderModels) {
 		return false;
 	}
 
@@ -2119,11 +2125,13 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 		if (ent->hidden)
 			continue;
 
-		if (renderEnts[i].modelIdx >= 0 && renderEnts[i].modelIdx < map->modelCount) {
+		int modelIdx = renderEnts[i].modelIdx;
+
+		if (modelIdx >= 0 && modelIdx < map->modelCount && modelIdx < numRenderModels) {
 
 			bool isSpecial = false;
-			for (int k = 0; k < renderModels[renderEnts[i].modelIdx].groupCount; k++) {
-				if (renderModels[renderEnts[i].modelIdx].renderGroups[k].transparent) {
+			for (int k = 0; k < renderModels[modelIdx].groupCount; k++) {
+				if (renderModels[modelIdx].renderGroups[k].transparent) {
 					isSpecial = true;
 					break;
 				}
@@ -2137,7 +2145,7 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 
 			vec3 angles = map->ents[i]->canRotate() ? renderEnts[i].angles : vec3();
 			if (pickModelPoly(start, dir, renderEnts[i].offset, angles,
-				renderEnts[i].modelIdx, hullIdx, i, faceIdx, bestDist)) {
+					modelIdx, hullIdx, i, faceIdx, bestDist)) {
 				entIdx = i;
 				foundBetterPick = true;
 			}
