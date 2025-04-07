@@ -7242,18 +7242,25 @@ int Bsp::add_model(string serialized) {
 }
 
 int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
-	// remove point entities
-
 	struct MergedEntity {
 		Entity* ent;
 		vec3 min[MAX_MAP_HULLS];
 		vec3 max[MAX_MAP_HULLS];
+		bool hasHull[MAX_MAP_HULLS];
 	};
 
 	vector<MergedEntity> mergedEnts;
 
 	for (Entity* ent : mergeEnts) {
 		int idx = ent->getBspModelIdx();
+
+		if (idx >= modelCount) {
+			logf("Merge failed. Invalid model selected for merging: %d\n", idx);
+			return -1;
+		}
+
+		BSPMODEL& model = models[idx];
+
 		if (idx >= 0) {
 			MergedEntity ment;
 			get_model_merge_bounds(idx, ment.min[0], ment.max[0]);
@@ -7264,15 +7271,13 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 			for (int i = 0; i < MAX_MAP_HULLS; i++) {
 				ment.min[i] += ori;
 				ment.max[i] += ori;
+				ment.hasHull[i] = model.iHeadnodes[i] >= 0;
 			}
 
 			ment.ent = ent;
 			mergedEnts.push_back(ment);
 		}
-		if (idx >= modelCount) {
-			logf("Merge failed. Invalid model selected for merging: %d\n", idx);
-			return -1;
-		}
+		
 	}
 
 	if (mergedEnts.size() <= 1) {
@@ -7288,6 +7293,10 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 				continue;
 
 			for (int i = 0; i < MAX_MAP_HULLS; i++) {
+				if (!enta.hasHull[i] || !entb.hasHull[i]) {
+					continue;
+				}
+
 				if (boxesIntersect(enta.min[i] + enta.ent->getOrigin(), enta.max[i] + enta.ent->getOrigin(),
 					entb.min[i] + entb.ent->getOrigin(), entb.max[i] + entb.ent->getOrigin())) {
 					
@@ -7333,6 +7342,9 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 			for (int i = 0; i < mergedEnts.size(); i++) {
 				MergedEntity& enta = mergedEnts[i];
 
+				if (!enta.hasHull[hull])
+					continue;
+
 				int bestMerge = -1;
 				Entity* bestMergeEnt = NULL;
 				float bestVolume = FLT_MAX;
@@ -7343,6 +7355,9 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 				for (int k = 0; k < mergedEnts.size(); k++) {
 					MergedEntity& entb = mergedEnts[k];
 					if (enta.ent == entb.ent)
+						continue;
+
+					if (!entb.hasHull[hull])
 						continue;
 
 					vec3 bmin = entb.min[hull];
@@ -7366,7 +7381,7 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 
 					bool wouldMergeIntersectOtherEnts = false;
 					for (const MergedEntity& entc : mergedEnts) {
-						if (entc.ent == enta.ent || entc.ent == entb.ent)
+						if (entc.ent == enta.ent || entc.ent == entb.ent || !entc.hasHull[hull])
 							continue;
 
 						if (boxesIntersect(mergedMins, mergedMaxs, entc.min[hull], entc.max[hull])) {
