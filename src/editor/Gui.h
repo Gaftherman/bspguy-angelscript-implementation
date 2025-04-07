@@ -123,6 +123,9 @@ private:
 
 	float mainMenuBarHeight;
 
+	int confirmMerge = 0;
+	int deduplicateOpen = 0;
+
 	void draw3dContextMenus();
 	void drawEditOptions(bool isMainMenu);
 	void drawMenuBar();

@@ -246,7 +246,7 @@ public:
 	// searches for entities that have very similar models,
 	// then updates the entities to share a single model reference
 	// this reduces the precached model count even though the models are still present in the bsp
-	void deduplicate_models();
+	int deduplicate_models(bool allowTextureShift, bool dryrun);
 	
 	// scales up texture axes for any face with bad surface extents
 	// connected planar faces which use the same texture will also be scaled up to prevent seams

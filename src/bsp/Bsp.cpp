@@ -2555,7 +2555,7 @@ struct ModelIdxRemap {
 	vec3 offset;
 };
 
-void Bsp::deduplicate_models() {
+int Bsp::deduplicate_models(bool allowTextureShift, bool dryrun) {
 	const float epsilon = 1.0f;
 
 	map<int, ModelIdxRemap> modelRemap;
@@ -2695,6 +2695,10 @@ void Bsp::deduplicate_models() {
 									((diffU < uvEpsilon || fabs(diffU - 1.0f) < uvEpsilon)
 									&& (diffV < uvEpsilon || fabs(diffV - 1.0f) < uvEpsilon));
 
+								if (allowTextureShift) {
+									uvsMatch = true;
+								}
+
 								if (((vertA.pos - minsA) - (vertB.pos - minsB)).length() < epsilon
 									&& uvsMatch) {
 									foundVertMatch = true;
@@ -2731,13 +2735,16 @@ void Bsp::deduplicate_models() {
 			modelRemap[k] = remap;
 		}
 	}
-	
-	logf("Remapped %d BSP model references\n", modelRemap.size());
+
+	unordered_set<int> oldUniqueModels;
+	unordered_set<int> newUniqueModels;
 
 	for (Entity* ent : ents) {
 		if (!ent->hasKey("model")) {
 			continue;
 		}
+		if (ent->hidden)
+			continue;
 
 		string model = ent->getKeyvalue("model");
 
@@ -2749,10 +2756,22 @@ void Bsp::deduplicate_models() {
 		if (modelRemap.find(modelIdx) != modelRemap.end()) {
 			ModelIdxRemap remap = modelRemap[modelIdx];
 
-			ent->setOrAddKeyvalue("origin", (ent->getOrigin() + remap.offset).toKeyvalueString());
-			ent->setOrAddKeyvalue("model", "*" + to_string(remap.newIdx));
+			oldUniqueModels.insert(modelIdx);
+			newUniqueModels.insert(remap.newIdx);
+
+			if (!dryrun) {
+				ent->setOrAddKeyvalue("origin", (ent->getOrigin() + remap.offset).toKeyvalueString());
+				ent->setOrAddKeyvalue("model", "*" + to_string(remap.newIdx));
+			}
 		}
 	}
+
+	int refsRemoved = oldUniqueModels.size() - newUniqueModels.size();
+	if (!dryrun) {
+		logf("Removed %d BSP model references\n", refsRemoved);
+	}
+
+	return refsRemoved;
 }
 
 float Bsp::calc_allocblock_usage() {

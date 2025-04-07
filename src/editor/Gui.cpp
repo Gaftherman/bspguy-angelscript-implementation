@@ -20,7 +20,6 @@
 #include <lzma_util.h>
 #include "BaseRenderer.h"
 #include <unordered_set>
-#include "Wad.h"
 
 // embedded binary data
 #include "fonts/notosans.h"
@@ -41,7 +40,6 @@ char const* bspFilterPatterns[1] = { "*.bsp" };
 char const* entFilterPatterns[1] = { "*.ent" };
 char const* wadFilterPatterns[1] = { "*.wad" };
 
-int confirmMerge = 0;
 bool editWasOpen = false;
 
 void tooltip(ImGuiContext& g, const char* text) {
@@ -533,41 +531,6 @@ void Gui::draw3dContextMenus() {
 
 			ImGui::EndPopup();
 		}
-	}
-
-	if (confirmMerge == 2) {
-		ImGui::OpenPopup("Confirm Merge");
-	}
-
-	ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Appearing);
-	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y*0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	if (ImGui::BeginPopupModal("Confirm Merge", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextWrapped("The selected models have clipnodes that are overlapping or can't be merged simply.\n\n"
-			"Inspect clipnodes after merging. They will likely be broken.");
-		
-		ImGui::Dummy(ImVec2(0, 10));
-		
-		if (ImGui::Button("Merge")) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
-			Bsp* map = app->mapRenderer->map;
-			int newIndex = map->merge_models(app->pickInfo.getEnts(), true);
-
-			if (newIndex >= 0 || newIndex == -3) {
-				command->pushUndoState();
-			}
-			else {
-				delete command;
-			}
-
-			confirmMerge = 0;
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel")) {
-			confirmMerge = 0;
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::EndPopup();
 	}
 }
 
@@ -1600,15 +1563,12 @@ void Gui::drawMenuBar() {
 		*/
 
 		if (ImGui::MenuItem("Deduplicate Models", 0, false, !app->isLoading)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Deduplicate models");
-			map->deduplicate_models();
-
-			command->pushUndoState();
+			deduplicateOpen = 1;
 		}
 		tooltip(g, "Scans for duplicated BSP models and updates entity model keys to reference only one model from set of duplicated models. "
 			"This lowers the model count and allows more game models to be precached. Lightmaps are ignored during the scan, so this might "
 			"make some entities appear too bright in dark areas, or too dark in lit areas.\n\n"
-			"This does not delete BSP data unless you run the Clean command afterward. Cut/copy problematic entities before "
+			"This does not delete BSP data unless you run the Clean command afterward. Cut/hide problematic entities before "
 			"deduplicating if you don't want their models swapped.");
 
 		if (ImGui::BeginMenu("Delete BSP Data", !app->isLoading)) {
@@ -2161,6 +2121,10 @@ void Gui::drawStatusBar() {
 }
 
 void Gui::drawPopups() {
+	ImGuiContext& g = *GImGui;
+	ImGuiIO& io = ImGui::GetIO();
+	Bsp* map = app->mapRenderer->map;
+
 	if (!g_app->mergeResult.map && !g_app->mergeResult.overflow && g_app->mergeResult.fpath.size())
 		ImGui::OpenPopup("Merge Overlap");
 
@@ -2283,6 +2247,106 @@ void Gui::drawPopups() {
 		ImGui::Dummy(ImVec2(0.0f, 20.0f));
 
 		ImGui::SetItemDefaultFocus();
+		ImGui::EndPopup();
+	}
+
+	if (confirmMerge == 2) {
+		ImGui::OpenPopup("Confirm Merge");
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Confirm Merge", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("The selected models have clipnodes that are overlapping or can't be merged simply.\n\n"
+			"Inspect clipnodes after merging. They will likely be broken.");
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (ImGui::Button("Merge")) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+			Bsp* map = app->mapRenderer->map;
+			int newIndex = map->merge_models(app->pickInfo.getEnts(), true);
+
+			if (newIndex >= 0 || newIndex == -3) {
+				command->pushUndoState();
+			}
+			else {
+				delete command;
+			}
+
+			confirmMerge = 0;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			confirmMerge = 0;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	if (deduplicateOpen) {
+		ImGui::OpenPopup("Deduplicate Models");
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Deduplicate Models", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		static bool allowShift = false;
+		static int dedupEstimate = -1;
+
+		ImGui::Text("Model count will be lowered by: %d", dedupEstimate);
+
+		if (dedupEstimate == -1) {
+			dedupEstimate = map->deduplicate_models(allowShift, true);
+		}
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (ImGui::Checkbox("Allow Shifted Textures", &allowShift)) {
+			dedupEstimate = -1;
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("Ignore texture shifts when deduplicating. "
+				"Textures must still match for every face but the shift values don't need to be exactly the same.");
+		}
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (ImGui::Button("Deduplicate")) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Deduplicate models");
+			map->deduplicate_models(allowShift, false);
+			command->pushUndoState();
+			ImGui::CloseCurrentPopup();
+			deduplicateOpen = 0;
+			dedupEstimate = -1;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Select Unique")) {
+			app->deselectObject();
+
+			for (int m = 1; m < map->modelCount; m++) {
+				for (int i = 0; i < map->ents.size(); i++) {
+					if (map->ents[i]->getBspModelIdx() == m) {
+						app->pickInfo.selectEnt(i);
+						break;
+					}
+				}
+			}
+			
+			app->postSelectEnt();
+			deduplicateOpen = 0;
+			dedupEstimate = -1;
+			ImGui::CloseCurrentPopup();
+		}
+		tooltip(g, "Don't deduplicate models, just select entities that use a unique model.\n\nUse this then drag the entities out to space to see which models need merging (for when deduplication isn't enough).");
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			deduplicateOpen = 0;
+			dedupEstimate = -1;
+			ImGui::CloseCurrentPopup();
+		}
 		ImGui::EndPopup();
 	}
 }
