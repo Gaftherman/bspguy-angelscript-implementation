@@ -5352,6 +5352,7 @@ void Gui::drawEntityReport() {
 			static int lastKeyboardNavSelect = 0;
 			static string classFilter = "(none)";
 			static bool partialMatches = true;
+			static bool invertMatch = false;
 
 			ImGuiIO& io = ImGui::GetIO();
 			const ImGuiKeyChord expected_key_mod_flags = io.KeyMods;
@@ -5417,6 +5418,11 @@ void Gui::drawEntityReport() {
 							}
 						}
 					}
+
+					if (invertMatch) {
+						visible = !visible;
+					}
+
 					if (visible) {
 						ReportEnt rpent;
 						rpent.idx = i;
@@ -5646,6 +5652,17 @@ void Gui::drawEntityReport() {
 			}
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Do not force entity keys/values to match your input exactly.");
+			}
+
+			ImGui::SameLine();
+			ImGui::Dummy(ImVec2(10, 0));
+			ImGui::SameLine();
+			
+			if (ImGui::Checkbox("Invert", &invertMatch)) {
+				entityReportFilterNeeded = true;
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Invert search filter.");
 			}
 
 			ImGui::EndChild();
