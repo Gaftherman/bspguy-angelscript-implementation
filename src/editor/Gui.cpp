@@ -5557,6 +5557,14 @@ void Gui::drawEntityReport() {
 				}
 			}
 
+			if (ImGui::IsWindowFocused() && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+				app->deselectObject();
+				for (int i = 0; i < filteredEnts.size(); i++) {
+					app->pickInfo.selectEnt(filteredEnts[i].idx);
+				}
+				app->postSelectEnt();
+			}
+
 			ImGui::EndChild();
 
 			ImGui::BeginChild("filters");
@@ -5669,10 +5677,6 @@ void Gui::drawEntityReport() {
 
 			ImGui::EndGroup();
 		}
-	}
-
-	if (ImGui::IsItemActive() && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) {
-		logf("Ctrl + A detected!\n");
 	}
 
 	ImGui::End();

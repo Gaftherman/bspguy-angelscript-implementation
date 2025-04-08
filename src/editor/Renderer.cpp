@@ -1660,7 +1660,7 @@ void Renderer::controls() {
 	anyAltPressed = pressed[GLFW_KEY_LEFT_ALT] || pressed[GLFW_KEY_RIGHT_ALT];
 	anyShiftPressed = pressed[GLFW_KEY_LEFT_SHIFT] || pressed[GLFW_KEY_RIGHT_SHIFT];
 
-	if (!io.WantCaptureKeyboard)
+	if (!io.WantCaptureKeyboard && !io.WantCaptureMouse)
 		cameraOrigin += getMoveDir() * frameTimeScale;
 	
 	moveGrabbedEnts();
