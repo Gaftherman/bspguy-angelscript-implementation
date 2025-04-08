@@ -1747,10 +1747,12 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 		}
 	}
 
-	if (wireframePass)
-		drawModelWireframe(0, false);
-	else {
-		drawModel(map->ents[0], 0, transparencyPass, false);
+	if (!map->ents[0]->hidden) {
+		if (wireframePass)
+			drawModelWireframe(0, false);
+		else {
+			drawModel(map->ents[0], 0, transparencyPass, false);
+		}
 	}
 
 	activeShader->pushMatrix(MAT_MODEL);
@@ -1790,7 +1792,7 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 	if (clipnodesLoaded && transparencyPass && !wireframePass) {
 		g_app->colorShader->bind();
 
-		if (g_settings.render_flags & RENDER_WORLD_CLIPNODES && clipnodeHull != -1) {
+		if (g_settings.render_flags & RENDER_WORLD_CLIPNODES && clipnodeHull != -1 && !map->ents[0]->hidden) {
 			drawModelClipnodes(0, false, clipnodeHull);
 		}
 
