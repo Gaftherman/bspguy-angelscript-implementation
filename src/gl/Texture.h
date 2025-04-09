@@ -10,6 +10,24 @@ struct MipTexture {
 	COLOR4* data;
 };
 
+enum resample_modes {
+	KernelTypeUnknown,
+	KernelTypeNearest,
+	KernelTypeAverage,
+	KernelTypeBilinear,
+	KernelTypeBicubic,
+	KernelTypeMitchell,
+	KernelTypeCardinal,
+	KernelTypeBSpline,
+	KernelTypeLanczos,
+	KernelTypeLanczos2,
+	KernelTypeLanczos3,
+	KernelTypeLanczos4,
+	KernelTypeLanczos5,
+	KernelTypeCatmull,
+	KernelTypeGaussian,
+};
+
 class Texture
 {
 public:	
@@ -31,6 +49,9 @@ public:
 	Texture(int width, int height, int depth);
 	Texture(int width, int height, void * data);
 	~Texture();
+
+	static vector<COLOR3> resample(COLOR3* srcData, int srcW, int srcH, COLOR3* dstData,
+		int dstW, int dstH, int mode, bool masked, COLOR3 maskColor);
 
 	void generateMipMaps(int mipLevels);
 

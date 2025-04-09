@@ -247,6 +247,8 @@ public:
 	// then updates the entities to share a single model reference
 	// this reduces the precached model count even though the models are still present in the bsp
 	int deduplicate_models(bool allowTextureShift, bool dryrun);
+
+	int get_entity_index(Entity* ent);
 	
 	// scales up texture axes for any face with bad surface extents
 	// connected planar faces which use the same texture will also be scaled up to prevent seams
@@ -268,7 +270,7 @@ public:
 	// returns true if was downscaled
 	bool downscale_texture(int textureId, int maxDim, bool allowWad);
 
-	bool downscale_texture(int textureId, int newWidth, int newHeight);
+	bool downscale_texture(int textureId, int newWidth, int newHeight, int resampleMode);
 
 	bool rename_texture(const char* oldName, const char* newName);
 
@@ -310,6 +312,9 @@ public:
 	// gets estimated number of allocblocks filled
 	// actual amount will vary because there is some wasted space when the engine generates lightmap atlases
 	float calc_allocblock_usage();
+
+	// returns how much to scale up face textures to fix all bad extents in the map
+	float get_scale_to_fix_bad_extents(int textureIdx);
 
 	// subdivides along the axis with the most texture pixels (for biggest surface extent reduction)
 	bool subdivide_face(int faceIdx);

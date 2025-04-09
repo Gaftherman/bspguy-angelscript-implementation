@@ -5,6 +5,8 @@
 #include <string.h>
 #include <cmath>
 #include <base_resample.h>
+#include "quant.h"
+#include <unordered_set>
 
 Texture::Texture(int width, int height) {
 	this->width = width;
@@ -52,6 +54,57 @@ Texture::~Texture()
 	for (MipTexture& mip : mipmaps) {
 		delete[] mip.data;
 	}
+}
+
+vector<COLOR3> Texture::resample(COLOR3* srcData, int srcW, int srcH, COLOR3* dstData,
+	int dstW, int dstH, int mode, bool masked, COLOR3 maskColor) {
+	
+	vector<COLOR3> palette;
+
+	if (masked && mode != KernelTypeNearest) {
+		COLOR3* maskedData = new COLOR3[srcW * srcH];
+		memcpy(maskedData, srcData, srcW * srcH * sizeof(COLOR3));
+
+		// replace the mask color with black. Better to fade edges into black than bright blue/pink.
+		for (int i = 0; i < srcW * srcH; i++) {
+			if (maskedData[i] == maskColor) {
+				maskedData[i] = COLOR3(0, 0, 0);
+			}
+		}
+		base::ResampleImage24((byte*)maskedData, srcW, srcH, (byte*)dstData, dstW, dstH, (base::KernelType)mode);
+		delete[] maskedData;
+
+		// quantize the image, saving one palette entry for the mask color
+		palette = median_cut_quantize(dstData, dstW * dstH, 255);
+
+		// apply the mask color using nearest neighbor sampling
+		COLOR3* nearestResamp = new COLOR3[dstW * dstH];
+		base::ResampleImage24((byte*)srcData, srcW, srcH, (byte*)nearestResamp, dstW, dstH, base::KernelType::KernelTypeNearest);
+		for (int i = 0; i < dstW * dstH; i++) {
+			if (nearestResamp[i] == maskColor) {
+				dstData[i] = maskColor;
+			}
+		}
+		delete[] nearestResamp;
+
+		palette.push_back(maskColor);
+	}
+	else {
+		base::ResampleImage24((byte*)srcData, srcW, srcH, (byte*)dstData, dstW, dstH, (base::KernelType)mode);
+		
+		if (mode != KernelTypeNearest) {
+			palette = median_cut_quantize(dstData, dstW * dstH, 256);
+		}
+		else {
+			unordered_set<COLOR3> uniqueColors;
+			for (int i = 0; i < dstW * dstH; i++) {
+				uniqueColors.insert(dstData[i]);				
+			}
+			palette = vector<COLOR3>(uniqueColors.begin(), uniqueColors.end());
+		}		
+	}
+
+	return palette;
 }
 
 void Texture::generateMipMaps(int mipLevels) {

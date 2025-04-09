@@ -70,6 +70,7 @@ class Renderer {
 	friend class SprRenderer;
 	friend class Entity;
 	friend class PickInfo;
+	friend class Bsp;
 
 public:
 	BspRenderer* mapRenderer;

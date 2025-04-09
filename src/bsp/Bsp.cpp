@@ -17,6 +17,8 @@
 #include "Renderer.h"
 #include "icons/aaatrigger.h"
 #include "mstream.h"
+#include "Fgd.h"
+#include "Texture.h"
 
 typedef map< string, vec3 > mapStringToVector;
 
@@ -2774,6 +2776,16 @@ int Bsp::deduplicate_models(bool allowTextureShift, bool dryrun) {
 	return refsRemoved;
 }
 
+int Bsp::get_entity_index(Entity* ent) {
+	for (int i = 0; i < ents.size(); i++) {
+		if (ents[i] == ent) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 float Bsp::calc_allocblock_usage() {
 	int total = 0;
 
@@ -2792,6 +2804,74 @@ float Bsp::calc_allocblock_usage() {
 	const int allocBlockSize = 128 * 128;
 
 	return total / (float)allocBlockSize;
+}
+
+float Bsp::get_scale_to_fix_bad_extents(int textureIdx) {
+	int numBadExtent = 0;
+	float bestScale = FLT_MAX;
+	bool anyScaleNeeded = false;
+
+	for (int i = 0; i < faceCount; i++) {
+		BSPTEXTUREINFO& info = texinfos[faces[i].iTextureInfo];
+		BSPTEXTUREINFO oldInfo = info;
+		float originalScaleX = info.vS.length();
+		float originalScaleY = info.vT.length();
+
+		if ((info.nFlags & TEX_SPECIAL) || info.iMiptex != textureIdx) {
+			continue;
+		}
+
+		int mins[2];
+		int maxs[2];
+
+		GetFaceExtents(this, i, mins, maxs);
+		int width = (maxs[0] - mins[0]);
+		int height = (maxs[1] - mins[1]);
+
+		if ((width <= g_limits.max_surface_extents) && (height <= g_limits.max_surface_extents)) {
+			continue;
+		}
+
+		float scaleNeeded = max((float)g_limits.max_surface_extents / width, (float)g_limits.max_surface_extents / height);
+		info.vS = info.vS.normalize() * originalScaleX * scaleNeeded;
+		info.vT = info.vT.normalize() * originalScaleY * scaleNeeded;
+		bool scalingUp = scaleNeeded > 0;
+
+		while (true) {
+			GetFaceExtents(this, i, mins, maxs);
+			width = (maxs[0] - mins[0]);
+			height = (maxs[1] - mins[1]);
+
+			if ((width > g_limits.max_surface_extents) || (height > g_limits.max_surface_extents)) {
+				if (!scalingUp) {
+					break; // found the maximum scale
+				}
+				scaleNeeded -= 0.01f;
+				if (scaleNeeded <= 0) {
+					scaleNeeded = FLT_MIN;
+					break;
+				}
+			}
+			else {
+				if (scalingUp) {
+					break; // found the minimum scale
+				}
+				scaleNeeded += 0.01f;
+			}
+
+			info.vS = info.vS.normalize() * originalScaleX * scaleNeeded;
+			info.vT = info.vT.normalize() * originalScaleY * scaleNeeded;
+		}
+
+		if (scaleNeeded < bestScale) {
+			anyScaleNeeded = true;
+			bestScale = scaleNeeded;
+		}
+
+		info = oldInfo;
+	}
+
+	return anyScaleNeeded ? bestScale : 1.0f;
 }
 
 int Bsp::allocblock_reduction() {
@@ -3237,7 +3317,7 @@ int Bsp::get_default_texture_idx() {
 	return aaatriggerIdx;
 }
 
-bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight) {
+bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resampleMode) {
 	if ((newWidth % 16 != 0) || (newHeight % 16 != 0) || newWidth <= 0 || newHeight <= 0) {
 		logf("Invalid downscale dimensions: %dx%d\n", newWidth, newHeight);
 		return false;
@@ -3255,15 +3335,12 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight) {
 	int lastMipSize = (oldWidth >> 3) * (oldHeight >> 3);
 	byte* pixels = (byte*)(textures + texOffset + tex.nOffsets[0]);
 	byte* palette = (byte*)(textures + texOffset + tex.nOffsets[3] + lastMipSize);
+	COLOR3* paletteColors = (COLOR3*)(palette + 2); // skip color count
 
-	int oldWidths[4];
-	int oldHeights[4];
 	int newWidths[4];
 	int newHeights[4];
 	int newOffset[4];
 	for (int i = 0; i < 4; i++) {
-		oldWidths[i] = oldWidth >> (1 * i);
-		oldHeights[i] = oldHeight >> (1 * i);
 		newWidths[i] = tex.nWidth >> (1 * i);
 		newHeights[i] = tex.nHeight >> (1 * i);
 
@@ -3274,29 +3351,57 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight) {
 			newOffset[i] = sizeof(BSPMIPTEX);
 		}
 	}
-	byte* newPalette = (byte*)(textures + texOffset + newOffset[3] + newWidths[3] * newHeights[3]);
 
 	float srcScaleX = (float)oldWidth / tex.nWidth;
 	float srcScaleY = (float)oldHeight / tex.nHeight;
 
-	for (int i = 0; i < 4; i++) {
-		byte* srcData = (byte*)(textures + texOffset + tex.nOffsets[i]);
+	byte* srcPixels = (byte*)(textures + texOffset + tex.nOffsets[0]);
+	COLOR3* srcColors = new COLOR3[oldWidth * oldHeight];
+	for (int i = 0; i < oldWidth * oldHeight; i++) {
+		srcColors[i] = paletteColors[srcPixels[i]];
+	}
+
+	COLOR3* dstColors = new COLOR3[newWidth * newHeight];
+	vector<COLOR3> newColors = Texture::resample(srcColors, oldWidth, oldHeight, dstColors,
+		newWidth, newHeight, resampleMode, tex.szName[0] == '{', paletteColors[255]);
+
+	if (newColors.empty()) {
+		for (int i = newColors.size(); i < 256; i++) {
+			newColors.push_back(paletteColors[i]);
+		}
+	}
+
+	// convert pixels to palette indexes
+	byte* mip0 = (byte*)(textures + texOffset + newOffset[0]);
+	for (int i = 0; i < newWidth * newHeight; i++) {
+		for (int k = 0; k < newColors.size(); k++) {
+			if (newColors[k] == dstColors[i]) {
+				mip0[i] = k;
+				break;
+			}
+		}
+	}
+	delete[] dstColors;
+
+	// nearest neighbor mipmap resize
+	byte* srcData = (byte*)(textures + texOffset + newOffset[0]);
+	for (int i = 1; i < 4; i++) {
 		byte* dstData = (byte*)(textures + texOffset + newOffset[i]);
-		int srcWidth = oldWidths[i];
-		int dstWidth = newWidths[i];
+		int mipWidth = newWidth >> i;
+		int mipHeight = newHeight >> i;
+		int mipScale = 1 << i;
 
-		for (int y = 0; y < newHeights[i]; y++) {
-			int srcY = (int)(srcScaleY * y + 0.5f);
-
-			for (int x = 0; x < newWidths[i]; x++) {
-				int srcX = (int)(srcScaleX * x + 0.5f);
-
-				dstData[y * dstWidth + x] = srcData[srcY * srcWidth + srcX];
+		for (int y = 0; y < mipHeight; y++) {
+			for (int x = 0; x < mipWidth; x++) {
+				dstData[y * mipWidth + x] = srcData[y * mipScale * newWidth + x * mipScale];
 			}
 		}
 	}
 	// 2 = palette color count (should always be 256)
-	memcpy(newPalette, palette, 256 * sizeof(COLOR3) + 2);
+	byte* newPalette = (byte*)(textures + texOffset + newOffset[3] + newWidths[3] * newHeights[3]);
+	memcpy(newPalette, palette, 2);
+	memset(newPalette + 2, 0, sizeof(COLOR3) * 256);
+	memcpy(newPalette + 2, &newColors[0], sizeof(COLOR3) * newColors.size());
 
 	for (int i = 0; i < 4; i++) {
 		tex.nOffsets[i] = newOffset[i];
@@ -3306,7 +3411,7 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight) {
 
 	// shrink texture lump
 	int removedBytes = palette - newPalette;
-	byte* texEnd = newPalette + 256 * sizeof(COLOR3);
+	byte* texEnd = newPalette + 256 * sizeof(COLOR3) + 2;
 	int shiftBytes = (texEnd - textures) + removedBytes;
 
 	memcpy(texEnd, texEnd + removedBytes, header.lump[LUMP_TEXTURES].nLength - shiftBytes);
@@ -3372,7 +3477,7 @@ bool Bsp::downscale_texture(int textureId, int maxDim, bool allowWad) {
 		return false;
 	}
 
-	return downscale_texture(textureId, newWidth, newHeight);
+	return downscale_texture(textureId, newWidth, newHeight, KernelTypeLanczos3);
 }
 
 string Bsp::get_texture_source(string texname, vector<Wad*>& wads) {
@@ -3823,7 +3928,7 @@ int Bsp::downscale_invalid_textures(vector<Wad*>& wads) {
 				}
 			}
 
-			downscale_texture(i, newWidth, newHeight);
+			downscale_texture(i, newWidth, newHeight, KernelTypeLanczos3);
 			count++;
 		}
 	}
@@ -4817,6 +4922,8 @@ bool Bsp::validate() {
 
 	int oobCount = 0;
 	int badOriginCount = 0;
+	int badModelRefCount = 0;
+	int missingBspModelCount = 0;
 	for (Entity* ent : ents) {
 		vec3 ori = ent->getOrigin();
 		//float oob = g_engine_limits->max_mapboundary;
@@ -4838,6 +4945,19 @@ bool Bsp::validate() {
 				*/
 			oobCount++;
 		}
+		if (ent->getBspModelIdx() >= modelCount) {
+			badModelRefCount++;
+		}
+		FgdClass* fgd = g_app->mergedFgd ? g_app->mergedFgd->getFgdClass(ent->getClassname()) : NULL;
+		if (fgd->classType == FGD_CLASS_SOLID && ent->getBspModelIdx() < 0) {
+			missingBspModelCount++;
+		}
+	}
+	if (missingBspModelCount) {
+		logf("%d solid entities have no model key set\n", missingBspModelCount);
+	}
+	if (badModelRefCount) {
+		logf("%d entities have invalid BSP model references\n", badModelRefCount);
 	}
 	if (oobCount) {
 		logf("%d entities outside of the map boundaries\n", oobCount);
@@ -7453,6 +7573,8 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 
 	remove_unused_model_structures();
 
+	vector<int> entsToRemove;
+
 	Entity* finalEnt = NULL;
 	for (const MergeOp& op : mergeOperations) {
 		int newIdx = merge_models(op.enta, op.entb);
@@ -7460,8 +7582,22 @@ int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
 			return -3; // shouldn't happen, but does. Special value meaning to make this undoable
 		op.enta->setOrAddKeyvalue("model", "*" + to_string(newIdx));
 		op.entb->removeKeyvalue("model");
+
+		int idx = get_entity_index(op.entb);
+		if (idx != -1) {
+			entsToRemove.push_back(idx);
+		}
+
 		remove_unused_model_structures();
 		finalEnt = op.enta;
+	}
+
+	// delete merged ents from highest index to lowest
+	sort(entsToRemove.begin(), entsToRemove.end(), [](const int& a, const int& b) {
+		return a > b;
+	});
+	for (int idx : entsToRemove) {
+		ents.erase(ents.begin() + idx);
 	}
 
 	return finalEnt->getBspModelIdx();

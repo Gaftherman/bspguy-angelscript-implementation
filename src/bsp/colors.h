@@ -27,3 +27,15 @@ bool operator==(COLOR3 c1, COLOR3 c2);
 
 COLOR4 operator*(COLOR4 v, float f);
 bool operator==(COLOR4 c1, COLOR4 c2);
+
+// for using COLOR3 with sets/maps
+namespace std {
+	template<>
+	struct hash<COLOR3> {
+		std::size_t operator()(const COLOR3& c) const {
+			return (static_cast<size_t>(c.r) << 16) |
+				(static_cast<size_t>(c.g) << 8) |
+				static_cast<size_t>(c.b);
+		}
+	};
+}

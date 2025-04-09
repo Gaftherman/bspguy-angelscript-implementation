@@ -444,41 +444,6 @@ void Gui::draw3dContextMenus() {
 				}
 			}
 
-			if (ImGui::MenuItem("Downscale texture", 0, false, !app->isLoading && isEmbedded)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textrue");
-
-				Bsp* map = app->pickInfo.getMap();
-
-				set<int> downscaled;
-
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					BSPFACE& face = map->faces[app->pickInfo.faces[i]];
-					BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-					
-					if (downscaled.count(info.iMiptex))
-						continue;
-					
-					int32_t texOffset = ((int32_t*)map->textures)[info.iMiptex + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-
-					int maxDim = max(tex.nWidth, tex.nHeight);
-
-					int nextBestDim = 16;
-					if (maxDim > 512) { nextBestDim = 512; }
-					else if (maxDim > 256) { nextBestDim = 256; }
-					else if (maxDim > 128) { nextBestDim = 128; }
-					else if (maxDim > 64) { nextBestDim = 64; }
-					else if (maxDim > 32) { nextBestDim = 32; }
-					else if (maxDim > 32) { nextBestDim = 32; }
-
-					downscaled.insert(info.iMiptex);
-					map->downscale_texture(info.iMiptex, nextBestDim, true);
-				}
-				
-				command->pushUndoState();
-			}
-			tooltip(g, "Reduces the dimensions of this texture down to the next power of 2.");
-
 			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
 				bool plural = app->pickInfo.faces.size() > 1;
 				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
@@ -6087,6 +6052,14 @@ void Gui::drawTextureTool() {
 	ImGui::SetNextWindowSize(ImVec2(300, 570), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(200, 420), ImVec2(FLT_MAX, app->windowHeight));
 
+	static uint16_t resizeWidth = 0;
+	static uint16_t resizeHeight = 0;
+	static uint16_t resizeOriginalWidth = 0;
+	static uint16_t resizeOriginalHeight = 0;
+	static int resizeTextureIdx = 0;
+	static bool resizeMasked = false;
+	static COLOR3 resizeMaskColor;
+
 	//ImGui::SetNextWindowSize(ImVec2(400, 600));
 	if (ImGui::Begin("Face Editor", &showTextureWidget)) {
 		static float scaleX, scaleY, shiftX, shiftY, rotate;
@@ -6383,7 +6356,27 @@ void Gui::drawTextureTool() {
 			ImGui::PopStyleColor();
 		}
 		ImGui::SameLine();
-		ImGui::Text("%dx%d", width, height);
+
+		ImGui::BeginDisabled(!isEmbedded || app->pickInfo.faces.empty());
+		if (ImGui::Button((to_string(width) + "x" + to_string(height)).c_str())) {
+			ImGui::OpenPopup("Resize Texture");
+
+			int faceIdx = app->pickInfo.faces[0];
+			BSPFACE& face = map->faces[faceIdx];
+			BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
+			int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
+			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+			int lastMipSize = (tex.nWidth >> 3) * (tex.nHeight >> 3);
+			byte* palette = (byte*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize);
+			COLOR3* paletteColors = (COLOR3*)(palette + 2); // skip color count
+
+			resizeWidth = resizeOriginalWidth = width;
+			resizeHeight = resizeOriginalHeight = height;
+			resizeTextureIdx = texinfo.iMiptex;
+			resizeMasked = tex.szName[0] == '{';
+			resizeMaskColor = paletteColors[255];
+		}
+		ImGui::EndDisabled();
 
 		if ((scaledX || scaledY || shiftedX || shiftedY || rotated || textureChanged || refreshAfterFacePaste || toggledFlags)) {
 			if (!faceUndoCommand)
@@ -6500,22 +6493,193 @@ void Gui::drawTextureTool() {
 			//ImGui::OpenPopup("Texture Browser");
 		}
 
-		/*
-		if (ImGui::BeginPopupModal("Texture Browser", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-		{
-			ImGui::TextWrapped("There's no texture browser yet, but you can type in any texture name to apply it. If the name is found in a loaded WAD then it will be added to the BSP data.\n\n");
-			ImGui::Separator();
-
-			if (ImGui::Button("OK", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::SetItemDefaultFocus();
-			ImGui::EndPopup();
-		}
-		*/
-
 		ImGui::Text(("Source: " + texture_src).c_str());
 		ImGui::Text(("Size: " + to_string(tex_size_kb) + " KB").c_str());
+	}
+
+	ImGuiIO& io = ImGui::GetIO();
+	int bestWidth = app->windowWidth * 0.5f;
+	ImGui::SetNextWindowSize(ImVec2(bestWidth, bestWidth*0.8f), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(340, 140), ImVec2(FLT_MAX, app->windowHeight - 40));
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Resize Texture", NULL, 0))
+	{
+		Bsp* map = app->mapRenderer->map;
+
+		static int step = 16;
+		static Texture* originalTexture;
+		static Texture* previewTexture;
+		static bool reloadPreview = false;
+
+		struct ResampOption {
+			const char* name;
+			const char* desc;
+			int mode;
+		};
+
+		static ResampOption resamplers[4] = {
+			{"Nearest", "Sharp but fails to retain detail.", KernelTypeNearest},
+			{"Lanczos", "Sharp and retains detail better than Nearest.", KernelTypeLanczos3},
+			{"Gaussian", "Blurry but retains detail best. Use with text.", KernelTypeGaussian},
+			{"Bilinear", "A middle ground between Lanczos and Gaussian.", KernelTypeBilinear},
+		};
+
+		static ResampOption resampler = resamplers[1];
+
+		int32_t texOffset = ((int32_t*)map->textures)[resizeTextureIdx + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+
+		int lastMipSize = (tex.nWidth >> 3) * (tex.nHeight >> 3);
+		byte* palette = (byte*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize + 2);
+		byte* srcPixels = (byte*)(map->textures + texOffset + tex.nOffsets[0]);
+
+		if (!originalTexture) {
+			originalTexture = new Texture(resizeOriginalWidth, resizeOriginalHeight);
+
+			COLOR3* srcColors = new COLOR3[tex.nWidth * tex.nHeight];
+			for (int i = 0; i < tex.nWidth * tex.nHeight; i++) {
+				srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
+			}
+
+			COLOR4* texColors = (COLOR4*)originalTexture->data;
+			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+				texColors[i] = COLOR4(srcColors[i], 255);
+			}
+
+			originalTexture->upload(GL_RGBA);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		}
+
+		if (!previewTexture || reloadPreview) {
+			if (previewTexture) {
+				delete previewTexture;
+			}
+			previewTexture = new Texture(resizeWidth, resizeHeight);
+			
+			COLOR3* srcColors = new COLOR3[tex.nWidth * tex.nHeight];
+			for (int i = 0; i < tex.nWidth * tex.nHeight; i++) {
+				srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
+			}
+
+			COLOR3* dstColors = new COLOR3[resizeWidth * resizeHeight];
+			vector<COLOR3> newPal = Texture::resample(srcColors, tex.nWidth, tex.nHeight, dstColors, resizeWidth, resizeHeight,
+				resampler.mode, resizeMasked, resizeMaskColor);
+
+			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+				bool foundColor = false;
+				for (int k = 0; k < newPal.size(); k++) {
+					if (newPal[k] == dstColors[i]) {
+						dstColors[i] = newPal[k];
+						foundColor = true;
+						break;
+					}
+				}
+				if (!foundColor) {
+					dstColors[i] = COLOR3(0, 0, 0);
+				}
+			}
+
+			COLOR4* texColors = (COLOR4*)previewTexture->data;
+
+			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+				texColors[i] = COLOR4(dstColors[i], 255);
+			}
+
+			delete[] dstColors;
+
+			previewTexture->upload(GL_RGBA);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			reloadPreview = false;
+		}
+
+		ImGui::SetNextItemWidth(200);
+		if (ImGui::InputScalar("Width", ImGuiDataType_U16, (void*)&resizeWidth, &step)) {
+			resizeWidth = min((int)resizeOriginalWidth, max(16, (resizeWidth / 16) * 16));
+			reloadPreview = true;
+
+		}
+		ImGui::SetNextItemWidth(200);
+		if (ImGui::InputScalar("Height", ImGuiDataType_U16, (void*)&resizeHeight, &step)) {
+			resizeHeight = min((int)resizeOriginalHeight, max(16, (resizeHeight / 16) * 16));
+			reloadPreview = true;
+		}
+		ImGui::SetNextItemWidth(200);
+
+		if (ImGui::BeginCombo("Resampling", resampler.name)) {
+			for (int i = 0; i < 4; i++) {
+				if (ImGui::Selectable(resamplers[i].name)) {
+					resampler = resamplers[i];
+					reloadPreview = true;
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(resamplers[i].desc);
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::Dummy(ImVec2(0, 5));
+		if (ImGui::Button("Reset")) {
+			resizeWidth = resizeOriginalWidth;
+			resizeHeight = resizeOriginalHeight;
+			reloadPreview = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Fix Bad Extents")) {
+			float bestScale = map->get_scale_to_fix_bad_extents(resizeTextureIdx);
+			resizeWidth = max(16, (((int)(resizeOriginalWidth * bestScale)+7) / 16) * 16);
+			resizeHeight = max(16, (((int)(resizeOriginalHeight * bestScale)+7) / 16) * 16);
+			reloadPreview = true;
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("Calculate the max size for this texture which will fix all bad surface extents.");
+		}
+
+		ImGui::Dummy(ImVec2(0, 5));
+
+
+		ImGui::Columns(2, NULL, false);
+		ImGui::Text("Original (%dx%d):", resizeOriginalWidth, resizeOriginalHeight);
+		ImGui::NextColumn();
+		ImGui::Text("Resized (%dx%d):", resizeWidth, resizeHeight);
+		ImGui::NextColumn();
+		int imgWidth = ImGui::GetContentRegionAvail().x;
+		float aspect = (float)originalTexture->height / originalTexture->width;
+		ImGui::Image(originalTexture->id, ImVec2(imgWidth, imgWidth * aspect));
+		ImGui::NextColumn();
+		imgWidth = ImGui::GetContentRegionAvail().x;
+		aspect = (float)previewTexture->height / previewTexture->width;
+		ImGui::Image(previewTexture->id, ImVec2(imgWidth, imgWidth * aspect));
+		ImGui::Columns(1);
+
+		ImGui::Dummy(ImVec2(0, 5));
+		ImGui::Separator();
+		ImGui::Dummy(ImVec2(0, 5));
+
+		ImGui::BeginDisabled(resizeWidth == resizeOriginalWidth && resizeHeight == resizeOriginalHeight);
+		if (ImGui::Button("Resize", ImVec2(120, 0))) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Resize Texture");
+			map->downscale_texture(resizeTextureIdx, resizeWidth, resizeHeight, resampler.mode);
+			command->pushUndoState();
+
+			ImGui::CloseCurrentPopup();
+
+			delete previewTexture;
+			previewTexture = NULL;
+			delete originalTexture;
+			originalTexture = NULL;
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+			delete previewTexture;
+			previewTexture = NULL;
+			delete originalTexture;
+			originalTexture = NULL;
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::EndPopup();
 	}
 
 	ImGui::End();
@@ -6635,9 +6799,6 @@ void Gui::checkValidHulls() {
 
 void Gui::checkFaceErrors() {
 	lightmapTooLarge = badSurfaceExtents = false;
-
-	if (!app->pickInfo.getFace())
-		return;
 
 	Bsp* map = app->pickInfo.getMap();
 

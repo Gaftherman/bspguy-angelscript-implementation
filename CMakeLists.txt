@@ -107,6 +107,7 @@ set(SOURCE_FILES
 	src/util/tinyfiledialogs.c
 	src/util/tinyfiledialogs.h
 	src/util/lzma_util.h src/util/lzma_util.cpp
+	src/util/quant.h src/util/quant.cpp
 )
 
 set(SHADER_FILES
@@ -153,6 +154,7 @@ include_directories(src/gl)
 include_directories(src/qtools)
 include_directories(src/util)
 include_directories(src/nav)
+include_directories(src/lib)
 include_directories(imgui)
 include_directories(imgui/examples)
 include_directories(imgui/backends)
