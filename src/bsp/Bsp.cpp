@@ -2806,72 +2806,71 @@ float Bsp::calc_allocblock_usage() {
 	return total / (float)allocBlockSize;
 }
 
-float Bsp::get_scale_to_fix_bad_extents(int textureIdx) {
-	int numBadExtent = 0;
-	float bestScale = FLT_MAX;
-	bool anyScaleNeeded = false;
+void Bsp::get_scaled_texture_dimensions(int textureIdx, float scale, int& newWidth, int& newHeight) {
+	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
+	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+	newWidth = max(16, (((int)(tex.nWidth * scale) + 7) / 16) * 16);
+	newHeight = max(16, (((int)(tex.nHeight * scale) + 7) / 16) * 16);
+	if (newWidth == tex.nWidth) {
+		newWidth = max(16, ((int)(tex.nWidth * scale) / 16) * 16);
+	}
+	if (newHeight == tex.nHeight) {
+		newHeight = max(16, ((int)(tex.nHeight * scale) / 16) * 16);
+	}
+}
+
+bool Bsp::has_bad_extents(int textureIdx, float scale) {
+	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
+	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+	int newWidth, newHeight;
+	get_scaled_texture_dimensions(textureIdx, scale, newWidth, newHeight);
+
+	float actualScaleX = (float)newWidth / tex.nWidth;
+	float actualScaleY = (float)newHeight / tex.nHeight;
 
 	for (int i = 0; i < faceCount; i++) {
 		BSPTEXTUREINFO& info = texinfos[faces[i].iTextureInfo];
-		BSPTEXTUREINFO oldInfo = info;
-		float originalScaleX = info.vS.length();
-		float originalScaleY = info.vT.length();
 
 		if ((info.nFlags & TEX_SPECIAL) || info.iMiptex != textureIdx) {
 			continue;
 		}
 
-		int mins[2];
-		int maxs[2];
+		BSPTEXTUREINFO oldInfo = info;
+		
+		adjust_resized_texture_coordinates(faces[i], info, newWidth, newHeight, tex.nWidth, tex.nHeight);
 
-		GetFaceExtents(this, i, mins, maxs);
-		int width = (maxs[0] - mins[0]);
-		int height = (maxs[1] - mins[1]);
-
-		if ((width <= g_limits.max_surface_extents) && (height <= g_limits.max_surface_extents)) {
-			continue;
-		}
-
-		float scaleNeeded = max((float)g_limits.max_surface_extents / width, (float)g_limits.max_surface_extents / height);
-		info.vS = info.vS.normalize() * originalScaleX * scaleNeeded;
-		info.vT = info.vT.normalize() * originalScaleY * scaleNeeded;
-		bool scalingUp = scaleNeeded > 0;
-
-		while (true) {
-			GetFaceExtents(this, i, mins, maxs);
-			width = (maxs[0] - mins[0]);
-			height = (maxs[1] - mins[1]);
-
-			if ((width > g_limits.max_surface_extents) || (height > g_limits.max_surface_extents)) {
-				if (!scalingUp) {
-					break; // found the maximum scale
-				}
-				scaleNeeded -= 0.01f;
-				if (scaleNeeded <= 0) {
-					scaleNeeded = FLT_MIN;
-					break;
-				}
-			}
-			else {
-				if (scalingUp) {
-					break; // found the minimum scale
-				}
-				scaleNeeded += 0.01f;
-			}
-
-			info.vS = info.vS.normalize() * originalScaleX * scaleNeeded;
-			info.vT = info.vT.normalize() * originalScaleY * scaleNeeded;
-		}
-
-		if (scaleNeeded < bestScale) {
-			anyScaleNeeded = true;
-			bestScale = scaleNeeded;
+		int size[2];
+		if (!GetFaceLightmapSize(this, i, size)) {
+			info = oldInfo;
+			return true;
 		}
 
 		info = oldInfo;
 	}
 
-	return anyScaleNeeded ? bestScale : 1.0f;
+	return false;
+}
+
+float Bsp::get_scale_to_fix_bad_extents(int textureIdx) {
+	float bestScale = 1.0f;
+	float lastWorkingScale = 1.0f;
+
+	while (has_bad_extents(textureIdx, bestScale)) {
+		bestScale -= bestScale > 0.1f ? 0.1f : 0.01f; // coarse adjust
+		if (bestScale < 0) {
+			bestScale = FLT_MIN;
+			break;
+		}
+	}
+	while (!has_bad_extents(textureIdx, bestScale)) {
+		lastWorkingScale = bestScale;
+		bestScale += 0.01f; // fine tuning
+	}
+	bestScale = lastWorkingScale - 0.02f; // undo last bad step and add epsilon
+
+	return bestScale;
 }
 
 int Bsp::allocblock_reduction() {
@@ -3128,13 +3127,20 @@ int Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
 			}
 		}
 
-		totalFaces++;
-		subdivide_face(i);
-		faces.push_back(i+1);
-		faces.push_back(i);
+		if (subdivide_face(i)) {
+			totalFaces++;
+			faces.push_back(i + 1);
+			faces.push_back(i);
+		}
 	}
 
-	logf("Subdivided into %d faces\n", totalFaces);
+	if (totalFaces != 1) {
+		logf("Subdivided face %d into %d faces\n", faceIdx, totalFaces);
+	}
+	else {
+		debugf("Face %d does not need to be subdivided\n", faceIdx);
+	}
+	
 	return totalFaces - 1;
 }
 
@@ -3167,16 +3173,31 @@ void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, in
 		static vector<Wad*> emptyWads;
 		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
 
-		for (int i = 0; i < textureCount; i++) {
-			int32_t texOffset = ((int32_t*)textures)[i + 1];
+		unordered_set<int> bad_extent_mips;
+
+		for (int fa = 0; fa < faceCount; fa++) {
+			int faceIdx = fa;
+			BSPFACE& face = faces[faceIdx];
+			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+			int size[2];
+			if (GetFaceLightmapSize(this, faceIdx, size)) {
+				continue;
+			}
+
+			bad_extent_mips.insert(info.iMiptex);
+		}
+
+		for (int mip : bad_extent_mips) {
+			int32_t texOffset = ((int32_t*)textures)[mip + 1];
 			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
 			if (tex.nOffsets[0] != 0) {
 				continue;
 			}
 
-			if (tex.nWidth > maxTextureDim || tex.nHeight > maxTextureDim) {
-				embed_texture(i, wads);
+			if (maxTextureDim == -1 || tex.nWidth > maxTextureDim || tex.nHeight > maxTextureDim) {
+				embed_texture(mip, wads);
 			}
 		}
 	}
@@ -3197,7 +3218,7 @@ void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, in
 				continue;
 			}
 
-			if (maxTextureDim > 0 && downscale_texture(info.iMiptex, maxTextureDim, false)) {
+			if (maxTextureDim != 0 && downscale_texture(info.iMiptex, maxTextureDim, false)) {
 				// retry after downscaling
 				numShrink++;
 				fa--;
@@ -3429,7 +3450,7 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 	return true;
 }
 
-bool Bsp::downscale_texture(int textureId, int maxDim, bool allowWad) {
+bool Bsp::downscale_texture(int textureId, int minDim, bool allowWad) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
@@ -3438,28 +3459,20 @@ bool Bsp::downscale_texture(int textureId, int maxDim, bool allowWad) {
 	int newWidth = tex.nWidth;
 	int newHeight = tex.nHeight;
 
-	if (tex.nWidth > maxDim && tex.nWidth > tex.nHeight) {
-		float ratio = oldHeight / (float)oldWidth;
-		newWidth = maxDim;
-		newHeight = (int)(((newWidth * ratio) + 8) / 16) * 16;
-		if (newHeight > oldHeight) {
-			newHeight = (int)((newWidth * ratio) / 16) * 16;
-		}
-	}
-	else if (tex.nHeight > maxDim) {
-		float ratio = oldWidth / (float)oldHeight;
-		newHeight = maxDim;
-		newWidth = (int)(((newHeight * ratio) + 8) / 16) * 16;
-		if (newWidth > oldWidth) {
-			newWidth = (int)((newHeight * ratio) / 16) * 16;
-		}
-	}
-	else {
-		return false; // no need to downscale
+	float scale = get_scale_to_fix_bad_extents(textureId);
+
+	if (scale == 1.0f) {
+		return false;
 	}
 
+	get_scaled_texture_dimensions(textureId, scale, newWidth, newHeight);
+
+	if (max(newWidth, newHeight) < minDim) {
+		return false;
+	}
+	
 	if (oldWidth == newWidth && oldHeight == newHeight) {
-		logf("Failed to downscale texture %s %dx%d to max dim %d\n", tex.szName, oldWidth, oldHeight, maxDim);
+		logf("Failed to downscale texture %s %dx%d above dim %d\n", tex.szName, oldWidth, oldHeight, minDim);
 		return false;
 	}
 
@@ -3839,16 +3852,42 @@ WADTEX Bsp::load_texture(int textureIdx) {
 	return out;
 }
 
+void Bsp::adjust_resized_texture_coordinates(BSPFACE& face, BSPTEXTUREINFO& info, int newWidth, int newHeight, int oldWidth, int oldHeight) {
+	// scale up face texture coordinates
+	float scaleX = newWidth / (float)oldWidth;
+	float scaleY = newHeight / (float)oldHeight;
+
+	// get any vert on the face to use a reference point. Why?
+	// When textures are scaled, the texture relative to the face will depend on how far away its
+	// vertices are from the world origin. This means faces far away from the world origin shift many
+	// pixels per scale unit, and faces aligned with the world origin don't shift at all when scaled.
+	int32_t edgeIdx = surfedges[face.iFirstEdge];
+	BSPEDGE& edge = edges[abs(edgeIdx)];
+	int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
+	vec3 vert = verts[vertIdx];
+
+	vec3 oldvs = info.vS;
+	vec3 oldvt = info.vT;
+	info.vS *= scaleX;
+	info.vT *= scaleY;
+
+	// get before/after uv coordinates
+	float oldu = (dotProduct(oldvs, vert) + info.shiftS) * (1.0f / (float)oldWidth);
+	float oldv = (dotProduct(oldvt, vert) + info.shiftT) * (1.0f / (float)oldHeight);
+	float u = dotProduct(info.vS, vert) + info.shiftS;
+	float v = dotProduct(info.vT, vert) + info.shiftT;
+
+	// undo the shift in uv coordinates for this face
+	info.shiftS += (oldu * newWidth) - u;
+	info.shiftT += (oldv * newHeight) - v;
+}
+
 void Bsp::adjust_resized_texture_coordinates(int textureId, int oldWidth, int oldHeight) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 	
 	int newWidth = tex.nWidth;
 	int newHeight = tex.nHeight;
-
-	// scale up face texture coordinates
-	float scaleX = newWidth / (float)oldWidth;
-	float scaleY = newHeight / (float)oldHeight;
 
 	for (int i = 0; i < faceCount; i++) {
 		BSPFACE& face = faces[i];
@@ -3860,29 +3899,7 @@ void Bsp::adjust_resized_texture_coordinates(int textureId, int oldWidth, int ol
 		// the shift amount may be different for every face after scaling
 		BSPTEXTUREINFO* info = get_unique_texinfo(i);
 
-		// get any vert on the face to use a reference point. Why?
-		// When textures are scaled, the texture relative to the face will depend on how far away its
-		// vertices are from the world origin. This means faces far away from the world origin shift many
-		// pixels per scale unit, and faces aligned with the world origin don't shift at all when scaled.
-		int32_t edgeIdx = surfedges[face.iFirstEdge];
-		BSPEDGE& edge = edges[abs(edgeIdx)];
-		int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
-		vec3 vert = verts[vertIdx];
-
-		vec3 oldvs = info->vS;
-		vec3 oldvt = info->vT;
-		info->vS *= scaleX;
-		info->vT *= scaleY;
-
-		// get before/after uv coordinates
-		float oldu = (dotProduct(oldvs, vert) + info->shiftS) * (1.0f / (float)oldWidth);
-		float oldv = (dotProduct(oldvt, vert) + info->shiftT) * (1.0f / (float)oldHeight);
-		float u = dotProduct(info->vS, vert) + info->shiftS;
-		float v = dotProduct(info->vT, vert) + info->shiftT;
-
-		// undo the shift in uv coordinates for this face
-		info->shiftS += (oldu * newWidth) - u;
-		info->shiftT += (oldv * newHeight) - v;
+		adjust_resized_texture_coordinates(face, *info, newWidth, newHeight, oldWidth, oldHeight);
 	}
 }
 

@@ -265,10 +265,10 @@ public:
 	// reduces size of textures that exceed game limits and adjusts face scales accordingly
 	int downscale_invalid_textures(vector<Wad*>& wads);
 
-	// downscales a texture to the maximum specified width/height
+	// downscales a texture to no lower dimension than minDim
 	// allowWad:true = texture coordinates will be scaled even if the the texture is from a WAD and must be scaled separately
 	// returns true if was downscaled
-	bool downscale_texture(int textureId, int maxDim, bool allowWad);
+	bool downscale_texture(int textureId, int minDim, bool allowWad);
 
 	bool downscale_texture(int textureId, int newWidth, int newHeight, int resampleMode);
 
@@ -293,6 +293,7 @@ public:
 	void remove_unused_wads(vector<Wad*>& wads);
 
 	// updates texture coordinates after a texture has been resized
+	void adjust_resized_texture_coordinates(BSPFACE& face, BSPTEXTUREINFO& info, int newWidth, int newHeight, int oldWidth, int oldHeight);
 	void adjust_resized_texture_coordinates(int textureId, int oldWidth, int oldHeight);
 
 	// moves entity models to (0,0,0), duplicating the BSP model if necessary
@@ -312,6 +313,11 @@ public:
 	// gets estimated number of allocblocks filled
 	// actual amount will vary because there is some wasted space when the engine generates lightmap atlases
 	float calc_allocblock_usage();
+
+	void get_scaled_texture_dimensions(int textureIdx, float scale, int& newWidth, int& newHeight);
+
+	// true if any face using this texture has bad extents, if texture info is scaled by scale
+	bool has_bad_extents(int textureIdx, float scale);
 
 	// returns how much to scale up face textures to fix all bad extents in the map
 	float get_scale_to_fix_bad_extents(int textureIdx);

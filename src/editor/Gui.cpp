@@ -469,12 +469,17 @@ void Gui::draw3dContextMenus() {
 
 				Bsp* map = app->pickInfo.getMap();
 
+				// subdividing changes faces indexes so must be done in the right order
+				sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
+					return a > b;
+				});
+
 				int totalSub = 0;
 				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
 					totalSub += map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
 				}
 				if (totalSub == 0) {
-					logf("Selected faces already have valid extents");
+					logf("No faces were subdivided (failed or extents are already valid)");
 					delete command;
 				}
 				else {
@@ -1695,6 +1700,15 @@ void Gui::drawMenuBar() {
 		}
 
 		if (ImGui::BeginMenu("Fix Bad Extents", !app->isLoading)) {
+			if (ImGui::MenuItem("Downscale Textures", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
+				map->fix_bad_surface_extents(false, true, -1);
+				command->pushUndoState();
+			}
+			tooltip(g, "Downscales textures on faces with bad surface extents to the max resolution which will fix all errors.\n"
+				"This alone won't be enough to fix all surface extent errors if any textures are too small to downscale. "
+				"You may also have to Subdivide or Scale faces.");
+
 			if (ImGui::MenuItem("Downscale Textures (512)", 0, false, !app->isLoading)) {
 				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (512)");
 				map->fix_bad_surface_extents(false, true, 512);
@@ -1709,7 +1723,7 @@ void Gui::drawMenuBar() {
 				map->fix_bad_surface_extents(false, true, 256);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 256x256 pixels. "
+			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 256 pixels. "
 				"This alone will likely not be enough to fix all surface extent errors. "
 				"You may also have to Subdivide or Scale faces.");
 
@@ -1718,7 +1732,7 @@ void Gui::drawMenuBar() {
 				map->fix_bad_surface_extents(false, true, 128);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 128x128 pixels. "
+			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 128 pixels. "
 				"This alone will likely not be enough to fix all surface extent errors. "
 				"You may also have to Subdivide or Scale faces.");
 
@@ -1727,7 +1741,7 @@ void Gui::drawMenuBar() {
 				map->fix_bad_surface_extents(false, true, 64);
 				command->pushUndoState();
 			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 64x64 pixels. "
+			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 64 pixels. "
 				"This alone will likely not be enough to fix all surface extent errors. "
 				"You may also have to Subdivide or Scale faces.");
 
@@ -6627,8 +6641,10 @@ void Gui::drawTextureTool() {
 		ImGui::SameLine();
 		if (ImGui::Button("Fix Bad Extents")) {
 			float bestScale = map->get_scale_to_fix_bad_extents(resizeTextureIdx);
-			resizeWidth = max(16, (((int)(resizeOriginalWidth * bestScale)+7) / 16) * 16);
-			resizeHeight = max(16, (((int)(resizeOriginalHeight * bestScale)+7) / 16) * 16);
+			int newWidth, newHeight;
+			map->get_scaled_texture_dimensions(resizeTextureIdx, bestScale, newWidth, newHeight);
+			resizeWidth = newWidth;
+			resizeHeight = newHeight;
 			reloadPreview = true;
 		}
 		if (ImGui::IsItemHovered()) {
