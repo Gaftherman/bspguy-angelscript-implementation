@@ -83,6 +83,7 @@ private:
 	int settingsTab = 0;
 	bool openSavedTabs = false;
 	bool transparentClipnodes = true;
+	bool showDownscalePopup = false;
 
 	ImFont* smallFont;
 	ImFont* largeFont;

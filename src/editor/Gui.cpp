@@ -119,7 +119,6 @@ void Gui::draw() {
 	hoveredOOB = -1;
 
 	drawMenuBar();
-	drawPopups();
 
 	drawToolbar();
 	drawStatusMessage();
@@ -185,6 +184,8 @@ void Gui::draw() {
 	draw3dContextMenus();
 
 	drawStatusBar();
+
+	drawPopups();
 
 	// Rendering
 	glUseProgram(0);
@@ -1701,61 +1702,20 @@ void Gui::drawMenuBar() {
 
 		if (ImGui::BeginMenu("Fix Bad Extents", !app->isLoading)) {
 			if (ImGui::MenuItem("Downscale Textures", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
-				map->fix_bad_surface_extents(false, true, -1);
-				command->pushUndoState();
+				ImGui::OpenPopup("Downscale Textures");
+				showDownscalePopup = true;
 			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to the max resolution which will fix all errors.\n"
-				"This alone won't be enough to fix all surface extent errors if any textures are too small to downscale. "
-				"You may also have to Subdivide or Scale faces.");
+			tooltip(g, "Downscale textures until all faces that use them have valid extents.");
 
-			if (ImGui::MenuItem("Downscale Textures (512)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (512)");
-				map->fix_bad_surface_extents(false, true, 512);
-				command->pushUndoState();
-			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a max resolution of 512x512 pixels. "
-				"This alone will likely not be enough to fix all surface extent errors. "
-				"You may also have to Subdivide or Scale faces.");
-
-			if (ImGui::MenuItem("Downscale Textures (256)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (256)");
-				map->fix_bad_surface_extents(false, true, 256);
-				command->pushUndoState();
-			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 256 pixels. "
-				"This alone will likely not be enough to fix all surface extent errors. "
-				"You may also have to Subdivide or Scale faces.");
-
-			if (ImGui::MenuItem("Downscale Textures (128)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (128)");
-				map->fix_bad_surface_extents(false, true, 128);
-				command->pushUndoState();
-			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 128 pixels. "
-				"This alone will likely not be enough to fix all surface extent errors. "
-				"You may also have to Subdivide or Scale faces.");
-
-			if (ImGui::MenuItem("Downscale Textures (64)", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures (64)");
-				map->fix_bad_surface_extents(false, true, 64);
-				command->pushUndoState();
-			}
-			tooltip(g, "Downscales textures on faces with bad surface extents to a dimension no lower than 64 pixels. "
-				"This alone will likely not be enough to fix all surface extent errors. "
-				"You may also have to Subdivide or Scale faces.");
-
-			ImGui::Separator();
-
-			if (ImGui::MenuItem("Scale", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Scale faces");
+			if (ImGui::MenuItem("Scale Faces", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Scale Faces");
 				map->fix_bad_surface_extents(true, false, 0);
 				command->pushUndoState();
 			}
 			tooltip(g, "Scales up face textures until they have valid extents. The drawback to this method is shifted texture coordinates and lower apparent texture quality.");
 
-			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Subdivide faces");
+			if (ImGui::MenuItem("Subdivide Faces", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Subdivide Faces");
 				map->fix_bad_surface_extents(false, false, 0);
 				command->pushUndoState();
 			}
@@ -2325,6 +2285,54 @@ void Gui::drawPopups() {
 			deduplicateOpen = 0;
 			dedupEstimate = -1;
 			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	if (showDownscalePopup) {
+		ImGui::OpenPopup("Downscale Textures");
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Downscale Textures", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+
+		static int minDim = 224;
+		static int step = 16;
+
+		ImGui::TextWrapped("Fix bad surface extents by downscaling textures. The minimum dimension "
+			"balances texture quality with error counts.\n\n"
+			"For Sven Co-op maps compiled with -subdivide 528:\n"
+			"224 fixes extents for texture sizes 512 and up.\n"
+			"112 fixes extents for texture sizes 256 and up.\n"
+			"48 fixes extents for texture sizes 128 and up.\n"
+			"16 fixes as many errors as possible.");
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		ImGui::SetNextItemWidth(200);
+		if (ImGui::InputScalar("Minimum Dimension", ImGuiDataType_U32, (void*)&minDim, &step)) {
+			minDim = max(16, (minDim / 16) * 16);
+		}
+		tooltip(g, "Textures will be downscaled no lower than the limit you set here. Increase for higher texture quality. Decrease to fix more errors."
+			"\n\nThis applies only to the largest dimension of the texture. For example, setting 128 "
+			"here will allow downscaling a texture from 256x128 to 128x64, and no lower than that.");
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (ImGui::Button("Downscale")) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
+			map->fix_bad_surface_extents(false, true, minDim);
+			command->pushUndoState();
+			ImGui::CloseCurrentPopup();
+			showDownscalePopup = false;
+		}
+		ImGui::SameLine();
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			ImGui::CloseCurrentPopup();
+			showDownscalePopup = false;
 		}
 		ImGui::EndPopup();
 	}
@@ -6610,7 +6618,6 @@ void Gui::drawTextureTool() {
 		if (ImGui::InputScalar("Width", ImGuiDataType_U16, (void*)&resizeWidth, &step)) {
 			resizeWidth = min((int)resizeOriginalWidth, max(16, (resizeWidth / 16) * 16));
 			reloadPreview = true;
-
 		}
 		ImGui::SetNextItemWidth(200);
 		if (ImGui::InputScalar("Height", ImGuiDataType_U16, (void*)&resizeHeight, &step)) {

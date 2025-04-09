@@ -3196,7 +3196,7 @@ void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, in
 				continue;
 			}
 
-			if (maxTextureDim == -1 || tex.nWidth > maxTextureDim || tex.nHeight > maxTextureDim) {
+			if (tex.nWidth > maxTextureDim || tex.nHeight > maxTextureDim) {
 				embed_texture(mip, wads);
 			}
 		}
@@ -3218,7 +3218,7 @@ void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, in
 				continue;
 			}
 
-			if (maxTextureDim != 0 && downscale_texture(info.iMiptex, maxTextureDim, false)) {
+			if (downscale_texture(info.iMiptex, maxTextureDim, false)) {
 				// retry after downscaling
 				numShrink++;
 				fa--;
@@ -3472,7 +3472,7 @@ bool Bsp::downscale_texture(int textureId, int minDim, bool allowWad) {
 	}
 	
 	if (oldWidth == newWidth && oldHeight == newHeight) {
-		logf("Failed to downscale texture %s %dx%d above dim %d\n", tex.szName, oldWidth, oldHeight, minDim);
+		logf("Failed to downscale texture %s %dx%d\n", tex.szName, oldWidth, oldHeight);
 		return false;
 	}
 
