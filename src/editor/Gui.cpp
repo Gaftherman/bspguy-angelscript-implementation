@@ -394,18 +394,16 @@ void Gui::draw3dContextMenus() {
 				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
 				uint32_t selectedMiptex = texinfo.iMiptex;
 
-				for (int i : app->pickInfo.faces) {
-					g_app->mapRenderer->highlightFace(i, false);
-				}
+				g_app->mapRenderer->highlightPickedFaces(false);
 
 				app->pickInfo.deselect();
 				for (int i = 0; i < map->faceCount; i++) {
 					BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
 					if (info.iMiptex == selectedMiptex) {
 						app->pickInfo.selectFace(i);
-						g_app->mapRenderer->highlightFace(i, true);
 					}
 				}
+				g_app->mapRenderer->highlightPickedFaces(true);
 				g_app->updateTextureAxes();
 
 				logf("Selected %d faces\n", app->pickInfo.faces.size());
@@ -417,15 +415,13 @@ void Gui::draw3dContextMenus() {
 				Bsp* map = app->pickInfo.getMap();
 
 				set<int> newSelect = map->selectConnectedTexture(app->pickInfo.getModelIndex(), app->pickInfo.getFaceIndex());
-				for (int i : app->pickInfo.faces) {
-					g_app->mapRenderer->highlightFace(i, false);
-				}
+				g_app->mapRenderer->highlightPickedFaces(false);
 
 				app->pickInfo.deselect();
 				for (int i : newSelect) {
 					app->pickInfo.selectFace(i);
-					g_app->mapRenderer->highlightFace(i, true);
 				}
+				g_app->mapRenderer->highlightPickedFaces(true);
 				g_app->updateTextureAxes();
 
 				logf("Selected %d faces\n", app->pickInfo.faces.size());
@@ -445,6 +441,8 @@ void Gui::draw3dContextMenus() {
 				}
 			}
 
+			ImGui::Separator();
+
 			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
 				bool plural = app->pickInfo.faces.size() > 1;
 				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
@@ -462,7 +460,7 @@ void Gui::draw3dContextMenus() {
 
 				command->pushUndoState();
 			}
-			tooltip(g, "Split this face across the axis with the most texture pixels.");
+			tooltip(g, "Split selected faces across the axis with the most texture pixels.");
 
 			if (ImGui::MenuItem("Subdivide until valid", 0, false, !app->isLoading)) {
 				bool plural = app->pickInfo.faces.size() > 1;
@@ -480,14 +478,34 @@ void Gui::draw3dContextMenus() {
 					totalSub += map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
 				}
 				if (totalSub == 0) {
-					logf("No faces were subdivided (failed or extents are already valid)");
+					logf("No faces were subdivided (failed or extents are already valid)\n");
 					delete command;
 				}
 				else {
 					command->pushUndoState();
 				}
 			} 
-			tooltip(g, "Subdivide this face until it has valid surface extents.");
+			tooltip(g, "Subdivide selected faces until they have valid surface extents.");
+
+			if (ImGui::MenuItem("Scale until valid", 0, false, !app->isLoading)) {
+				bool plural = app->pickInfo.faces.size() > 1;
+				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Scale Faces" : "Scale Face");
+
+				Bsp* map = app->pickInfo.getMap();
+
+				int totalScale = 0;
+				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+					totalScale += map->fix_bad_surface_extents_with_scale(app->pickInfo.faces[i]);
+				}
+				if (totalScale == 0) {
+					logf("No faces were scaled (failed or extents are already valid)\n");
+					delete command;
+				}
+				else {
+					command->pushUndoState();
+				}
+			}
+			tooltip(g, "Scale selected faces until they have valid surface extents.");
 
 			ImGui::Separator();
 
@@ -1700,29 +1718,11 @@ void Gui::drawMenuBar() {
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("Fix Bad Extents", !app->isLoading)) {
-			if (ImGui::MenuItem("Downscale Textures", 0, false, !app->isLoading)) {
-				ImGui::OpenPopup("Downscale Textures");
-				showDownscalePopup = true;
-			}
-			tooltip(g, "Downscale textures until all faces that use them have valid extents.");
-
-			if (ImGui::MenuItem("Scale Faces", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Scale Faces");
-				map->fix_bad_surface_extents(true, false, 0);
-				command->pushUndoState();
-			}
-			tooltip(g, "Scales up face textures until they have valid extents. The drawback to this method is shifted texture coordinates and lower apparent texture quality.");
-
-			if (ImGui::MenuItem("Subdivide Faces", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Subdivide Faces");
-				map->fix_bad_surface_extents(false, false, 0);
-				command->pushUndoState();
-			}
-			tooltip(g, "Subdivides faces until they have valid extents. The drawback to this method is reduced in-game performace from higher poly counts.");
-
-			ImGui::EndMenu();
+		if (ImGui::MenuItem("Fix Bad Surface Extents", 0, false, !app->isLoading)) {
+			ImGui::OpenPopup("Fix Bad Surface Extents");
+			showDownscalePopup = true;
 		}
+		tooltip(g, "Fix all faces with bad surface extents.");
 
 		if (ImGui::MenuItem("Scale Invisible Faces", 0, false, !app->isLoading)) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("AllocBlock Reduction");
@@ -2290,43 +2290,108 @@ void Gui::drawPopups() {
 	}
 
 	if (showDownscalePopup) {
-		ImGui::OpenPopup("Downscale Textures");
+		ImGui::OpenPopup("Fix Bad Surface Extents");
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(600, 0), ImGuiCond_Appearing);
 	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	if (ImGui::BeginPopupModal("Downscale Textures", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (ImGui::BeginPopupModal("Fix Bad Surface Extents", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 
 		static int minDim = 224;
 		static int step = 16;
+		static int subdivideMax = 20;
+		static bool shouldDownscale = true;
+		static bool shouldSubdivide = false;
+		static bool shouldScale = false;
 
-		ImGui::TextWrapped("Fix bad surface extents by downscaling textures. The minimum dimension "
-			"balances texture quality with error counts.\n\n"
-			"For Sven Co-op maps compiled with -subdivide 528:\n"
-			"224 fixes extents for texture sizes 512 and up.\n"
-			"112 fixes extents for texture sizes 256 and up.\n"
-			"48 fixes extents for texture sizes 128 and up.\n"
-			"16 fixes as many errors as possible.");
+		ImGui::TextWrapped("Fixes are applied in order.");
 
-		ImGui::Dummy(ImVec2(0, 10));
+		ImVec2 cellPadding(5.0f, 10.0f); // x = horizontal, y = vertical
+		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, cellPadding);
 
-		ImGui::SetNextItemWidth(200);
-		if (ImGui::InputScalar("Minimum Dimension", ImGuiDataType_U32, (void*)&minDim, &step)) {
-			minDim = max(16, (minDim / 16) * 16);
+		if (ImGui::BeginTable("MyTable", 4, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersH)) {
+			ImGui::TableSetupColumn("Fixed1", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Fixed2", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Fixed3", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Auto");
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+
+			ImGui::Text("1)");
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Subdivide Faces", &shouldSubdivide);
+			tooltip(g, "Subdivide faces for a texture if additional faces would be below the Subdivide Limit. The drawback to this method is reduced in-game performace from higher poly counts.");
+
+			ImGui::TableNextColumn();
+			ImGui::Dummy(ImVec2(20, 0));
+
+			ImGui::TableNextColumn();
+			ImGui::BeginDisabled(!shouldSubdivide);
+			ImGui::SetNextItemWidth(200);
+			ImGui::DragInt("Face Limit", &subdivideMax, 0.1f, 0, g_limits.max_faces);
+			tooltip(g, "This limit is applied per texture, not globally. All faces for a texture will be subdivided only if the newly created face count is less than this limit.\n");
+			ImGui::EndDisabled();
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text("2)");
+
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Downscale Textures", &shouldDownscale);
+			tooltip(g, "Downscale a texture if subdivision would create more faces than desired.\n");
+
+			ImGui::TableNextColumn();
+			ImGui::Dummy(ImVec2(20, 0));
+
+			ImGui::TableNextColumn();
+			ImGui::BeginDisabled(!shouldDownscale);
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::InputScalar("Size Limit", ImGuiDataType_U32, (void*)&minDim, &step)) {
+				minDim = max(16, (minDim / 16) * 16);
+			}
+			tooltip(g, "Textures will be downscaled no lower than the limit you set here. Increase for higher texture quality. Decrease to fix more errors."
+				"\n\nThis applies only to the largest dimension of the texture. For example, setting 128 "
+				"here will allow downscaling a texture from 256x128 to 128x64, and no lower than that.\n\n"
+				"For Sven Co-op maps compiled with -subdivide 528:\n"
+				"224 fixes extents for texture sizes 512 and up.\n"
+				"112 fixes extents for texture sizes 256 and up.\n"
+				"48 fixes extents for texture sizes 128 and up.\n"
+				"16 fixes as many errors as possible.");
+			ImGui::EndDisabled();
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text("3)");
+
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Scale Faces", &shouldScale);
+			tooltip(g, "Scale up faces if both downscaling and subdivsion failed. This ensures every face "
+				"has valid extents, but will misalign textures. In some cases that's ok (texture shifting "
+				"often doesn't matter for noisy terrain textures).\n");
+
+			ImGui::EndTable();
 		}
-		tooltip(g, "Textures will be downscaled no lower than the limit you set here. Increase for higher texture quality. Decrease to fix more errors."
-			"\n\nThis applies only to the largest dimension of the texture. For example, setting 128 "
-			"here will allow downscaling a texture from 256x128 to 128x64, and no lower than that.");
-
+		ImGui::PopStyleVar();
 		ImGui::Dummy(ImVec2(0, 10));
 
-		if (ImGui::Button("Downscale")) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
-			map->fix_bad_surface_extents(false, true, minDim);
+		ImGui::BeginDisabled(!shouldSubdivide && !shouldScale && !shouldDownscale);
+		if (ImGui::Button("Apply Fixes")) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("Fix Bad Surface Extents");
+			if (shouldSubdivide)
+				map->fix_all_bad_surface_extents_with_subdivide(subdivideMax);
+
+			if (shouldDownscale)
+				map->fix_bad_surface_extents_with_downscale(minDim);
+
+			if (shouldScale)
+				map->fix_bad_surface_extents_with_scale();
+
 			command->pushUndoState();
 			ImGui::CloseCurrentPopup();
 			showDownscalePopup = false;
 		}
+		ImGui::EndDisabled();
 		ImGui::SameLine();
 
 		ImGui::SameLine();
@@ -2390,10 +2455,10 @@ void Gui::drawToolbar() {
 			if (modelIdx > 0 && model) {
 				for (int i = 0; i < model->nFaces; i++) {
 					int faceIdx = model->iFirstFace + i;
-					mapRenderer->highlightFace(faceIdx, true);
 					app->pickInfo.selectFace(faceIdx);
 				}
 			}
+			g_app->mapRenderer->highlightPickedFaces(true);
 			
 			app->pickMode = PICK_FACE;
 			app->pickCount++; // force texture tool refresh
@@ -5034,6 +5099,12 @@ void Gui::drawLimits() {
 					drawAllocBlockLimitTab(map);
 					ImGui::EndTabItem();
 				}
+
+				if (ImGui::BeginTabItem("Extents")) {
+					loadedStats = false;
+					drawFaceExtentsLimitTab();
+					ImGui::EndTabItem();
+				}
 			}
 
 			ImGui::EndTabBar();
@@ -5272,9 +5343,10 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 				}
 			}
 
+			g_app->mapRenderer->highlightPickedFaces(false);
 			app->deselectFaces();
 			app->pickInfo.selectFace(faceIdx);
-			app->mapRenderer->highlightFace(faceIdx, true);
+			g_app->mapRenderer->highlightPickedFaces(true);
 			app->updateTextureAxes();
 			app->pickMode = PICK_FACE;
 			showTextureWidget = true;
@@ -5307,6 +5379,126 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 	ImGui::EndChild();
 }
 
+void Gui::drawFaceExtentsLimitTab() {
+	if (app->isLoading)
+		return; // counting subdivisions messes with lumps so don't do that while loading
+	
+	Bsp* map = app->mapRenderer->map;
+
+	int maxCount;
+	const int allocBlockSize = 128 * 128;
+
+	if (!loadedLimit[SORT_EXTENTS]) {
+		limitExtents.clear();
+
+		unordered_set<int> bad_extent_mips;
+		for (int fa = 0; fa < map->faceCount; fa++) {
+			BSPFACE& face = map->faces[fa];
+			BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
+
+			if (info.nFlags & TEX_SPECIAL)
+				continue;
+
+			int size[2];
+			if (GetFaceLightmapSize(map, fa, size)) {
+				continue;
+			}
+
+			bad_extent_mips.insert(info.iMiptex);
+		}
+
+		for (int mip : bad_extent_mips) {
+			int32_t texOffset = ((int32_t*)map->textures)[mip + 1];
+			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+
+			ExtentInfo info;
+			info.texname = tex.szName;
+			info.faceCount = to_string(map->count_faces_for_mip(mip));
+			info.dimensions = to_string(tex.nWidth) + "x" + to_string(tex.nHeight);
+			info.sort = map->get_subdivisions_needed_to_fix_mip_extents(mip);
+			info.subsNeeded = to_string(info.sort);
+			info.mip = mip;
+			limitExtents.push_back(info);
+		}
+		sort(limitExtents.begin(), limitExtents.end(), [](const ExtentInfo& a, const ExtentInfo& b) {
+			return a.sort > b.sort;
+		});
+
+		loadedLimit[SORT_EXTENTS] = true;
+	}
+	vector<ExtentInfo>& allocInfos = limitExtents;
+
+	ImGui::BeginChild("content");
+	ImGui::Dummy(ImVec2(0, 10));
+	ImGui::PushFont(consoleFontLarge);
+
+	int fontSize = g_settings.fontSize;
+	int facesWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Faces ").x;
+	int subsWidth = consoleFontLarge->CalcTextSizeA(fontSize * 1.1f, FLT_MAX, FLT_MAX, " Subs Needed ").x;
+	int bigWidth = ImGui::GetWindowWidth() - (facesWidth + subsWidth);
+	ImGui::Columns(3);
+	ImGui::SetColumnWidth(0, bigWidth);
+	ImGui::SetColumnWidth(1, facesWidth);
+	ImGui::SetColumnWidth(2, subsWidth);
+
+	ImGui::Text("Texture"); ImGui::NextColumn();
+	ImGui::Text("Faces"); ImGui::NextColumn();
+	ImGui::Text("Subs Needed"); ImGui::NextColumn();
+
+	ImGui::Columns(1);
+	ImGui::Separator();
+	ImGui::BeginChild("chart");
+	ImGui::Columns(3);
+	ImGui::SetColumnWidth(0, bigWidth);
+	ImGui::SetColumnWidth(1, facesWidth);
+	ImGui::SetColumnWidth(2, subsWidth);
+
+	int selected = app->pickInfo.getFaceIndex();
+
+	for (int i = 0; i < limitExtents.size(); i++) {
+		string texname = limitExtents[i].texname + "##" + "select" + to_string(i);
+		int flags = ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_SpanAllColumns;
+		if (ImGui::Selectable(texname.c_str(), false, flags)) {
+			selected = i;
+
+			app->deselectFaces();
+
+			for (int k = 0; k < map->faceCount; k++) {
+				BSPFACE& face = map->faces[k];
+				BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
+
+				if (info.iMiptex == limitExtents[i].mip) {
+					app->pickInfo.selectFace(k);
+				}
+			}
+			app->mapRenderer->highlightPickedFaces(true);
+
+			app->updateTextureAxes();
+			app->pickMode = PICK_FACE;
+			showTextureWidget = true;
+			app->pickCount++;
+		}
+
+		ImGui::NextColumn();
+
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetColumnWidth()
+			- ImGui::CalcTextSize(limitExtents[i].faceCount.c_str()).x
+			- ImGui::GetScrollX() - 2 * ImGui::GetStyle().ItemSpacing.x);
+		ImGui::Text(limitExtents[i].faceCount.c_str()); ImGui::NextColumn();
+
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetColumnWidth()
+			- ImGui::CalcTextSize(limitExtents[i].subsNeeded.c_str()).x
+			- ImGui::GetScrollX() - 2 * ImGui::GetStyle().ItemSpacing.x);
+		ImGui::Text(limitExtents[i].subsNeeded.c_str()); ImGui::NextColumn();
+	}
+
+
+	ImGui::Columns(1);
+	ImGui::EndChild();
+
+	ImGui::PopFont();
+	ImGui::EndChild();
+}
 
 void Gui::drawEntityReport() {
 	ImGui::SetNextWindowSize(ImVec2(550, 630), ImGuiCond_FirstUseEver);
@@ -5460,9 +5652,7 @@ void Gui::drawEntityReport() {
 						lastKeyboardNavSelect = i;
 
 						if (app->pickMode == PICK_FACE) {
-							for (int faceIdx : app->pickInfo.faces) {
-								g_app->mapRenderer->highlightFace(faceIdx, false);
-							}
+							g_app->mapRenderer->highlightPickedFaces(false);
 							app->pickInfo.deselect();
 							app->pickMode = PICK_OBJECT;
 						}
@@ -6489,9 +6679,7 @@ void Gui::drawTextureTool() {
 				for (auto it = modelRefreshes.begin(); it != modelRefreshes.end(); it++) {
 					mapRenderer->refreshModel(*it, false);
 				}
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					mapRenderer->highlightFace(app->pickInfo.faces[i], true);
-				}
+				g_app->mapRenderer->highlightPickedFaces(true);
 			}
 
 			checkFaceErrors();

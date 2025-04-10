@@ -2225,9 +2225,7 @@ void Renderer::pickObject() {
 
 	if (!multiselect) {
 		// deselect old faces
-		for (int faceIdx : pickInfo.faces) {
-			mapRenderer->highlightFace(faceIdx, false);
-		}
+		mapRenderer->highlightPickedFaces(false);
 
 		// update deselected point ents
 		for (int entIdx : pickInfo.ents) {
@@ -2305,22 +2303,23 @@ void Renderer::pickObject() {
 	}
 	else if (pickMode == PICK_FACE) {
 		if (multiselect) {
+			mapRenderer->highlightPickedFaces(false);
 			if (pickInfo.isFaceSelected(clickedFace)) {
-				mapRenderer->highlightFace(clickedFace, false);
 				pickInfo.deselectFace(clickedFace);
 			}
 			else if (clickedFace != -1) {
-				mapRenderer->highlightFace(clickedFace, true);
 				pickInfo.selectFace(clickedFace);
 			}
+			mapRenderer->highlightPickedFaces(true);
 		}
 		else {
+			mapRenderer->highlightPickedFaces(false);
 			pickInfo.deselect();
 
 			if (clickedFace != -1) {
-				mapRenderer->highlightFace(clickedFace, true);
 				pickInfo.selectFace(clickedFace);
 			}
+			mapRenderer->highlightPickedFaces(true);
 		}
 		//logf("%d selected faces\n", pickInfo.faces.size());
 		
@@ -4431,9 +4430,7 @@ void Renderer::deselectObject() {
 }
 
 void Renderer::deselectFaces() {
-	for (int i = 0; i < pickInfo.faces.size(); i++) {
-		mapRenderer->highlightFace(pickInfo.faces[i], false);
-	}
+	mapRenderer->highlightPickedFaces(false);
 	pickInfo.deselect();
 }
 

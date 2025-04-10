@@ -557,9 +557,7 @@ void FacesEditCommand::refresh() {
 		g_app->mapRenderer->reloadTextures(true);
 	}
 
-	for (int i = 0; i < g_app->pickInfo.faces.size(); i++) {
-		g_app->mapRenderer->highlightFace(g_app->pickInfo.faces[i], false);
-	}
+	g_app->mapRenderer->highlightPickedFaces(false);
 	g_app->pickInfo.deselect();
 
 	for (int idx : modelRefreshes)
@@ -567,9 +565,9 @@ void FacesEditCommand::refresh() {
 
 	if (g_app->pickMode == PICK_FACE) {
 		for (int i = 0; i < faces.size(); i++) {
-			g_app->mapRenderer->highlightFace(faces[i], true);
 			g_app->pickInfo.selectFace(faces[i]);
 		}
+		g_app->mapRenderer->highlightPickedFaces(true);
 	}
 
 	g_app->pickCount++;

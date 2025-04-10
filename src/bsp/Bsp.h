@@ -250,16 +250,21 @@ public:
 
 	int get_entity_index(Entity* ent);
 	
-	// scales up texture axes for any face with bad surface extents
-	// connected planar faces which use the same texture will also be scaled up to prevent seams
-	// showing between faces with different texture scales
-	// scaleNotSubdivide:true = scale face textures to lower extents
-	// scaleNotSubdivide:false = subdivide face textures to lower extents
-	// downscaleOnly:true = don't scale or subdivide anything, just downscale the textures
-	// maxTextureDim = downscale textures first if they are larger than this (0 = disable)
-	void fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, int maxTextureDim);
+	int count_faces_for_mip(int miptex);
 
-	// subdivide a face until it has valid surface extents
+	// scales up texture axes for any face with bad surface extents
+	bool fix_bad_surface_extents_with_scale(int faceIdx);
+	void fix_bad_surface_extents_with_scale();
+
+	// fix bad extents by downscaling textures and scaling up face coordinates
+	void fix_bad_surface_extents_with_downscale(int minTextureDim);
+
+	// count how many face subdivisions would be needed to fix bad surface extents for all faces
+	// that use the given texture
+	int get_subdivisions_needed_to_fix_mip_extents(int mip);
+
+	// subdivide faces until they have valid surface extents
+	void fix_all_bad_surface_extents_with_subdivide(int subdivideLimitPerTexture);
 	int fix_bad_surface_extents_with_subdivide(int faceIdx);
 
 	// reduces size of textures that exceed game limits and adjusts face scales accordingly
@@ -323,7 +328,8 @@ public:
 	float get_scale_to_fix_bad_extents(int textureIdx);
 
 	// subdivides along the axis with the most texture pixels (for biggest surface extent reduction)
-	bool subdivide_face(int faceIdx);
+	// if dryRun, only update the lumps needed for calculating surface extents
+	bool subdivide_face(int faceIdx, bool dryRunForExtents=false);
 
 	// select faces connected to the given one, which lie on the same plane and use the same texture
 	set<int> selectConnectedTexture(int modelId, int faceId);

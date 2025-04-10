@@ -197,7 +197,7 @@ public:
 	void updateLightmapInfos();
 	bool isFinishedLoading();
 
-	void highlightFace(int faceIdx, bool highlight);
+	void highlightPickedFaces(bool highlight);
 	void updateFaceUVs(int faceIdx);
 	uint getFaceTextureId(int faceIdx);
 	int addTextureToMap(string textureName); // adds a texture reference if found in a loaded WAD

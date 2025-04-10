@@ -2924,7 +2924,7 @@ int Bsp::allocblock_reduction() {
 	return scaleCount;
 }
 
-bool Bsp::subdivide_face(int faceIdx) {
+bool Bsp::subdivide_face(int faceIdx, bool dryRunForExtents) {
 	BSPFACE& face = faces[faceIdx];
 	BSPPLANE& plane = planes[face.iPlane];
 	BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
@@ -2987,55 +2987,77 @@ bool Bsp::subdivide_face(int faceIdx) {
 	vector<vector<vec3>> polys = poly.cut(cutLine);
 
 	if (polys.empty()) {
-		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-		vec3 center = get_face_center(faceIdx);
-		logf("Failed to subdivide face %d %s (%d %d %d)\n", faceIdx, tex.szName,
-			(int)center.x, (int)center.y, (int)center.z);
 		return false;
 	}
 	
 	int addVerts = polys[0].size() + polys[1].size();
 
+	int addMarks = 0;
+	if (!dryRunForExtents) {
+		for (int i = 0; i < marksurfCount; i++) {
+			if (marksurfs[i] == faceIdx) {
+				addMarks++;
+			}
+		}
+	}
+	int totalMarks = marksurfCount + addMarks;
+
+	bool limitExceeded = false;
+	if (totalMarks > g_limits.max_marksurfaces) {
+		logf("Exceeded max marksurfaces while subdividing face\n");
+		limitExceeded = true;
+	}
+	if (faceCount + 1 > g_limits.max_faces) {
+		logf("Exceeded max faces while subdividing face\n");
+		limitExceeded = true;
+	}
+	if (edgeCount + addVerts > g_limits.max_edges) {
+		logf("Exceeded max edges while subdividing face\n");
+		limitExceeded = true;
+	}
+	if (surfedgeCount + addVerts > g_limits.max_surfedges) {
+		logf("Exceeded max edges while subdividing face\n");
+		limitExceeded = true;
+	}
+	if (vertCount + addVerts > g_limits.max_vertexes) {
+		logf("Exceeded max vertexes while subdividing face\n");
+		limitExceeded = true;
+	}
+
+	if (limitExceeded) {
+		return false;
+	}
+
 	BSPFACE* newFaces = new BSPFACE[faceCount + 1];
 	memcpy(newFaces, faces, faceIdx * sizeof(BSPFACE));
 	memcpy(newFaces + faceIdx + 1, faces + faceIdx, (faceCount - faceIdx) * sizeof(BSPFACE));
 
-	int addMarks = 0;
-	for (int i = 0; i < marksurfCount; i++) {
-		if (marksurfs[i] == faceIdx) {
-			addMarks++;
-		}
+	uint16_t* newMarkSurfs = NULL;
+	if (!dryRunForExtents) {
+		newMarkSurfs = new uint16_t[totalMarks];
+		memcpy(newMarkSurfs, marksurfs, marksurfCount * sizeof(uint16_t));
 	}
-	int totalMarks = marksurfCount + addMarks;
-	uint16_t* newMarkSurfs = new uint16_t[totalMarks];
-	memcpy(newMarkSurfs, marksurfs, marksurfCount * sizeof(uint16_t));
 
-	BSPEDGE* newEdges = new BSPEDGE[edgeCount + addVerts];
-	memcpy(newEdges, edges, edgeCount * sizeof(BSPEDGE));
-
-	vec3* newVerts = new vec3[vertCount + addVerts];
-	memcpy(newVerts, verts, vertCount * sizeof(vec3));
-
-	int32_t* newSurfEdges = new int32_t[surfedgeCount + addVerts];
-	memcpy(newSurfEdges, surfedges, surfedgeCount * sizeof(int32_t));
+	BSPEDGE* newEdges = new BSPEDGE[addVerts];
+	vec3* newVerts = new vec3[addVerts];
+	int32_t* newSurfEdges = new int32_t[addVerts];
 
 	int oldSurfBegin = face.iFirstEdge;
 	int oldSurfEnd = face.iFirstEdge + face.nEdges;
 
-	BSPEDGE* edgePtr = newEdges + edgeCount;
-	vec3* vertPtr = newVerts + vertCount;
-	int32_t* surfedgePtr = newSurfEdges + surfedgeCount;
+	BSPEDGE* edgePtr = newEdges;
+	vec3* vertPtr = newVerts;
+	int32_t* surfedgePtr = newSurfEdges;
 
 	for (int k = 0; k < 2; k++) {
 		vector<vec3>& cutPoly = polys[k];
 
 		newFaces[faceIdx + k] = faces[faceIdx];
-		newFaces[faceIdx + k].iFirstEdge = surfedgePtr - newSurfEdges;
+		newFaces[faceIdx + k].iFirstEdge = (surfedgePtr - newSurfEdges) + surfedgeCount;
 		newFaces[faceIdx + k].nEdges = cutPoly.size();
 
-		int vertOffset = vertPtr - newVerts;
-		int edgeOffset = edgePtr - newEdges;
+		int vertOffset = (vertPtr - newVerts) + vertCount;
+		int edgeOffset = (edgePtr - newEdges) + edgeCount;
 
 		for (int i = 0; i < cutPoly.size(); i++) {
 			edgePtr->iVertex[0] = vertOffset + i;
@@ -3049,61 +3071,181 @@ bool Bsp::subdivide_face(int faceIdx) {
 		}
 	}
 
-	for (int i = 0; i < modelCount; i++) {
-		BSPMODEL& model = models[i];
+	if (!dryRunForExtents) {
+		for (int i = 0; i < modelCount; i++) {
+			BSPMODEL& model = models[i];
 
-		if (model.iFirstFace > faceIdx) {
-			model.iFirstFace += 1;
-		}
-		else if (model.iFirstFace <= faceIdx && model.iFirstFace + model.nFaces > faceIdx) {
-			model.nFaces++;
-		}
-	}
-
-	for (int i = 0; i < nodeCount; i++) {
-		BSPNODE& node = nodes[i];
-
-		if (node.firstFace > faceIdx) {
-			node.firstFace += 1;
-		}
-		else if (node.firstFace <= faceIdx && node.firstFace + node.nFaces > faceIdx) {
-			node.nFaces++;
-		}
-	}
-
-	for (int i = 0; i < totalMarks; i++) {
-		if (newMarkSurfs[i] == faceIdx) {
-			memmove(newMarkSurfs + i + 1, newMarkSurfs + i, (totalMarks - (i+1)) * sizeof(uint16_t));
-			newMarkSurfs[i + 1] = faceIdx + 1;
-
-			for (int k = 0; k < leafCount; k++) {
-				BSPLEAF& leaf = leaves[k];
-
-				if (!leaf.nMarkSurfaces)
-					continue;
-				else if (leaf.iFirstMarkSurface > i) {
-					leaf.iFirstMarkSurface += 1;
-				}
-				else if (leaf.iFirstMarkSurface <= i && leaf.iFirstMarkSurface + leaf.nMarkSurfaces > i) {
-					//logf("Added mark %d/%d to leaf %d (%d + %d)\n", i, marksurfCount, k, leaf.iFirstMarkSurface, leaf.nMarkSurfaces);
-					leaf.nMarkSurfaces += 1;
-				}
+			if (model.iFirstFace > faceIdx) {
+				model.iFirstFace += 1;
 			}
-
-			i++; // skip the other side of the subdivided face, or else it triggers the next block
+			else if (model.iFirstFace <= faceIdx && model.iFirstFace + model.nFaces > faceIdx) {
+				model.nFaces++;
+			}
 		}
-		else if (newMarkSurfs[i] > faceIdx) {
-			newMarkSurfs[i]++;
+
+		for (int i = 0; i < nodeCount; i++) {
+			BSPNODE& node = nodes[i];
+
+			if (node.firstFace > faceIdx) {
+				node.firstFace += 1;
+			}
+			else if (node.firstFace <= faceIdx && node.firstFace + node.nFaces > faceIdx) {
+				node.nFaces++;
+			}
+		}
+
+		for (int i = 0; i < totalMarks; i++) {
+			if (newMarkSurfs[i] == faceIdx) {
+				memmove(newMarkSurfs + i + 1, newMarkSurfs + i, (totalMarks - (i + 1)) * sizeof(uint16_t));
+				newMarkSurfs[i + 1] = faceIdx + 1;
+
+				for (int k = 0; k < leafCount; k++) {
+					BSPLEAF& leaf = leaves[k];
+
+					if (!leaf.nMarkSurfaces)
+						continue;
+					else if (leaf.iFirstMarkSurface > i) {
+						leaf.iFirstMarkSurface += 1;
+					}
+					else if (leaf.iFirstMarkSurface <= i && leaf.iFirstMarkSurface + leaf.nMarkSurfaces > i) {
+						//logf("Added mark %d/%d to leaf %d (%d + %d)\n", i, marksurfCount, k, leaf.iFirstMarkSurface, leaf.nMarkSurfaces);
+						leaf.nMarkSurfaces += 1;
+					}
+				}
+
+				i++; // skip the other side of the subdivided face, or else it triggers the next block
+			}
+			else if (newMarkSurfs[i] > faceIdx) {
+				newMarkSurfs[i]++;
+			}
 		}
 	}
 
-	replace_lump(LUMP_MARKSURFACES, newMarkSurfs, totalMarks * sizeof(uint16_t));
+	if (!dryRunForExtents) {
+		replace_lump(LUMP_MARKSURFACES, newMarkSurfs, totalMarks * sizeof(uint16_t));
+	}
+
 	replace_lump(LUMP_FACES, newFaces, (faceCount + 1)*sizeof(BSPFACE));
-	replace_lump(LUMP_EDGES, newEdges, (edgeCount + addVerts)*sizeof(BSPEDGE));
-	replace_lump(LUMP_SURFEDGES, newSurfEdges, (surfedgeCount + addVerts) * sizeof(int32_t));
-	replace_lump(LUMP_VERTICES, newVerts, (vertCount + addVerts) * sizeof(vec3));
+	append_lump(LUMP_EDGES, newEdges, addVerts*sizeof(BSPEDGE));
+	append_lump(LUMP_SURFEDGES, newSurfEdges, addVerts * sizeof(int32_t));
+	append_lump(LUMP_VERTICES, newVerts, addVerts * sizeof(vec3));
+
+	delete[] newEdges;
 
 	return true;
+}
+
+int Bsp::get_subdivisions_needed_to_fix_mip_extents(int mip) {
+	bool anySubdivides = true;
+	
+	LumpState oldLumps = duplicate_lumps(
+		(1 << LUMP_FACES) | (1 << LUMP_EDGES) | (1 << LUMP_SURFEDGES) | (1 << LUMP_VERTICES)
+	);
+
+	int numSub = 0;
+
+	// dry run to see how many subdivisions are needed
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+		if (info.nFlags & TEX_SPECIAL || info.iMiptex != mip) {
+			continue;
+		}
+
+		int size[2];
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			continue;
+		}
+
+		if (subdivide_face(faceIdx, true)) {
+			anySubdivides = true;
+			numSub++;
+			fa--;
+		}
+		else {
+			numSub++;
+		}
+	}
+
+	// undo all changes
+	replace_lumps(oldLumps);
+
+	return numSub;
+}
+
+void Bsp::fix_all_bad_surface_extents_with_subdivide(int subdivideLimitPerTexture) {
+	unordered_set<int> bad_extent_mips;
+	for (int fa = 0; fa < faceCount; fa++) {
+		BSPFACE& face = faces[fa];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+		if (info.nFlags & TEX_SPECIAL)
+			continue;
+
+		int size[2];
+		if (GetFaceLightmapSize(this, fa, size)) {
+			continue;
+		}
+
+		bad_extent_mips.insert(info.iMiptex);
+	}
+	
+	// count subdivisions needed for each mip
+	unordered_map<int, int> bad_extent_mips_count;
+	for (int mip : bad_extent_mips) {
+		bad_extent_mips_count[mip] = get_subdivisions_needed_to_fix_mip_extents(mip);
+	}
+
+	// exclude mips that needed more subdivisions than is allowed
+	unordered_set<int> subdivide_mips;
+	for (auto item : bad_extent_mips_count) {
+		if (item.second < subdivideLimitPerTexture && item.second > 0) {
+			int32_t texOffset = ((int32_t*)textures)[item.first + 1];
+			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+			logf("%d subdivides needed for texture %s (%dx%d)\n", item.second, tex.szName, tex.nWidth, tex.nHeight);
+			subdivide_mips.insert(item.first);
+		}
+	}
+
+	unordered_set<int> repeatErrors;
+	int numSub = 0;
+
+	// subdivide again only for the target mips
+
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+		if (info.nFlags & TEX_SPECIAL || !subdivide_mips.count(info.iMiptex)) {
+			continue;
+		}
+
+		int size[2];
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			continue;
+		}
+
+		if (subdivide_face(faceIdx)) {
+			numSub++;
+			fa--;
+		}
+		else {
+			int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
+			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+			vec3 center = get_face_center(faceIdx);
+			if (!repeatErrors.count(faceIdx)) {
+				logf("Failed to subdivide face %d %s (%d %d %d)\n", faceIdx, tex.szName,
+					(int)center.x, (int)center.y, (int)center.z);
+				repeatErrors.insert(faceIdx);
+			}
+		}
+	}
+
+	logf("Subdivided %d faces across %d textures (%d skipped).\n", numSub, subdivide_mips.size(),
+		bad_extent_mips.size() - subdivide_mips.size());
 }
 
 int Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
@@ -3144,141 +3286,156 @@ int Bsp::fix_bad_surface_extents_with_subdivide(int faceIdx) {
 	return totalFaces - 1;
 }
 
-void Bsp::fix_bad_surface_extents(bool scaleNotSubdivide, bool downscaleOnly, int maxTextureDim) {
-	int numSub = 0;
-	int numScale = 0;
+void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 	int numShrink = 0;
-	bool anySubdivides = true;
 
-	if (scaleNotSubdivide) {
-		// create unique texinfos in case any are shared with both good and bad faces
-		for (int fa = 0; fa < faceCount; fa++) {
-			int faceIdx = fa;
-			BSPFACE& face = faces[faceIdx];
-			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+	static vector<Wad*> emptyWads;
+	vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
 
-			if (info.nFlags & TEX_SPECIAL) {
-				continue;
-			}
+	unordered_set<int> bad_extent_mips;
 
-			int size[2];
-			if (GetFaceLightmapSize(this, faceIdx, size)) {
-				continue;
-			}
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
 
-			get_unique_texinfo(faceIdx);
+		int size[2];
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			continue;
 		}
+
+		bad_extent_mips.insert(info.iMiptex);
+	}
+
+	for (int mip : bad_extent_mips) {
+		int32_t texOffset = ((int32_t*)textures)[mip + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+		if (tex.nOffsets[0] != 0) {
+			continue;
+		}
+
+		if (tex.nWidth > minTextureDim || tex.nHeight > minTextureDim) {
+			embed_texture(mip, wads);
+		}
+	}
+
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+		if (info.nFlags & TEX_SPECIAL) {
+			continue;
+		}
+
+		int size[2];
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			continue;
+		}
+
+		if (downscale_texture(info.iMiptex, minTextureDim, false)) {
+			// retry after downscaling
+			numShrink++;
+			fa--;
+			continue;
+		}
+	}
+
+	logf("Downscaled %d textures\n", numShrink);
+}
+
+int Bsp::count_faces_for_mip(int miptex) {
+	int count = 0;
+
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+		if (info.iMiptex == miptex) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+bool Bsp::fix_bad_surface_extents_with_scale(int faceIdx) {
+	BSPFACE& face = faces[faceIdx];
+	BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+
+	if (info.nFlags & TEX_SPECIAL) {
+		return false;
+	}
+
+	int size[2];
+	if (GetFaceLightmapSize(this, faceIdx, size)) {
+		return false;
+	}
+
+	vec2 oldScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
+
+	bool scaledOk = false;
+	for (int i = 0; i < 128; i++) {
+		info.vS *= 0.5f;
+		info.vT *= 0.5f;
+
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			scaledOk = true;
+			break;
+		}
+	}
+
+	if (!scaledOk) {
+		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		logf("Failed to fix face %s with scales %f %f\n", tex.szName, oldScale.x, oldScale.y);
+		return false;
 	}
 	else {
-		static vector<Wad*> emptyWads;
-		vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
+		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		vec2 newScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
 
-		unordered_set<int> bad_extent_mips;
-
-		for (int fa = 0; fa < faceCount; fa++) {
-			int faceIdx = fa;
-			BSPFACE& face = faces[faceIdx];
-			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
-
-			int size[2];
-			if (GetFaceLightmapSize(this, faceIdx, size)) {
-				continue;
-			}
-
-			bad_extent_mips.insert(info.iMiptex);
-		}
-
-		for (int mip : bad_extent_mips) {
-			int32_t texOffset = ((int32_t*)textures)[mip + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-
-			if (tex.nOffsets[0] != 0) {
-				continue;
-			}
-
-			if (tex.nWidth > maxTextureDim || tex.nHeight > maxTextureDim) {
-				embed_texture(mip, wads);
-			}
-		}
+		vec3 center = get_face_center(faceIdx);
+		logf("Scaled up %s from %.2fx%.2f -> %.2fx%.2f (%d %d %d)\n",
+			tex.szName, oldScale.x, oldScale.y, newScale.x, newScale.y,
+			(int)center.x, (int)center.y, (int)center.z);
 	}
 
-	while (anySubdivides) {
-		anySubdivides = false;
-		for (int fa = 0; fa < faceCount; fa++) {
-			int faceIdx = fa;
-			BSPFACE& face = faces[faceIdx];
-			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+	return true;
+}
 
-			if (info.nFlags & TEX_SPECIAL) {
-				continue;
-			}
+void Bsp::fix_bad_surface_extents_with_scale() {
+	int numScale = 0;
 
-			int size[2];
-			if (GetFaceLightmapSize(this, faceIdx, size)) {
-				continue;
-			}
+	// create unique texinfos in case any are shared with both good and bad faces
+	for (int fa = 0; fa < faceCount; fa++) {
+		int faceIdx = fa;
+		BSPFACE& face = faces[faceIdx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
 
-			if (downscale_texture(info.iMiptex, maxTextureDim, false)) {
-				// retry after downscaling
-				numShrink++;
-				fa--;
-				continue;
-			}
+		if (info.nFlags & TEX_SPECIAL) {
+			continue;
+		}
 
-			if (downscaleOnly) {
-				continue;
-			}
+		int size[2];
+		if (GetFaceLightmapSize(this, faceIdx, size)) {
+			continue;
+		}
 
-			if (!scaleNotSubdivide) {
-				if (subdivide_face(faceIdx)) {
-					numSub++;
-					anySubdivides = true;
-					break;
-				}
-				// else scale the face because it was too skinny to be subdivided or something
-			}
-				
-			vec2 oldScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
+		get_unique_texinfo(faceIdx);
+	}
+	
 
-			bool scaledOk = false;
-			for (int i = 0; i < 128; i++) {
-				info.vS *= 0.5f;
-				info.vT *= 0.5f;
-
-				if (GetFaceLightmapSize(this, faceIdx, size)) {
-					scaledOk = true;
-					break;
-				}
-			}
-
-			if (!scaledOk) {
-				int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-				BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-				logf("Failed to fix face %s with scales %f %f\n", tex.szName, oldScale.x, oldScale.y);
-			}
-			else {
-				int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-				BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-				vec2 newScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
-
-				vec3 center = get_face_center(faceIdx);
-				logf("Scaled up %s from %fx%f -> %fx%f (%d %d %d)\n",
-					tex.szName, oldScale.x, oldScale.y, newScale.x, newScale.y,
-					(int)center.x, (int)center.y, (int)center.z);
-				numScale++;
-			}
+	for (int fa = 0; fa < faceCount; fa++) {
+		if (fix_bad_surface_extents_with_scale(fa)) {
+			numScale++;
 		}
 	}
 
-	if (numScale) {
-		logf("Scaled up %d face textures\n", numScale);
-	}
-	if (numSub) {
-		logf("Subdivided %d faces\n", numSub);
-	}
-	if (numShrink) {
-		logf("Downscaled %d textures\n", numShrink);
-	}
+	logf("Scaled up %d face textures\n", numScale);
 }
 
 vec3 Bsp::get_face_center(int faceIdx) {

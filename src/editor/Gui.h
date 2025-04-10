@@ -30,6 +30,15 @@ struct AllocInfo {
 	int faceIdx;
 };
 
+struct ExtentInfo {
+	string texname;
+	string dimensions;
+	string faceCount;
+	string subsNeeded;
+	int mip;
+	int sort;
+};
+
 struct StatInfo {
 	string name;
 	string val;
@@ -101,6 +110,7 @@ private:
 	bool loadedLimit[SORT_MODES] = { false };
 	vector<ModelInfo> limitModels[SORT_MODES];
 	vector<AllocInfo> limitAllocs;
+	vector<ExtentInfo> limitExtents;
 	bool loadedStats = false;
 	vector<StatInfo> stats;
 
@@ -152,6 +162,7 @@ private:
 	void drawTextureTool();
 	void drawLimitTab(Bsp* map, int sortMode);
 	void drawAllocBlockLimitTab(Bsp* map);
+	void drawFaceExtentsLimitTab();
 	void drawEntityReport();
 	StatInfo calcStat(string name, uint val, uint max, bool isMem);
 	ModelInfo calcModelStat(Bsp* map, STRUCTUSAGE* modelInfo, uint val, uint max, bool isMem);

@@ -1567,31 +1567,39 @@ bool BspRenderer::isFinishedLoading() {
 		map->ents.empty();
 }
 
-void BspRenderer::highlightFace(int faceIdx, bool highlight) {
-	RenderFace* rface;
-	RenderGroup* rgroup;
-	if (!getRenderPointers(faceIdx, &rface, &rgroup)) {
-		logf("Bad face index\n");
-		return;
+void BspRenderer::highlightPickedFaces(bool highlight) {
+	unordered_set<RenderGroup*> uploadGroups;
+
+	for (int i = 0; i < g_app->pickInfo.faces.size(); i++) {
+		RenderFace* rface;
+		RenderGroup* rgroup;
+		if (!getRenderPointers(g_app->pickInfo.faces[i], &rface, &rgroup)) {
+			logf("Bad face index for highlight %d\n", g_app->pickInfo.faces[i]);
+			continue;
+		}
+
+		float r, g, b;
+		r = g = b = 1.0f;
+
+		if (highlight) {
+			r = 0.86f;
+			g = 0;
+			b = 0;
+		}
+
+		for (int i = 0; i < rface->vertCount; i++) {
+			rgroup->verts[rface->vertOffset + i].r = r;
+			rgroup->verts[rface->vertOffset + i].g = g;
+			rgroup->verts[rface->vertOffset + i].b = b;
+		}
+
+		uploadGroups.insert(rgroup);
 	}
 
-	float r, g, b;
-	r = g = b = 1.0f;
-
-	if (highlight) {
-		r = 0.86f;
-		g = 0;
-		b = 0;
+	for (RenderGroup* rgroup : uploadGroups) {
+		rgroup->buffer->deleteBuffer();
+		rgroup->buffer->upload();
 	}
-
-	for (int i = 0; i < rface->vertCount; i++) {
-		rgroup->verts[rface->vertOffset + i].r = r;
-		rgroup->verts[rface->vertOffset + i].g = g;
-		rgroup->verts[rface->vertOffset + i].b = b;
-	}
-
-	rgroup->buffer->deleteBuffer();
-	rgroup->buffer->upload();
 }
 
 void BspRenderer::updateFaceUVs(int faceIdx) {
