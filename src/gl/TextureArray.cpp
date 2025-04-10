@@ -79,7 +79,7 @@ TexArrayOffset TextureArray::tally(int width, int height) {
 	offset.layer = 0;
 
 	if ((width % 16) != 0 || (height % 16) != 0) {
-		logf("Texture array got dimensions not divisble by 16");
+		logf("Texture array got dimensions not divisible by 16\n");
 		return offset;
 	}
 	if (width > 1024 || height > 1024 || width < 16 || height < 16) {
@@ -110,7 +110,7 @@ TexArrayOffset TextureArray::tally(int width, int height) {
 
 void TextureArray::add(Texture* tex) {
 	if ((tex->width % 16) != 0 || (tex->height % 16) != 0) {
-		logf("Texture array got dimensions not divisble by 16");
+		logf("Texture array got dimensions not divisible by 16\n");
 		return;
 	}
 	if (tex->width > 1024 || tex->height > 1024 || tex->width < 16 || tex->height < 16) {

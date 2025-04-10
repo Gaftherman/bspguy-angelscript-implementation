@@ -1793,6 +1793,60 @@ void Gui::drawMenuBar() {
 				"in the worldspawn entity.\n\nIf an embedded texture cannot be found in a WAD, it will become "
 				"a missing texture. You may want to export embedded textures first to avoid losing data.");
 
+			if (ImGui::MenuItem("Delete Embedded RAD", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Delete RAD Textures");
+
+				bool didAnything = false;
+
+				if (!map->delete_embedded_rad_textures(NULL)) {
+					string msg = "Embedded RAD textures are corrupted. If you have the original "
+						"unedited BSP file, you can try to recover texture data from it.\n\n"
+						"Do you want to recover data from the original BSP?";
+					int ret = tinyfd_messageBox(
+						"Corrupt Data", /* NULL or "" */
+						msg.c_str(), /* NULL or "" may contain \n \t */
+						"yesno", /* "ok" "okcancel" "yesno" "yesnocancel" */
+						"question", /* "info" "warning" "error" "question" */
+						0);
+
+					if (ret == 1) { // yes
+						char* fname = tinyfd_openFileDialog("Select the original BSP", "",
+							1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
+
+						if (fname) {
+							Bsp* ogbsp = new Bsp(fname);
+
+							if (!map->delete_embedded_rad_textures(ogbsp)) {
+								logf("Failed to delete embedded RAD textures. The original texture data no longer exists and could not be recovered.\n");
+							}
+							else {
+								didAnything = true;
+							}
+
+							delete ogbsp;
+						}
+					}
+					else {
+						logf("Failed to delete embedded RAD textures. The original texture data no longer exists.\n");
+					}
+				}
+				else {
+					didAnything = true;
+				}
+
+				if (!didAnything) {
+					delete command;
+				}
+				else {
+					command->pushUndoState();
+				}
+			}
+			tooltip(g, "Deletes embedded VHLT RAD textures. These are copies of textures with lightmaps "
+				"baked into them. Transparent entities appear full-bright without these.\n\n"
+				"This fixes \"Malformed face\" errors in the RAD compiler if the embedded textures have "
+				"somehow become corrupted. In that case, you will be asked to load the original BSP "
+				"so that the original texture data can be recovered.");
+
 			if (ImGui::MenuItem("Remove Unused WADs", 0, false, !app->isLoading)) {
 				LumpReplaceCommand* command = new LumpReplaceCommand("Remove Unused WADs", true);
 				map->remove_unused_wads(wads);
@@ -2653,11 +2707,26 @@ void Gui::drawDebugWidget() {
 				if (app->pickInfo.getFaceIndex() != -1) {
 					BSPMODEL& model = map->models[modelIndex];
 					BSPFACE& face = *app->pickInfo.getFace();
+					BSPPLANE& plane = map->planes[face.iPlane];
 
 					ImGui::Text("Model ID: %d", modelIndex);
 					ImGui::Text("Model polies: %d", model.nFaces);
 
 					ImGui::Text("Face ID: %d", app->pickInfo.getFaceIndex());
+					ImGui::Text("Face Edges: %d", face.nEdges);
+					vec3 faceNormal = plane.vNormal * (face.nPlaneSide ? -1 : 1);
+
+					if (face.iTextureInfo < map->texinfoCount) {
+						BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
+						ImGui::Text("Face S Axis: %.2f %.2f %.2f", info.vS.x, info.vS.y, info.vS.z);
+						ImGui::Text("Face T Axis: %.2f %.2f %.2f", info.vT.x, info.vT.y, info.vT.z);
+						vec3 texnormal = crossProduct(info.vT, info.vS).normalize();
+						ImGui::Text("Face Texture Normal: %.2f %.2f %.2f", texnormal.x, texnormal.y, texnormal.z);
+						float distscale = dotProduct(texnormal, faceNormal);
+						ImGui::Text("distscale: %.2f", distscale);
+					}
+					ImGui::Text("Face Normal: %.2f %.2f %.2f", faceNormal.x, faceNormal.y, faceNormal.z);
+
 					ImGui::Text("Plane ID: %d", face.iPlane);
 
 					if (face.iTextureInfo < map->texinfoCount) {

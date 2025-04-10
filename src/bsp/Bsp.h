@@ -404,6 +404,15 @@ public:
 	// if the face's texinfo is not unique, a new one is created and returned. Otherwise, it's current texinfo is returned
 	BSPTEXTUREINFO* get_unique_texinfo(int faceIdx);
 
+	// returns original texinfo referenced by an embedded rad texture created by VHLT
+	BSPTEXTUREINFO* get_embedded_rad_texinfo(BSPTEXTUREINFO& info);
+	BSPTEXTUREINFO* get_embedded_rad_texinfo(const char* texName);
+
+	BSPMIPTEX* get_texture(int iMiptex);
+
+	// returns false if invalid RAD textures were detected (will need the original BSP file)
+	bool delete_embedded_rad_textures(Bsp* originalMap);
+
 	int get_model_from_face(int faceIdx);
 
 	vector<STRUCTUSAGE*> get_sorted_model_infos(int sortMode);

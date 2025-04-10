@@ -1550,6 +1550,23 @@ STRUCTCOUNT Bsp::remove_unused_model_structures(bool deleteModels) {
 		else
 			faces[i].iFirstEdge = 0;
 		faces[i].iTextureInfo = remap.texInfo[faces[i].iTextureInfo];
+
+		BSPTEXTUREINFO& tinfo = texinfos[faces[i].iTextureInfo];
+		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(tinfo);
+		if (radinfo) {
+			int32_t texOffset = ((int32_t*)textures)[tinfo.iMiptex + 1];
+			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+			int oldIndex = atoi(&tex.szName[5]);
+			int newIndex = remap.texInfo[oldIndex];
+
+			// from VHLT loadtextures.cpp
+			tex.szName[5] = '0' + (newIndex / 10000) % 10; // store the original texinfo
+			tex.szName[6] = '0' + (newIndex / 1000) % 10;
+			tex.szName[7] = '0' + (newIndex / 100) % 10;
+			tex.szName[8] = '0' + (newIndex / 10) % 10;
+			tex.szName[9] = '0' + (newIndex) % 10;
+		}
 	}
 
 	for (int i = 0; i < modelCount; i++) {
@@ -4906,6 +4923,7 @@ bool Bsp::validate() {
 		}
 	}
 	int numBadExtent = 0;
+	int numBadRadTexture = 0;
 	for (int i = 0; i < faceCount; i++) {
 		if (faces[i].iPlane < 0 || faces[i].iPlane >= planeCount) {
 			logf("Bad plane reference in face %d: %d / %d\n", i, faces[i].iPlane, planeCount);
@@ -4931,9 +4949,33 @@ bool Bsp::validate() {
 		if (!(info.nFlags & TEX_SPECIAL) && !GetFaceLightmapSize(this, i, size)) {
 			numBadExtent++;
 		}
+
+		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(info);
+		if (radinfo) {
+			int32_t radTexOffset = ((int32_t*)textures)[info.iMiptex + 1];
+			BSPMIPTEX& radTex = *((BSPMIPTEX*)(textures + radTexOffset));
+			BSPFACE& face = faces[i];
+			BSPPLANE& plane = planes[face.iPlane];
+
+			vec3 faceNormal = plane.vNormal * (face.nPlaneSide ? -1 : 1);
+			vec3 texnormal = crossProduct(radinfo->vT, radinfo->vS).normalize();
+			float distscale = dotProduct(texnormal, faceNormal);
+
+			if (distscale == 0) {
+				int32_t radTexOffset = ((int32_t*)textures)[info.iMiptex + 1];
+				BSPMIPTEX& radTex = *((BSPMIPTEX*)(textures + radTexOffset));
+				debugf("Invalid RAD texture axes in %s\n", radTex.szName);
+				numBadRadTexture++;
+			}
+		}
+		
 	}
 	if (numBadExtent) {
 		logf("Bad Surface Extents on %d faces\n", numBadExtent);
+		isValid = false;
+	}
+	if (numBadRadTexture) {
+		logf("%d faces have invalid RAD textures. VHLT will complain about malformed faces.\n", numBadRadTexture);
 		isValid = false;
 	}
 
@@ -5740,9 +5782,18 @@ void Bsp::mark_face_structures(int iFace, STRUCTUSAGE* usage) {
 		usage->verts[vertIdx] = true;
 	}
 
+	BSPTEXTUREINFO& tinfo = texinfos[face.iTextureInfo];
+	BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(tinfo);
+	
+	if (radinfo) {
+		int offset = radinfo - texinfos;
+		usage->texInfo[offset] = true;
+		usage->textures[radinfo->iMiptex] = true;
+	}
+
 	usage->texInfo[face.iTextureInfo] = true;
 	usage->planes[face.iPlane] = true;
-	usage->textures[texinfos[face.iTextureInfo].iMiptex] = true;
+	usage->textures[tinfo.iMiptex] = true;
 }
 
 void Bsp::mark_node_structures(int iNode, STRUCTUSAGE* usage, bool skipLeaves) {
@@ -8005,6 +8056,177 @@ BSPTEXTUREINFO* Bsp::get_unique_texinfo(int faceIdx) {
 	}
 
 	return &texinfos[targetInfo];
+}
+
+BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(BSPTEXTUREINFO& info) {
+	if (info.iMiptex >= textureCount) {
+		return NULL;
+	}
+
+	int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
+	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+	/*
+	* -------------------------------------------
+	* The VHLT Embedded rad texture naming format
+	* -------------------------------------------
+	* 
+	* Example name:    __rad03319Jxi03
+	* Name components: __rad 03319 Jxi 03
+	* 
+	* The components are:
+	*	- A prefix, which is one of:
+	*		__rad
+	*		!_rad     (this is commented out in VHLT, but SCHLT may enable it soon for func_water)
+	*		{_rad
+	*	- The original texinfo index as a decimal value.
+	*	- A hash string computed from the texture index and size of the texture.
+	*	- A count value representing the face index in the model modulo'd by 62.
+	* 
+	* Only the original texinfo index is read when running hlrad again. The hash and count is there only
+	* to make the name unique. So, to keep this in sync with bspguy, rewrite the texinfo if it ever
+	* changes, and leave the rest alone. The original map can be used to load lost texinfos.
+	*/
+
+	char c = tex.szName[0];
+	bool hasRadPrefix = strstr(tex.szName, "_rad") == tex.szName + 1 && (c == '_' || c == '{' || c == '!');
+	if (hasRadPrefix && tex.szName[5] >= '0' && tex.szName[5] <= '9') {
+		int offset = atoi(&tex.szName[5]);
+		if (offset >= 0 && offset < texinfoCount) {
+			return &texinfos[offset];
+		}
+	}
+
+	return NULL;
+}
+
+BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(const char* texName) {
+	for (int i = 0; i < texinfoCount; i++) {
+		BSPTEXTUREINFO& info = texinfos[i];
+		BSPMIPTEX* tex = get_texture(info.iMiptex);
+
+		if (tex && !strncmp(texName, tex->szName, MAXTEXTURENAME)) {
+			return get_embedded_rad_texinfo(info);
+		}
+	}
+	
+	return NULL;
+}
+
+BSPMIPTEX* Bsp::get_texture(int iMiptex) {
+	if (iMiptex < textureCount) {
+		int32_t texOffset = ((int32_t*)textures)[iMiptex + 1];
+		if (texOffset + sizeof(BSPMIPTEX) <= header.lump[LUMP_TEXTURES].nLength) {
+			return ((BSPMIPTEX*)(textures + texOffset));
+		}
+	}
+
+	return NULL;
+}
+
+bool Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
+
+	// first check that the original texture references are valid
+	int numBadRadTexture = 0;
+	for (int i = 0; i < faceCount; i++) {
+		BSPFACE& face = faces[i];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+		BSPMIPTEX* tex = get_texture(info.iMiptex);
+
+		if (!tex)
+			continue;
+
+		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(info);
+
+		if (!radinfo)
+			continue;
+
+		if (originalMap) {
+			radinfo = originalMap->get_embedded_rad_texinfo(tex->szName);
+
+			if (!radinfo) {
+				numBadRadTexture++;
+			}
+		}
+
+		BSPPLANE& plane = planes[face.iPlane];
+		vec3 faceNormal = plane.vNormal * (face.nPlaneSide ? -1 : 1);
+		vec3 texnormal = crossProduct(radinfo->vT, radinfo->vS).normalize();
+		float distscale = dotProduct(texnormal, faceNormal);
+
+		if (distscale == 0) {
+			debugf("Invalid RAD texture axes in %s\n", tex->szName);
+			numBadRadTexture++;
+		}
+	}
+
+	if (numBadRadTexture > 0) {
+		return false;
+	}
+
+	for (int i = 0; i < faceCount; i++) {
+		BSPFACE& face = faces[i];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+		BSPMIPTEX* tex = get_texture(info.iMiptex);
+
+		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(info);
+
+		if (!radinfo) {
+			continue;
+		}
+
+		if (originalMap) {
+			radinfo = originalMap->get_embedded_rad_texinfo(tex->szName);
+
+			if (!radinfo) {
+				continue;
+			}
+
+			BSPMIPTEX* ogtex = originalMap->get_texture(radinfo->iMiptex);
+			if (!ogtex) {
+				continue;
+			}
+
+			info = *radinfo;
+			info.iMiptex = 0;
+
+			bool foundTexture = false;
+			for (int k = 0; k < textureCount; k++) {
+				BSPMIPTEX* testTex = get_texture(k);
+				if (!memcmp(ogtex, testTex, sizeof(BSPMIPTEX))) {
+					debugf("Found existing texture referenced by other map: %s\n", ogtex->szName);
+					info.iMiptex = k;
+					foundTexture = true;
+					break;
+				}
+			}
+
+			if (!foundTexture) {
+				if (ogtex->nOffsets[0] == 0) {
+					// texture loads from a WAD, just add the reference
+					WADTEX* tex = new WADTEX;
+					memcpy(tex, ogtex, sizeof(BSPMIPTEX));
+					info.iMiptex = add_texture_from_wad(tex);
+					delete tex;
+					logf("Added texture reference for %s\n", ogtex->szName);
+				}
+				else {
+					WADTEX tex = originalMap->load_texture(radinfo->iMiptex);
+					info.iMiptex = add_texture(tex);
+					if (tex.data)
+						delete tex.data;
+					logf("Copied embedded texture %s\n", ogtex->szName);
+				}
+			}
+		}
+		else {
+			info = *radinfo;
+		}
+	}
+
+	remove_unused_model_structures(false).print_delete_stats(1);
+
+	return true;
 }
 
 int Bsp::get_model_from_face(int faceIdx) {
