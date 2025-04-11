@@ -5,8 +5,10 @@
 #include "Renderer.h"
 #include "globals.h"
 
-// fix:
-// - log spam when moving model origin while clipnode rendering on
+// fix v6:
+// - force rotate not refreshing entities anymore
+// - mipmaps show blue mask color when render modes are on
+// - rad textures darker than they should be due to lightmaps
 
 // todo:
 // ripent saftey warning

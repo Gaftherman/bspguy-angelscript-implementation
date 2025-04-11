@@ -65,6 +65,8 @@ void removeDir(const string& dirName);
 
 string toLowerCase(string str);
 
+string toUpperCase(string str);
+
 string trimSpaces(string s);
 
 int getBspTextureSize(BSPMIPTEX* bspTexture);

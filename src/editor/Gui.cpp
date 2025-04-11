@@ -39,6 +39,7 @@ string iniPath = getConfigDir() + "imgui.ini";
 char const* bspFilterPatterns[1] = { "*.bsp" };
 char const* entFilterPatterns[1] = { "*.ent" };
 char const* wadFilterPatterns[1] = { "*.wad" };
+char const* radFilterPatterns[1] = { "*.rad" };
 
 bool editWasOpen = false;
 
@@ -1377,7 +1378,7 @@ void Gui::drawMenuBar() {
 				"\n\nAttempting to run a "
 				"Sven Co-op map in Half-Life may result in AllocBlock Full errors, Bad Surface Extents, "
 				"crashes caused by large textures, and visual glitches caused by crossing the +/-4096 map boundary. "
-				"See the Porting Tools menu for solutions to these problems.");
+				"See the Tools menu for solutions to these problems.");
 
 			ImGui::EndMenu();
 		}
@@ -1724,6 +1725,139 @@ void Gui::drawMenuBar() {
 		}
 		tooltip(g, "Fix all faces with bad surface extents.");
 
+		if (ImGui::MenuItem("RAD Preparation", 0, false, !app->isLoading)) {
+			LumpReplaceCommand* command = new LumpReplaceCommand("RAD preparation");
+
+			bool didAnything = false;
+
+			int numDeletedRadTextures = map->delete_embedded_rad_textures(NULL);
+
+			if (numDeletedRadTextures == -1) {
+				string msg = "Embedded RAD textures are corrupted. If you have the original "
+					"unedited BSP file, you can try to recover texture data from it.\n\n"
+					"Do you want to recover data from the original BSP?";
+				int ret = tinyfd_messageBox(
+					"Corrupt Data", /* NULL or "" */
+					msg.c_str(), /* NULL or "" may contain \n \t */
+					"yesno", /* "ok" "okcancel" "yesno" "yesnocancel" */
+					"question", /* "info" "warning" "error" "question" */
+					0);
+
+				if (ret == 1) { // yes
+					char* fname = tinyfd_openFileDialog("Select the original BSP", "",
+						1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
+
+					if (fname) {
+						Bsp* ogbsp = new Bsp(fname);
+						numDeletedRadTextures = map->delete_embedded_rad_textures(ogbsp);
+
+						if (numDeletedRadTextures == -1) {
+							logf("Failed to delete embedded RAD textures. The original texture data no longer exists and could not be recovered.\n");
+						}
+						else if (numDeletedRadTextures > 0) {
+							didAnything = true;
+						}
+
+						delete ogbsp;
+					}
+				}
+				else {
+					logf("Failed to delete embedded RAD textures. The original texture data no longer exists.\n");
+				}
+			}
+			else if (numDeletedRadTextures > 0) {
+				didAnything = true;
+			}
+
+			Entity* info_texlights = NULL;
+
+			// convert light_surface back to its original state
+			for (Entity* ent : map->ents) {
+				if (ent->hasKey("_tex")) {
+					string cname = ent->getClassname();
+					if (cname == "light" || cname == "light_spot") {
+						ent->setOrAddKeyvalue("classname", "light_surface");
+						ent->setOrAddKeyvalue("convertto", cname);
+						didAnything = true;
+					}
+				}
+
+				if (ent->getClassname() == "info_texlights") {
+					info_texlights = ent;
+				}
+			}
+
+			if (map->do_entities_share_models()) {
+				if (!info_texlights) {
+					string msg = "This map does not have an info_texlights entity. Texture light information "
+						"is required to check if models need duplication.\n\n"
+						"Do you want to import an lights.rad file?";
+					int ret = tinyfd_messageBox(
+						"Texlight Import", /* NULL or "" */
+						msg.c_str(), /* NULL or "" may contain \n \t */
+						"yesno", /* "ok" "okcancel" "yesno" "yesnocancel" */
+						"question", /* "info" "warning" "error" "question" */
+						0);
+
+					if (ret == 1) { // yes
+						char* fname = tinyfd_openFileDialog("Import lights.rad file", "",
+							1, radFilterPatterns, "Texlight File (*.rad)", 1);
+
+						if (fname && map->import_texlights(fname)) {
+							didAnything = true;
+						}
+					}
+					else {
+						logf("Skipped lights.rad import. Some textures may not emit light when they should.\n");
+					}
+				}
+
+				int numDup = map->make_unique_texlight_models();
+				if (numDup > 0) {
+					logf("Duplicated %d models. You can Deduplicate these after running RAD to keep the model count low.\n", numDup);
+					didAnything = true;
+				}
+				else {
+					logf("No models needed to be duplicated.\n");
+				}
+			}
+
+			int numMissing = map->count_missing_textures();
+
+			if (!didAnything)
+				logf("No changes were needed to prepare for RAD compilation.\n");
+
+			if (numMissing) {
+				string msg = "VHLT requires texture data for embedded lightmaps and texture reflection. "
+					"This map is missing " + to_string(numMissing) + " textures. To compile, you will need to choose one of these options:\n\n"
+					"1. Compile with -notextures to disable modern RAD features.\n"
+					"2. Update your settings to find missing WAD files.\n"
+					"3. Replace missing textures with the Face Editor.";
+				int ret = tinyfd_messageBox(
+					"Missing Textures", /* NULL or "" */
+					msg.c_str(), /* NULL or "" may contain \n \t */
+					"ok", /* "ok" "okcancel" "yesno" "yesnocancel" */
+					"warning", /* "info" "warning" "error" "question" */
+					0);
+			}
+			else {
+				map->generate_wa_file();
+			}
+
+			if (!didAnything) {
+				delete command;
+			}
+			else {
+				command->pushUndoState();
+			}
+		}
+		tooltip(g, ("Prepare the map for running through a RAD compiler based on VHLT. This will:\n\n"
+			"1. Delete embedded RAD textures (fixes \"Malformed face\" errors when these are invalid).\n"
+			"2. Convert light/light_spot entities to light_surface, if that's what they were originally.\n"
+			"3. Duplicate shared texlight models (deduplicated models can't emit light).\n"
+			"4. Generate a \"" + map->name + ".wa_\" file for running RAD without the -notextures option.").c_str()
+		);
+
 		if (ImGui::MenuItem("Scale Invisible Faces", 0, false, !app->isLoading)) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("AllocBlock Reduction");
 			if (map->allocblock_reduction() == 0) {
@@ -1792,60 +1926,6 @@ void Gui::drawMenuBar() {
 			tooltip(g, "Deletes all embedded texture data, forcing textures to be loaded from WADs referenced "
 				"in the worldspawn entity.\n\nIf an embedded texture cannot be found in a WAD, it will become "
 				"a missing texture. You may want to export embedded textures first to avoid losing data.");
-
-			if (ImGui::MenuItem("Delete Embedded RAD", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Delete RAD Textures");
-
-				bool didAnything = false;
-
-				if (!map->delete_embedded_rad_textures(NULL)) {
-					string msg = "Embedded RAD textures are corrupted. If you have the original "
-						"unedited BSP file, you can try to recover texture data from it.\n\n"
-						"Do you want to recover data from the original BSP?";
-					int ret = tinyfd_messageBox(
-						"Corrupt Data", /* NULL or "" */
-						msg.c_str(), /* NULL or "" may contain \n \t */
-						"yesno", /* "ok" "okcancel" "yesno" "yesnocancel" */
-						"question", /* "info" "warning" "error" "question" */
-						0);
-
-					if (ret == 1) { // yes
-						char* fname = tinyfd_openFileDialog("Select the original BSP", "",
-							1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
-
-						if (fname) {
-							Bsp* ogbsp = new Bsp(fname);
-
-							if (!map->delete_embedded_rad_textures(ogbsp)) {
-								logf("Failed to delete embedded RAD textures. The original texture data no longer exists and could not be recovered.\n");
-							}
-							else {
-								didAnything = true;
-							}
-
-							delete ogbsp;
-						}
-					}
-					else {
-						logf("Failed to delete embedded RAD textures. The original texture data no longer exists.\n");
-					}
-				}
-				else {
-					didAnything = true;
-				}
-
-				if (!didAnything) {
-					delete command;
-				}
-				else {
-					command->pushUndoState();
-				}
-			}
-			tooltip(g, "Deletes embedded VHLT RAD textures. These are copies of textures with lightmaps "
-				"baked into them. Transparent entities appear full-bright without these.\n\n"
-				"This fixes \"Malformed face\" errors in the RAD compiler if the embedded textures have "
-				"somehow become corrupted. In that case, you will be asked to load the original BSP "
-				"so that the original texture data can be recovered.");
 
 			if (ImGui::MenuItem("Remove Unused WADs", 0, false, !app->isLoading)) {
 				LumpReplaceCommand* command = new LumpReplaceCommand("Remove Unused WADs", true);
@@ -2720,10 +2800,6 @@ void Gui::drawDebugWidget() {
 						BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
 						ImGui::Text("Face S Axis: %.2f %.2f %.2f", info.vS.x, info.vS.y, info.vS.z);
 						ImGui::Text("Face T Axis: %.2f %.2f %.2f", info.vT.x, info.vT.y, info.vT.z);
-						vec3 texnormal = crossProduct(info.vT, info.vS).normalize();
-						ImGui::Text("Face Texture Normal: %.2f %.2f %.2f", texnormal.x, texnormal.y, texnormal.z);
-						float distscale = dotProduct(texnormal, faceNormal);
-						ImGui::Text("distscale: %.2f", distscale);
 					}
 					ImGui::Text("Face Normal: %.2f %.2f %.2f", faceNormal.x, faceNormal.y, faceNormal.z);
 

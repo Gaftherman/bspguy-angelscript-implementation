@@ -5182,33 +5182,16 @@ bool Bsp::validate() {
 		logf("%d entities have origins that may cause problems (see \"Zero Entity Origins\" tool)\n", badOriginCount);
 	}
 
-	static vector<Wad*> emptyWads;
-	vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
-
-	int missing_textures = 0;
-
 	for (int i = 0; i < textureCount; i++) {
 		int32_t texOffset = ((int32_t*)textures)[i + 1];
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-
-		if (tex.nOffsets[0] == 0) {
-			bool foundTexture = false;
-			for (int k = 0; k < wads.size(); k++) {
-				if (wads[k]->hasTexture(tex.szName)) {
-					foundTexture = true;
-					break;
-				}
-			}
-			if (!foundTexture) {
-				missing_textures++;
-			}
-		}
 
 		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
 			logf("Texture '%s' too large (%dx%d)\n", tex.szName, tex.nWidth, tex.nHeight);
 		}
 	}
 
+	int missing_textures = count_missing_textures();
 	if (missing_textures) {
 		logf("%d missing textures\n", missing_textures);
 	}
@@ -8113,6 +8096,258 @@ BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(const char* texName) {
 	return NULL;
 }
 
+bool Bsp::do_entities_share_models() {
+	unordered_set<int> uniqueModels;
+
+	for (Entity* ent : ents) {
+		int modelIdx = ent->getBspModelIdx();
+		if (modelIdx > 0) {
+			if (uniqueModels.count(modelIdx)) {
+				return true;
+			}
+			uniqueModels.insert(modelIdx);
+		}
+	}
+
+	return false;
+}
+
+int Bsp::count_missing_textures() {
+	static vector<Wad*> emptyWads;
+	vector<Wad*>& wads = g_app->mapRenderer ? g_app->mapRenderer->wads : emptyWads;
+
+	int missing_textures = 0;
+
+	for (int i = 0; i < textureCount; i++) {
+		int32_t texOffset = ((int32_t*)textures)[i + 1];
+		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
+		if (tex.nOffsets[0] == 0) {
+			bool foundTexture = false;
+			for (int k = 0; k < wads.size(); k++) {
+				if (wads[k]->hasTexture(tex.szName)) {
+					foundTexture = true;
+					break;
+				}
+			}
+			if (!foundTexture) {
+				missing_textures++;
+			}
+		}
+
+		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
+			logf("Texture '%s' too large (%dx%d)\n", tex.szName, tex.nWidth, tex.nHeight);
+		}
+	}
+
+	return missing_textures;
+}
+
+void Bsp::generate_wa_file() {
+	int numMissing = 0;
+	
+	vector<WADTEX> wadTextures;
+	for (int i = 0; i < textureCount; i++) {
+		int32_t offset = ((int32_t*)textures)[i + 1];
+		BSPMIPTEX* tex = (BSPMIPTEX*)(textures + offset);
+
+		if (tex->nOffsets[0] != 0) {
+			continue; // embedded
+		}
+
+		WADTEX copy = load_texture(i);
+
+		if (copy.data)
+			wadTextures.push_back(copy);
+		else
+			numMissing++;
+	}
+
+	string fname = path;
+	replaceAll(fname, ".bsp", ".wa_");
+
+	Wad outWad = Wad();
+	outWad.write(fname, &wadTextures[0], wadTextures.size());
+	logf("Wrote %d WAD textures to: %s\n", wadTextures.size(), fname.c_str());
+
+	for (WADTEX& tex : wadTextures) {
+		delete[] tex.data;
+	}
+}
+
+int Bsp::make_unique_texlight_models() {
+	unordered_map<string, string> texlights = get_tex_lights();
+	unordered_set<int> texlight_models;
+
+	for (Entity* ent : ents) {
+		if (ent->getClassname() == "light_surface") {
+			texlights[toUpperCase(ent->getKeyvalue("_tex"))] = ent->getKeyvalue("_light");
+		}
+	}
+
+	for (int i = 1; i < modelCount; i++) {
+		BSPMODEL& model = models[i];
+
+		for (int k = model.iFirstFace; k < model.iFirstFace + model.nFaces; k++) {
+			BSPMIPTEX* tex = get_texture(texinfos[faces[k].iTextureInfo].iMiptex);
+
+			if (tex && texlights.count(toUpperCase(tex->szName))) {
+				// Distance, name, and classnames filters aren't checked for simplicity.
+				// Duplicated models can be deduplicated after running RAD.
+				texlight_models.insert(i);
+				break;
+			}
+		}
+	}
+
+	int numDups = 0;
+
+	for (Entity* ent : ents) {
+		int modelidx = ent->getBspModelIdx();
+
+		if (texlight_models.count(modelidx)) {
+			bool isUnique = true;
+
+			for (Entity* ent2 : ents) {
+				if (ent != ent2 && ent2->getBspModelIdx() == modelidx) {
+					isUnique = false;
+					break;
+				}
+			}
+
+			if (!isUnique) {
+				logf("Duplicate model %d\n", modelidx);
+				int newModelIdx = duplicate_model(modelidx);
+				ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+				numDups++;
+			}
+		}
+	}
+
+	return numDups;
+}
+
+unordered_map<string, string> Bsp::get_tex_lights() {
+	unordered_map<string, string> texlights;
+
+	for (int i = 0; i < ents.size(); i++) {
+		Entity* ent = ents[i];
+		if (ent->getClassname() == "info_texlights") {
+			unordered_map<string, string> keys = ent->getAllKeyvalues();
+			for (auto item : keys) {
+				texlights[toUpperCase(item.first)] = item.second;
+			}
+		}
+	}
+
+	return texlights;
+}
+
+bool Bsp::import_texlights(string fname) {
+	std::ifstream file(fname); // Open file
+	if (!file) {
+		logf("Failed to open file: %s\n", fname.c_str());
+		return false;
+	}
+
+	unordered_map<string, string> texlights;
+
+	bool anyChanges = false;
+
+	for (int i = 0; i < ents.size(); i++) {
+		Entity* ent = ents[i];
+		if (ent->getClassname() == "info_texlights") {
+			unordered_map<string, string> keys = ent->getAllKeyvalues();
+			for (auto item : keys) {
+				texlights[toUpperCase(item.first)] = item.second;
+			}
+			ents.erase(ents.begin() + i);
+			i--;
+		}
+	}
+
+	if (texlights.size())
+		logf("Parsed %d texlights from existing info_texlights entities.\n", texlights.size());
+
+	for (int i = 0; i < ents.size(); i++) {
+		Entity* ent = ents[i];
+		if (ent->getClassname() == "info_texlights") {
+			unordered_map<string, string> keys = ent->getAllKeyvalues();
+			for (auto item : keys) {
+				texlights[toUpperCase(item.first)] = item.second;
+			}
+			logf("Parsed %d texlights from existing info_texlights entity.\n", keys.size());
+
+			ents.erase(ents.begin() + i);
+			i--;
+		}
+	}
+
+	unordered_set<string> textureNames;
+	for (int i = 0; i < faceCount; i++) {
+		BSPMIPTEX* tex = get_texture(texinfos[faces[i].iTextureInfo].iMiptex);
+
+		if (tex) {
+			textureNames.insert(toUpperCase(tex->szName));
+		}
+	}
+
+	int oldSize = texlights.size();
+
+	string line;
+	while (std::getline(file, line)) {
+		int comment = line.find("//");
+		if (comment != -1) {
+			line = line.substr(0, comment);
+		}
+		line = trimSpaces(line);
+		
+		int space = line.find_first_of(" \t");
+		if (space == -1)
+			continue;
+
+		string name = toUpperCase(line.substr(0, space));
+
+
+		if (!textureNames.count(name)) {
+			continue; // Ignore the texlights for textures not used in the map
+		}
+
+		string args = trimSpaces(line.substr(space));
+		texlights[name] = args;
+	}
+
+	if (texlights.size() == oldSize) {
+		logf("Texlight file had 0 definitions for textures used in this map: %s\n", fname.c_str());
+	}
+	else {
+		logf("Loaded %d texlights from file: %s\n", texlights.size() - oldSize, fname.c_str());
+	}
+
+	if (!texlights.size()) {
+		return false;
+	}
+
+	Entity* texlights_ent = new Entity();
+
+	std::vector<std::string> keys;
+	for (const auto& item : texlights) {
+		keys.push_back(item.first);
+	}
+
+	sort(keys.begin(), keys.end());
+
+	for (const string& key : keys) {
+		texlights_ent->setOrAddKeyvalue(key, texlights[key]);
+	}
+
+	texlights_ent->setOrAddKeyvalue("classname", "info_texlights");
+
+	ents.push_back(texlights_ent);
+
+	return true;
+}
+
 BSPMIPTEX* Bsp::get_texture(int iMiptex) {
 	if (iMiptex < textureCount) {
 		int32_t texOffset = ((int32_t*)textures)[iMiptex + 1];
@@ -8124,7 +8359,7 @@ BSPMIPTEX* Bsp::get_texture(int iMiptex) {
 	return NULL;
 }
 
-bool Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
+int Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
 
 	// first check that the original texture references are valid
 	int numBadRadTexture = 0;
@@ -8161,8 +8396,10 @@ bool Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
 	}
 
 	if (numBadRadTexture > 0) {
-		return false;
+		return -1;
 	}
+
+	int numRemoved = 0;
 
 	for (int i = 0; i < faceCount; i++) {
 		BSPFACE& face = faces[i];
@@ -8174,6 +8411,8 @@ bool Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
 		if (!radinfo) {
 			continue;
 		}
+
+		numRemoved++;
 
 		if (originalMap) {
 			radinfo = originalMap->get_embedded_rad_texinfo(tex->szName);
@@ -8224,9 +8463,10 @@ bool Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
 		}
 	}
 
-	remove_unused_model_structures(false).print_delete_stats(1);
+	if (numRemoved)
+		remove_unused_model_structures(false).print_delete_stats(1);
 
-	return true;
+	return numRemoved;
 }
 
 int Bsp::get_model_from_face(int faceIdx) {

@@ -8,6 +8,7 @@
 #include <streambuf>
 #include <set>
 #include <vector>
+#include <unordered_map>
 #include "colors.h"
 #include "Wad.h"
 
@@ -408,10 +409,29 @@ public:
 	BSPTEXTUREINFO* get_embedded_rad_texinfo(BSPTEXTUREINFO& info);
 	BSPTEXTUREINFO* get_embedded_rad_texinfo(const char* texName);
 
+	// generate a combined WAD file for the RAD compiler and save it next to the BSP file
+	void generate_wa_file();
+
+	int count_missing_textures();
+
+	// ensures entity that has a texlight model is using a unique model
+	int make_unique_texlight_models();
+
+	// true if any entities share a same BSP model
+	bool do_entities_share_models();
+
+	// get texlight info from info_texlights entities
+	unordered_map<string, string> get_tex_lights();
+
+	// import texlight info to a new or existing info_texlights entity
+	// returns true if any changes were made
+	bool import_texlights(string fname);
+
 	BSPMIPTEX* get_texture(int iMiptex);
 
-	// returns false if invalid RAD textures were detected (will need the original BSP file)
-	bool delete_embedded_rad_textures(Bsp* originalMap);
+	// returns -1 if invalid RAD textures were detected (will need the original BSP file)
+	// else returns number of textures deleted
+	int delete_embedded_rad_textures(Bsp* originalMap);
 
 	int get_model_from_face(int faceIdx);
 

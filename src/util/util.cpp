@@ -190,6 +190,12 @@ string toLowerCase(string str)
 	return str;
 }
 
+string toUpperCase(string str)
+{
+	transform(str.begin(), str.end(), str.begin(), ::toupper);
+	return str;
+}
+
 string trimSpaces(string s)
 {
 	// Remove white space indents
