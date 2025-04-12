@@ -405,6 +405,8 @@ public:
 	// if the face's texinfo is not unique, a new one is created and returned. Otherwise, it's current texinfo is returned
 	BSPTEXTUREINFO* get_unique_texinfo(int faceIdx);
 
+	bool is_embedded_rad_texture_name(const char* name);
+
 	// returns original texinfo referenced by an embedded rad texture created by VHLT
 	BSPTEXTUREINFO* get_embedded_rad_texinfo(BSPTEXTUREINFO& info);
 	BSPTEXTUREINFO* get_embedded_rad_texinfo(const char* texName);
@@ -423,9 +425,22 @@ public:
 	// get texlight info from info_texlights entities
 	unordered_map<string, string> get_tex_lights();
 
+	// removes texlights for textures not present in the map
+	unordered_map<string, string> filter_tex_lights(const unordered_map<string, string>& inputLights);
+
 	// import texlight info to a new or existing info_texlights entity
 	// returns true if any changes were made
-	bool import_texlights(string fname);
+	unordered_map<string, string> load_texlights_from_file(string fname);
+
+	bool load_texlight_from_string(string line, string& name, string& args);
+
+	// returns true if any changes were made
+	bool add_texlights(const unordered_map<string, string>& newLights);
+
+	bool replace_texlights(string texlightString);
+
+	// epsilon = how different texlight pixels can be to still be considered a texlight
+	unordered_map<string, string> estimate_texlights(int epsilon=8);
 
 	BSPMIPTEX* get_texture(int iMiptex);
 

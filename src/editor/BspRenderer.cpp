@@ -1747,7 +1747,7 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 	glDepthFunc(GL_LEQUAL);
 
 	if (!wireframePass) {
-		if (g_settings.render_flags & RENDER_LIGHTMAPS) {
+		if ((g_settings.render_flags & RENDER_LIGHTMAPS) && (g_settings.render_flags & RENDER_TEXTURES)) {
 			activeShader->setUniform("gamma", 1.5f);
 		}
 		else {
@@ -1922,8 +1922,6 @@ void BspRenderer::drawModel(Entity* ent, int modelIdx, bool transparent, bool hi
 	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
 		return;
 	}
-
-	activeShader->setUniform("gamma", 1.5f);
 
 	if (g_settings.render_flags & RENDER_RENDER_MODES) {
 		switch (opts.rendermode) {

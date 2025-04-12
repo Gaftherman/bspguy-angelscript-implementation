@@ -8041,6 +8041,18 @@ BSPTEXTUREINFO* Bsp::get_unique_texinfo(int faceIdx) {
 	return &texinfos[targetInfo];
 }
 
+bool Bsp::is_embedded_rad_texture_name(const char* name) {
+	if (strlen(name) > 5) {
+		char c = name[0];
+		bool hasRadPrefix = strstr(name, "_rad") == name + 1 && (c == '_' || c == '{' || c == '!');
+		if (hasRadPrefix && name[5] >= '0' && name[5] <= '9') {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(BSPTEXTUREINFO& info) {
 	if (info.iMiptex >= textureCount) {
 		return NULL;
@@ -8071,9 +8083,7 @@ BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(BSPTEXTUREINFO& info) {
 	* changes, and leave the rest alone. The original map can be used to load lost texinfos.
 	*/
 
-	char c = tex.szName[0];
-	bool hasRadPrefix = strstr(tex.szName, "_rad") == tex.szName + 1 && (c == '_' || c == '{' || c == '!');
-	if (hasRadPrefix && tex.szName[5] >= '0' && tex.szName[5] <= '9') {
+	if (is_embedded_rad_texture_name(tex.szName)) {
 		int offset = atoi(&tex.szName[5]);
 		if (offset >= 0 && offset < texinfoCount) {
 			return &texinfos[offset];
@@ -8185,6 +8195,7 @@ int Bsp::make_unique_texlight_models() {
 		}
 	}
 
+
 	for (int i = 1; i < modelCount; i++) {
 		BSPMODEL& model = models[i];
 
@@ -8235,7 +8246,8 @@ unordered_map<string, string> Bsp::get_tex_lights() {
 		if (ent->getClassname() == "info_texlights") {
 			unordered_map<string, string> keys = ent->getAllKeyvalues();
 			for (auto item : keys) {
-				texlights[toUpperCase(item.first)] = item.second;
+				if (item.first != "classname")
+					texlights[toUpperCase(item.first)] = item.second;
 			}
 		}
 	}
@@ -8243,45 +8255,8 @@ unordered_map<string, string> Bsp::get_tex_lights() {
 	return texlights;
 }
 
-bool Bsp::import_texlights(string fname) {
-	std::ifstream file(fname); // Open file
-	if (!file) {
-		logf("Failed to open file: %s\n", fname.c_str());
-		return false;
-	}
-
-	unordered_map<string, string> texlights;
-
-	bool anyChanges = false;
-
-	for (int i = 0; i < ents.size(); i++) {
-		Entity* ent = ents[i];
-		if (ent->getClassname() == "info_texlights") {
-			unordered_map<string, string> keys = ent->getAllKeyvalues();
-			for (auto item : keys) {
-				texlights[toUpperCase(item.first)] = item.second;
-			}
-			ents.erase(ents.begin() + i);
-			i--;
-		}
-	}
-
-	if (texlights.size())
-		logf("Parsed %d texlights from existing info_texlights entities.\n", texlights.size());
-
-	for (int i = 0; i < ents.size(); i++) {
-		Entity* ent = ents[i];
-		if (ent->getClassname() == "info_texlights") {
-			unordered_map<string, string> keys = ent->getAllKeyvalues();
-			for (auto item : keys) {
-				texlights[toUpperCase(item.first)] = item.second;
-			}
-			logf("Parsed %d texlights from existing info_texlights entity.\n", keys.size());
-
-			ents.erase(ents.begin() + i);
-			i--;
-		}
-	}
+unordered_map<string, string> Bsp::filter_tex_lights(const unordered_map<string, string>& inputLights) {
+	unordered_map<string, string> filtered;
 
 	unordered_set<string> textureNames;
 	for (int i = 0; i < faceCount; i++) {
@@ -8292,40 +8267,81 @@ bool Bsp::import_texlights(string fname) {
 		}
 	}
 
-	int oldSize = texlights.size();
+	for (auto item : inputLights) {
+		if (textureNames.count(toUpperCase(item.first))) {
+			filtered[item.first] = item.second;
+		}
+	}
+
+	return filtered;
+}
+
+unordered_map<string, string> Bsp::load_texlights_from_file(string fname) {
+	std::ifstream file(fname); // Open file
+	if (!file) {
+		logf("Failed to open file: %s\n", fname.c_str());
+		return unordered_map<string, string>();
+	}
+
+	unordered_map<string, string> texlights;
 
 	string line;
 	while (std::getline(file, line)) {
-		int comment = line.find("//");
-		if (comment != -1) {
-			line = line.substr(0, comment);
+		string name, args;
+		if (load_texlight_from_string(line, name, args)) {
+			texlights[name] = args;
 		}
-		line = trimSpaces(line);
-		
-		int space = line.find_first_of(" \t");
-		if (space == -1)
-			continue;
-
-		string name = toUpperCase(line.substr(0, space));
-
-
-		if (!textureNames.count(name)) {
-			continue; // Ignore the texlights for textures not used in the map
-		}
-
-		string args = trimSpaces(line.substr(space));
-		texlights[name] = args;
 	}
 
-	if (texlights.size() == oldSize) {
-		logf("Texlight file had 0 definitions for textures used in this map: %s\n", fname.c_str());
-	}
-	else {
-		logf("Loaded %d texlights from file: %s\n", texlights.size() - oldSize, fname.c_str());
-	}
+	return filter_tex_lights(texlights);
+}
 
-	if (!texlights.size()) {
+bool Bsp::load_texlight_from_string(string line, string& name, string& args) {
+	int comment = line.find("//");
+	if (comment != -1) {
+		line = line.substr(0, comment);
+	}
+	line = trimSpaces(line);
+
+	int space = line.find_first_of(" \t");
+	if (space == -1)
 		return false;
+
+	name = toUpperCase(line.substr(0, space));
+	args = trimSpaces(line.substr(space));
+	
+	return true;
+}
+
+bool Bsp::add_texlights(const unordered_map<string, string>& newLights) {
+	unordered_map<string, string> texlights = get_tex_lights();
+
+	bool anyChanges = false;
+
+	if (texlights.size())
+		logf("Parsed %d texlights from existing info_texlights entities.\n", texlights.size());
+
+	int oldSize = texlights.size();
+
+	unordered_map<string, string> filteredNewLights = filter_tex_lights(newLights);
+
+	if (!filteredNewLights.size()) {
+		logf("No new texlights to add/update.\n");
+		return false;
+	}
+
+	logf("Added/updated %d texlights\n", filteredNewLights.size());
+	for (auto item : filteredNewLights) {
+		texlights[toUpperCase(item.first)] = item.second;
+	}
+
+	for (int i = 0; i < ents.size(); i++) {
+		Entity* ent = ents[i];
+		if (ent->getClassname() == "info_texlights") {
+			delete ent;
+			ents.erase(ents.begin() + i);
+			i--;
+		}
 	}
 
 	Entity* texlights_ent = new Entity();
@@ -8346,6 +8362,182 @@ bool Bsp::import_texlights(string fname) {
 	ents.push_back(texlights_ent);
 
 	return true;
+}
+
+bool Bsp::replace_texlights(string texlightString) {
+	vector<string> lines = splitString(texlightString, "\n");
+
+	unordered_map<string, string> texlights;
+
+	for (string line : lines) {
+		int comment = line.find("//");
+		if (comment != -1) {
+			line = line.substr(0, comment);
+		}
+		line = trimSpaces(line);
+
+		int space = line.find_first_of(" \t");
+		if (space == -1)
+			continue;
+
+		string name = toUpperCase(line.substr(0, space));
+		string args = trimSpaces(line.substr(space));
+		texlights[name] = args;
+	}
+
+	for (int i = 0; i < ents.size(); i++) {
+		Entity* ent = ents[i];
+		if (ent->getClassname() == "info_texlights") {
+			delete ent;
+			ents.erase(ents.begin() + i);
+			i--;
+		}
+	}
+
+	return add_texlights(texlights);
+}
+
+unordered_map<string, string> Bsp::estimate_texlights(int epsilon) {
+	unordered_map<string, string> texlights = get_tex_lights();
+	unordered_map<string, string> newTexlights;
+
+	unordered_set<string> light_surface_names;
+	unordered_set<string> global_light_surface_names; // texture names that are always affected by light_surface
+	vector<Entity*> light_surface_ents;
+	for (Entity* ent : ents) {
+		string cname = ent->getClassname();
+		if (cname == "light_surface" || cname == "light" || cname == "light_spot") {
+			string texname = toUpperCase(ent->getKeyvalue("_tex"));
+			if (texname.empty())
+				continue;
+
+			light_surface_ents.push_back(ent);
+
+			if (!ent->hasKey("_frange") && !ent->hasKey("_fdist") && !ent->hasKey("_fclass") && !ent->hasKey("_fname")) {
+				global_light_surface_names.insert(texname);
+			}
+			else {
+				light_surface_names.insert(texname);
+			}
+		}
+	}
+
+	for (int i = 0; i < textureCount; i++) {
+		BSPMIPTEX* tex = get_texture(i);
+
+		if (!tex || is_embedded_rad_texture_name(tex->szName))
+			continue;
+		
+		string surfaceName = toUpperCase(tex->szName);
+
+		if (global_light_surface_names.count(surfaceName)) {
+			// a light_surface entity in the map is affecting every face using this texture,
+			// so adding it as a texlight would have no effect.
+			continue;
+		}
+
+		if (texlights.count(surfaceName)) {
+			// already specified in info_texlights
+			continue;
+		}
+
+		// true if only some faces are affected by light_surface ents in the map
+		bool affectedByLightSurface = light_surface_names.count(surfaceName);
+
+		bool anyLightmaps = false;
+		bool isTexlight = true;
+		bool hasLightcolor = false;
+		COLOR3 minColor(255, 255, 255);
+		COLOR3 maxColor(0,0,0);
+		const int defaultBrightness = 8000; // better too bright than too dark
+		int numFaces = 0;
+
+		for (int k = 0; k < faceCount; k++) {
+			BSPFACE& face = faces[k];
+			BSPTEXTUREINFO& info = texinfos[faces[k].iTextureInfo];
+			if (get_texture(info.iMiptex) != tex) {
+				continue;
+			}
+
+			if (info.nFlags & TEX_SPECIAL) {
+				continue; // special faces don't have lightmaps
+			}
+
+			if (affectedByLightSurface) {
+				// TODO: skip face if this face is affected by light_surface
+			}
+
+			int size[2];
+			if (!GetFaceLightmapSize(this, k, size)) {
+				debugf("Invalid extents for face %d. Can't check lightmaps", k);
+				continue;
+			}
+			int w = size[0];
+			int h = size[1];
+
+			if (face.nStyles[0] == 255) {
+				continue; // pitch black faces can't be texlights
+			}
+
+			// texlights can receive lighting (c1a0 monitor) so don't skip if it has lightstyles
+			/*
+			if (face.nStyles[1] != 255) {
+				isTexlight = false;
+				break; // texlights receive no lighting, so this can't be a texlight if it has styles
+			}
+			*/
+
+			anyLightmaps = true;
+			numFaces++;
+
+			int lightmapSz = w * h * sizeof(COLOR3);
+			int offset = face.nLightmapOffset;
+			COLOR3* lightSrc = (COLOR3*)(lightdata + offset);			
+			for (int y = 0; y < h && isTexlight; y++) {
+				for (int x = 0; x < w; x++) {
+					COLOR3 color = lightSrc[y * w + x];
+					minColor.r = min(minColor.r, color.r);
+					minColor.g = min(minColor.g, color.g);
+					minColor.b = min(minColor.b, color.b);
+					maxColor.r = max(maxColor.r, color.r);
+					maxColor.g = max(maxColor.g, color.g);
+					maxColor.b = max(maxColor.b, color.b);
+				}
+			}
+
+			if (!isTexlight) {
+				break;
+			}
+		}
+
+		COLOR3 avgColor(
+			minColor.r + (maxColor.r - minColor.r) * 0.5f,
+			minColor.g + (maxColor.g - minColor.g) * 0.5f,
+			minColor.b + (maxColor.b - minColor.b) * 0.5f
+		);
+		int maxChannel = max(avgColor.r, max(avgColor.g, avgColor.b));
+		if (maxChannel < 90) {
+			// too dark to be a texlight. With -dlight 1.0, the minimum value
+			// for the brightest texlight color channel is 92.
+			isTexlight = false;
+		}
+		else {
+			if (abs((int)minColor.r - (int)maxColor.r) > epsilon
+				|| abs((int)minColor.g - (int)maxColor.g) > epsilon
+				|| abs((int)minColor.b - (int)maxColor.b) > epsilon) {
+				// lightmap is not entirely the same color as every other lightmap pixel
+				// for every other lightmap for this texture. Must not be a texlight.
+				isTexlight = false;
+			}
+		}
+
+		if (isTexlight && anyLightmaps) {
+			newTexlights[tex->szName] = to_string(maxColor.r) + " " + to_string(maxColor.g) + " "
+				+ to_string(maxColor.b) + " " + to_string(defaultBrightness);
+		}
+	}
+
+	return newTexlights;
 }
 
 BSPMIPTEX* Bsp::get_texture(int iMiptex) {

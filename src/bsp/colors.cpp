@@ -12,6 +12,10 @@ bool operator==(COLOR3 c1, COLOR3 c2) {
 	return c1.r == c2.r && c1.g == c2.g && c1.b == c2.b;
 }
 
+bool operator!=(COLOR3 c1, COLOR3 c2) {
+	return c1.r != c2.r || c1.g != c2.g || c1.b != c2.b;
+}
+
 COLOR4 operator*(COLOR4 c, float scale)
 {
 	c.r *= scale;
@@ -22,4 +26,8 @@ COLOR4 operator*(COLOR4 c, float scale)
 
 bool operator==(COLOR4 c1, COLOR4 c2) {
 	return c1.r == c2.r && c1.g == c2.g && c1.b == c2.b && c1.a == c2.a;
+}
+
+bool operator!=(COLOR4 c1, COLOR4 c2) {
+	return c1.r != c2.r || c1.g != c2.g || c1.b != c2.b || c1.a != c2.a;
 }

@@ -93,6 +93,9 @@ private:
 	bool openSavedTabs = false;
 	bool transparentClipnodes = true;
 	bool showDownscalePopup = false;
+	bool showRadPrepPopup = false;
+	bool refreshTexlightList = false;
+	unordered_map<string, string> texlights;
 
 	ImFont* smallFont;
 	ImFont* largeFont;
