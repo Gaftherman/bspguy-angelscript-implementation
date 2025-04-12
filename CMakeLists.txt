@@ -56,6 +56,7 @@ set(SOURCE_FILES
 	src/util/Line2D.h			src/util/Line2D.cpp
 	src/util/mstream.h			src/util/mstream.cpp
 	src/util/ThreadSafeInt.h	src/util/ThreadSafeInt.cpp
+	src/util/bmp.h				src/util/bmp.cpp
 	src/globals.h				src/globals.cpp
 	
 	# Navigation meshes
@@ -287,7 +288,8 @@ if(MSVC)
 												src/util/mstream.h
 												src/util/lzma_util.h
 												src/util/ThreadSafeInt.h
-												src/util/mat4x4.h)
+												src/util/mat4x4.h
+												src/util/bmp.h)
 												
 	source_group("Source Files\\util" FILES		src/util/util.cpp
 												src/util/vectors.cpp
@@ -296,7 +298,8 @@ if(MSVC)
 												src/util/mstream.cpp
 												src/util/lzma_util.cpp
 												src/util/ThreadSafeInt.cpp
-												src/util/mat4x4.cpp)
+												src/util/mat4x4.cpp
+												src/util/bmp.cpp)
 												
 	source_group("Header Files\\nav" FILES		src/nav/NavMesh.h
 												src/nav/NavMeshGenerator.h

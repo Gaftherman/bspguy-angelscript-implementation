@@ -4028,6 +4028,32 @@ WADTEX Bsp::load_texture(int textureIdx) {
 	return out;
 }
 
+bool Bsp::replace_texture(int textureIdx, WADTEX& newtex) {
+	BSPMIPTEX* tex = get_texture(textureIdx);
+	if (!tex) {
+		return false;
+	}
+
+	memcpy(newtex.szName, tex->szName, MAXTEXTURENAME);
+	tex->szName[0] = 0;
+
+	int newIdx = add_texture(newtex);
+
+	for (int i = 0; i < texinfoCount; i++) {
+		BSPTEXTUREINFO& tinfo = texinfos[i];
+		if (tinfo.iMiptex == textureIdx) {
+			tinfo.iMiptex = newIdx;
+		}
+	}
+
+	tex = get_texture(textureIdx);
+	if (tex && (newtex.nWidth != tex->nWidth || newtex.nHeight != tex->nHeight)) {
+		adjust_resized_texture_coordinates(newIdx, tex->nWidth, tex->nHeight);
+	}
+
+	return true;
+}
+
 void Bsp::adjust_resized_texture_coordinates(BSPFACE& face, BSPTEXTUREINFO& info, int newWidth, int newHeight, int oldWidth, int oldHeight) {
 	// scale up face texture coordinates
 	float scaleX = newWidth / (float)oldWidth;

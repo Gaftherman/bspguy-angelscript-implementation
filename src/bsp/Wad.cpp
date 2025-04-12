@@ -3,6 +3,8 @@
 #include <iostream>
 #include <fstream>
 #include <string.h>
+#include <lodepng.h>
+#include "quant.h"
 
 #ifdef WIN32
 	#define strcasecmp _stricmp
@@ -271,3 +273,134 @@ bool Wad::write( std::string filename, WADTEX* textures, int numTex )
 	return true;
 }
 
+WADTEX loadTextureFromPng(const std::string& filename) {
+	WADTEX out;
+	memset(&out, 0, sizeof(WADTEX));
+	
+	uint8_t* pngpixels;
+	unsigned int w, h;
+
+	if (lodepng_decode32_file(&pngpixels, &w, &h, filename.c_str())) {
+		return out;
+	}
+
+	if (w % 16 != 0 || h % 16 != 0) {
+		logf("Image dimensions must be divisible by 16\n");
+		return out;
+	}
+
+	COLOR4* srcData = (COLOR4*)pngpixels;
+
+	// find a color to use as the invisible color
+	bool isMasked = false;
+	const int numMaskColors = 5;
+	COLOR3 maskColors[numMaskColors] = {
+		COLOR3(0, 0, 255),
+		COLOR3(255, 0, 255),
+		COLOR3(0, 255, 0),
+		COLOR3(0, 255, 255),
+		COLOR3(255, 255, 0),
+	};
+	bool validMaskColors[numMaskColors];
+	memset(validMaskColors, 1, sizeof(bool) * numMaskColors);
+
+	for (int i = 0; i < w * h; i++) {
+		COLOR4& c = srcData[i];
+		for (int k = 0; k < numMaskColors; k++) {
+			if (c.a < 128) {
+				isMasked = true;
+			} else if (c.rgb() == maskColors[k]) {
+				validMaskColors[k] = false;
+			}
+		}
+	}
+
+	COLOR3 maskColor = COLOR3(1, 2, 3);
+	for (int k = 0; k < numMaskColors; k++) {
+		if (validMaskColors[k]) {
+			maskColor = maskColors[k];
+			break;
+		}
+	}
+
+	vector<COLOR3> colors;
+	COLOR3* rgbData = new COLOR3[w * h];
+	bool* maskData = new bool[w * h];
+	memset(maskData, 0, sizeof(bool) * w * h);
+
+	for (int i = 0; i < w * h; i++) {
+		COLOR4& c = srcData[i];
+		COLOR3& dst = rgbData[i];
+		if (c.a < 128) {
+			dst = maskColor;
+			maskData[w * h] = true;
+		}
+		else {
+			dst = c.rgb();
+			maskData[w * h] = false;
+		}
+
+		bool uniqueColor = true;
+		for (int i = 0; i < colors.size(); i++) {
+			if (dst == colors[i]) {
+				uniqueColor = false;
+				break;
+			}
+		}
+
+		if (uniqueColor) {
+			colors.push_back(dst);
+		}
+	}
+
+	if (colors.size() > 256) {
+		logf("Quantized %d colors to 256 colors\n", colors.size());
+		if (isMasked) {
+			// convert mask color to black for quantizing
+			for (int i = 0; i < w * h; i++) {
+				if (maskData[i]) {
+					rgbData[i] = COLOR3();
+				}
+			}
+			colors = median_cut_quantize(rgbData, w * h, 255);
+			for (int i = 0; i < w * h; i++) {
+				if (maskData[i]) {
+					rgbData[i] = maskColor;
+				}
+			}
+			while (colors.size() < 255) {
+				colors.push_back(COLOR3());
+			}
+			colors.push_back(maskColor);
+		}
+		else {
+			colors = median_cut_quantize(rgbData, w * h, 256);
+			while (colors.size() < 256) {
+				colors.push_back(COLOR3());
+			}
+		}
+	}
+	else {
+		if (isMasked) {
+			// don't include the mask color twice
+			for (int i = 0; i < colors.size(); i++) {
+				if (colors[i] == maskColor) {
+					colors.erase(colors.begin() + i);
+					break;
+				}
+			}
+		}
+		while (colors.size() < 255) {
+			colors.push_back(COLOR3());
+		}
+		colors.push_back(isMasked ? maskColor : COLOR3());
+	}
+
+	out.loadRGB(rgbData, &colors[0], w, h);
+
+	delete[] rgbData;
+	delete[] maskData;
+	delete[] pngpixels;
+
+	return out;
+}

@@ -20,6 +20,7 @@
 #include <lzma_util.h>
 #include "BaseRenderer.h"
 #include <unordered_set>
+#include "bmp.h"
 
 // embedded binary data
 #include "fonts/notosans.h"
@@ -40,6 +41,9 @@ char const* bspFilterPatterns[1] = { "*.bsp" };
 char const* entFilterPatterns[1] = { "*.ent" };
 char const* wadFilterPatterns[1] = { "*.wad" };
 char const* radFilterPatterns[1] = { "*.rad" };
+char const* imgFilterPatterns[2] = { "*.bmp", "*.png" };
+char const* pngFilterPatterns[1] = { "*.png" };
+char const* bmpFilterPatterns[1] = { "*.bmp" };
 
 bool editWasOpen = false;
 
@@ -6627,6 +6631,7 @@ void Gui::drawLightMapTool() {
 void Gui::drawTextureTool() {
 	ImGui::SetNextWindowSize(ImVec2(300, 570), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(200, 420), ImVec2(FLT_MAX, app->windowHeight));
+	ImGuiContext& g = *GImGui;
 
 	static uint16_t resizeWidth = 0;
 	static uint16_t resizeHeight = 0;
@@ -7070,8 +7075,105 @@ void Gui::drawTextureTool() {
 		ImVec2 imgSize = ImVec2(imgWidth, imgWidth);
 		if (ImGui::ImageButton("texicon", textureId, imgSize, ImVec2(0, 0), ImVec2(1, 1))) {
 			logf("Texture browser not implemented.\n");
+		}
+		if (ImGui::BeginPopupContextItem()) {
+			int mip = map->texinfos[map->faces[app->pickInfo.faces[0]].iTextureInfo].iMiptex;
 
-			//ImGui::OpenPopup("Texture Browser");
+			if (ImGui::MenuItem("Import")) {
+				char* fname = tinyfd_openFileDialog("Import Texture", "", 2, imgFilterPatterns, "Image (*.bmp, *.png)", 1);
+				
+				if (fname) {
+					string fpath = fname;
+					int lastDot = fpath.find(".");
+					string ext = "";
+					if (lastDot != -1) {
+						ext = toLowerCase(fpath.substr(lastDot + 1));
+					}
+
+					WADTEX tex;
+					if (ext == "bmp") {
+						tex = load8BitBMP(fname);
+					}
+					else if (ext == "png") {
+						tex = loadTextureFromPng(fname);
+					}
+					else {
+						logf("Invalid file type '%s'\n", ext.c_str());
+					}
+
+ 					if (tex.data) {
+						LumpReplaceCommand* command = new LumpReplaceCommand("Import Texture");
+
+						if (map->replace_texture(mip, tex)) {
+							map->remove_unused_model_structures().print_delete_stats(1);
+							logf("Imported new texture data for %s\n", tex.szName);
+							command->pushUndoState();
+						}
+						else {
+							delete command;
+						}
+					}
+				}
+			}
+			tooltip(g, "Import a PNG/BMP file to replace this texture");
+
+			if (ImGui::MenuItem("Export as BMP")) {
+				char* fname = tinyfd_saveFileDialog("Export Texture", (string(textureName) + ".bmp").c_str(),
+					1, bmpFilterPatterns, "BMP (*.bmp)");
+
+				if (fname) {
+					WADTEX tex = map->load_texture(mip);
+
+					if (tex.data) {
+						save8BitBMP(fname, tex);
+						logf("Wrote %s\n", fname);
+					}
+					else {
+						logf("failed to load texture %d\n", mip);
+					}
+				}
+			}
+			tooltip(g, "Export this texture as an 8-bit BMP file.");
+
+			if (ImGui::MenuItem("Export as PNG")) {
+				char* fname = tinyfd_saveFileDialog("Export Texture", (string(textureName) + ".png").c_str(),
+					1, pngFilterPatterns, "PNG (*.png)");
+
+				if (fname) {
+					WADTEX tex = map->load_texture(mip);
+
+					if (tex.data) {
+						COLOR3* pal = tex.getPalette();
+						bool isMasked = textureName[0] == '{';
+						COLOR3 maskColor = pal[255];
+						uint8_t* srcData = tex.getMip(0);
+						COLOR4* pngPixels = new COLOR4[tex.nWidth * tex.nHeight];
+						for (int y = 0; y < tex.nHeight; y++) {
+							for (int x = 0; x < tex.nWidth; x++) {
+								COLOR3& src = pal[srcData[y * tex.nWidth + x]];
+								COLOR4& dst = pngPixels[y * tex.nWidth + x];
+								dst.r = src.r;
+								dst.g = src.g;
+								dst.b = src.b;
+								dst.a = (isMasked && maskColor == src) ? 0 : 255;
+							}
+						}
+
+						if (!lodepng_encode32_file(fname, (uint8_t*)pngPixels, tex.nWidth, tex.nHeight)) {
+							logf("Failed to save texture as PNG\n", fname);
+						}
+						else {
+							logf("Wrote %s\n", fname);
+						}
+					}
+					else {
+						logf("failed to load texture %d\n", mip);
+					}
+				}
+			}
+			tooltip(g, "Export this texture as a 32-bit PNG file.");
+
+			ImGui::EndPopup();
 		}
 
 		ImGui::Text(("Source: " + texture_src).c_str());

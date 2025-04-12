@@ -292,6 +292,8 @@ public:
 	// returns the embedded texture data or texture data from WAD, if it exists
 	WADTEX load_texture(int textureIdx);
 
+	bool replace_texture(int textureIdx, WADTEX& tex);
+
 	vector<string> get_wad_names();
 
 	// returns the WAD or BSP name the texture is loaded from
