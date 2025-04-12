@@ -282,7 +282,8 @@ public:
 
 	bool embed_texture(int textureId, vector<Wad*>& wads);
 
-	bool unembed_texture(int textureId, vector<Wad*>& wads, bool force=false);
+	// return 1 on success, 0 on failure, 2 on success and resize
+	int unembed_texture(int textureId, vector<Wad*>& wads, bool force=false);
 
 	// adds a texture reference to the BSP (does not embed it)
 	// returns an iMipTex for use in texture infos

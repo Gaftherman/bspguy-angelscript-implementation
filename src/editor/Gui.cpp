@@ -1788,7 +1788,7 @@ void Gui::drawMenuBar() {
 						continue;
 					}
 
-					if (map->unembed_texture(i, wads, true)) {
+					if (map->unembed_texture(i, wads, true) > 0) {
 						count++;
 					}
 				}
@@ -6863,9 +6863,12 @@ void Gui::drawTextureTool() {
 				}
 
 				if (!isEmbedded && isActuallyEmbedded) {
-					if (map->unembed_texture(mip, wads)) {
+					int ret = map->unembed_texture(mip, wads);
+					if (ret > 0) {
 						isEmbedded = false;
 						anySuccess = true;
+						if (ret == 2)
+							app->mapRenderer->reloadTextures();
 					}
 					else
 						isEmbedded = true;
@@ -6958,6 +6961,10 @@ void Gui::drawTextureTool() {
 			if (!faceUndoCommand)
 				faceUndoCommand = new FacesEditCommand("Edit Face");
 			
+			if (scaledX || scaledY) {
+				loadedLimit[SORT_EXTENTS] = false;
+			}
+
 			uint32_t newMiptex = 0;
 			bool texturesNeedReload = false;
 			if (textureChanged) {

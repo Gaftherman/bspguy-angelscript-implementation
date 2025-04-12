@@ -3853,13 +3853,13 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 	return embedded;
 }
 
-bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
+int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
 	if (tex.nOffsets[0] == 0) {
 		logf("Texture %s is already unembedded\n", tex.szName);
-		return false;
+		return 0;
 	}
 
 	int sz = tex.nWidth * tex.nHeight;	   // miptex 0
@@ -3871,6 +3871,7 @@ bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	int newTexBufferSz = header.lump[LUMP_TEXTURES].nLength - texDataSz;
 
 	// reset texture dimensions in case it was edited inside the BSP
+	bool wasResized = false;
 	bool isInWad = false;
 	for (int k = 0; k < wads.size(); k++) {
 		if (wads[k]->hasTexture(tex.szName)) {
@@ -3882,6 +3883,7 @@ bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 				tex.nWidth = wadTex->nWidth;
 				tex.nHeight = wadTex->nHeight;
 				adjust_resized_texture_coordinates(textureId, oldWidth, oldHeight);
+				wasResized = true;
 			}
 
 			isInWad = true;
@@ -3891,7 +3893,7 @@ bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	}
 	if (!isInWad && !force) {
 		logf("Aborted unembed of %s. No WAD contains this texture. Data would be lost.\n", tex.szName);
-		return false;
+		return 0;
 	}
 
 	for (int i = 0; i < textureCount; i++) {
@@ -3916,7 +3918,7 @@ bool Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	header.lump[LUMP_TEXTURES].nLength -= texDataSz;
 	update_lump_pointers();
 
-	return true;
+	return wasResized ? 2 : 1;
 }
 
 int Bsp::add_texture_from_wad(WADTEX* tex) {
@@ -8573,6 +8575,7 @@ int Bsp::delete_embedded_rad_textures(Bsp* originalMap) {
 
 			if (!radinfo) {
 				numBadRadTexture++;
+				continue;
 			}
 		}
 

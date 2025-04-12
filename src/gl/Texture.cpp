@@ -87,6 +87,9 @@ vector<COLOR3> Texture::resample(COLOR3* srcData, int srcW, int srcH, COLOR3* ds
 		}
 		delete[] nearestResamp;
 
+		while (palette.size() < 255) {
+			palette.push_back(COLOR3());
+		}
 		palette.push_back(maskColor);
 	}
 	else {
@@ -124,6 +127,9 @@ void Texture::generateMipMaps(int mipLevels) {
 			dst.r = src.r;
 			dst.g = src.g;
 			dst.b = src.b;
+			if (src.a == 0) {
+				dst = COLOR3();
+			}
 		}
 	}
 
@@ -134,6 +140,7 @@ void Texture::generateMipMaps(int mipLevels) {
 
 		COLOR3* mipData24 = new COLOR3[mipWidth * mipHeight];
 		base::ResampleImage24((byte*)data24, width, height, (byte*)mipData24, mipWidth, mipHeight,
+			//base::KernelType::KernelTypeNearest); // for masked textures
 			base::KernelType::KernelTypeAverage); // checkerboards look less flickery with this
 			//base::KernelType::KernelTypeBilinear);
 			//base::KernelType::KernelTypeLanczos3);
