@@ -9,6 +9,10 @@
 // - force rotate not refreshing entities anymore
 // - mipmaps show blue mask color when render modes are on
 // - rad textures darker than they should be due to lightmaps
+// - guide update: crash from leaves or smth (io_v1, crystal_mission_3b), new tools, rad, different subdivides
+// - hiding entity breaks point ents (crystal_mission_hl_4 squadmaker wave2_monster then check changevalues)
+// - black models for transparent textures (frightmanor)
+// - can't see model poly count in ent selection mode
 
 // todo:
 // ripent saftey warning

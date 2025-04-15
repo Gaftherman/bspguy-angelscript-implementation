@@ -406,6 +406,10 @@ void BspRenderer::loadLightmaps() {
 			// copy lightmap data into atlas
 			int lightmapSz = info.w * info.h * sizeof(COLOR3);
 			int offset = face.nLightmapOffset + s * lightmapSz;
+			if (offset + info.w * info.h > map->lightDataLength) {
+				logf("Face %d invalid lightmap %d\n", fmap.idx, s);
+				continue;
+			}
 			COLOR3* lightSrc = (COLOR3*)(map->lightdata + offset);
 			COLOR3* lightDst = (COLOR3*)(atlasTextures[atlasId]->data);
 			for (int y = 0; y < info.h; y++) {
@@ -2123,7 +2127,7 @@ bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& 
 		return false;
 	}
 
-	if (pickModelPoly(start, dir, vec3(), vec3(), 0, hullIdx, 0, faceIdx, bestDist)) {
+	if (!map->ents[0]->hidden && pickModelPoly(start, dir, vec3(), vec3(), 0, hullIdx, 0, faceIdx, bestDist)) {
 		entIdx = 0;
 		foundBetterPick = true;
 	}
@@ -2341,8 +2345,14 @@ int BspRenderer::getBestClipnodeHull(int modelIdx) {
 void PickInfo::selectEnt(int entIdx) {
 	Bsp* map = getMap();
 
-	if (entIdx >= 0 && entIdx < map->ents.size())
+	if (entIdx >= 0 && entIdx < map->ents.size()) {
+		for (int i = 0; i < ents.size(); i++) {
+			if (ents[i] == entIdx) {
+				return;
+			}
+		}
 		ents.push_back(entIdx);
+	}
 	else
 		logf("Failed to select ent index out of range %d\n", entIdx);
 

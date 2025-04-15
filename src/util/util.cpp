@@ -585,20 +585,24 @@ vector<vec3> getTriangularVerts(vector<vec3>& verts) {
 		return vector<vec3>();
 	}
 
-	for (int i = 1; i < verts.size(); i++) {
-		if (i == i1)
-			continue;
+	for (int pass = 0; pass < 2 && i2 == -1; pass++) {
+		float colinear = pass == 0 ? 0.99f : 0.999f;
 
-		if (verts[i] != verts[i0] && verts[i] != verts[i1]) {
-			vec3 ab = (verts[i1] - verts[i0]).normalize();
-			vec3 ac = (verts[i] - verts[i0]).normalize();
-			vec3 bc = (verts[i] - verts[i1]).normalize();
-			if (fabs(dotProduct(ab, ac)) > 0.99f && fabs(dotProduct(ab, bc)) > 0.99f) {
+		for (int i = 1; i < verts.size(); i++) {
+			if (i == i1)
 				continue;
-			}
 
-			i2 = i;
-			break;
+			if (verts[i] != verts[i0] && verts[i] != verts[i1]) {
+				vec3 ab = (verts[i1] - verts[i0]).normalize();
+				vec3 ac = (verts[i] - verts[i0]).normalize();
+				vec3 bc = (verts[i] - verts[i1]).normalize();
+				if (fabs(dotProduct(ab, ac)) > colinear && fabs(dotProduct(ab, bc)) > colinear) {
+					continue;
+				}
+
+				i2 = i;
+				break;
+			}
 		}
 	}
 

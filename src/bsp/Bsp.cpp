@@ -5193,7 +5193,7 @@ bool Bsp::validate() {
 			badModelRefCount++;
 		}
 		FgdClass* fgd = g_app->mergedFgd ? g_app->mergedFgd->getFgdClass(ent->getClassname()) : NULL;
-		if (fgd->classType == FGD_CLASS_SOLID && ent->getBspModelIdx() < 0) {
+		if (fgd && fgd->classType == FGD_CLASS_SOLID && ent->getBspModelIdx() < 0) {
 			missingBspModelCount++;
 		}
 	}

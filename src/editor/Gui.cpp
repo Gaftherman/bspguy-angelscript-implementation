@@ -600,56 +600,114 @@ void Gui::drawEditOptions(bool isMainMenu) {
 		ImGui::Separator();
 
 		bool anySolidSelected = false;
+		int numSolidsSelected = 0;
 		vector<Entity*> pickEnts = app->pickInfo.getEnts();
 		if (app->pickInfo.getEntIndex() > 0) {
 
 			for (Entity* ent : pickEnts) {
-				if (ent->getBspModelIdx() != -1) {
-					anySolidSelected = app->pickInfo.getEntIndex() != 0;
-					break;
+				if (ent->getBspModelIdx() != -1 && app->pickInfo.getEntIndex() != 0) {
+					anySolidSelected = true;
+					numSolidsSelected++;
 				}
 			}
 		}
 
-		if (ImGui::MenuItem("Copy BSP model", 0, false, !app->isLoading && anySolidSelected)) {
-			app->copyEnts(true);
-		}
-		tooltip(g, "Stores the entity and BSP model to the clipboard. Used to transfer BSP models between maps.\n\n"
-			"Textures are included and embedded after pasting, except for textures that already exist in the map. ");
-
-		if (ImGui::MenuItem("Duplicate BSP model", 0, false, !app->isLoading && anySolidSelected)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
-
-			for (Entity* ent : pickEnts) {
-				int oldModelIdx = ent->getBspModelIdx();
-				int newModelIdx = map->duplicate_model(oldModelIdx);
-				ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+		bool plural = numSolidsSelected > 1;
+		if (ImGui::BeginMenu(plural ? "BSP Models" : "BSP Model")) {
+			if (ImGui::MenuItem("Copy", 0, false, !app->isLoading && anySolidSelected)) {
+				app->copyEnts(true);
 			}
+			tooltip(g, "Stores the entity and BSP model to the clipboard. Used to transfer BSP models between maps.\n\n"
+				"Textures are included and embedded after pasting, except for textures that already exist in the map. ");
 
-			command->pushUndoState();
-		}
-		tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
-			"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
-			"This also prevents model edits from affecting multiple entities at once.");
+			if (ImGui::MenuItem("Deduplicate", 0, false, !app->isLoading && anySolidSelected && app->pickInfo.ents.size() > 1)) {
+				app->updateEntityLumpUndoState(map);
 
-		if (ImGui::MenuItem("Merge BSP models", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
-			LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+				int firstModel = pickEnts[0]->getBspModelIdx();
 
-			// remove origins from models so that they merge at offsets seen in the editor
-			int newIndex = map->merge_models(app->pickInfo.getEnts(), false);
+				vec3 minsA, maxsA, centerA;
+				map->get_model_vertex_bounds(firstModel, minsA, maxsA);
+				centerA = minsA + (maxsA - minsA) * 0.5f;
 
-			if (newIndex >= 0 || newIndex == -3) {
+				for (Entity* ent : pickEnts) {
+					int oldModelIdx = ent->getBspModelIdx();
+					if (oldModelIdx != firstModel) {
+						vec3 minsB, maxsB, centerB;
+						map->get_model_vertex_bounds(oldModelIdx, minsB, maxsB);
+						centerB = minsB + (maxsB - minsB) * 0.5f;
+						vec3 offset = centerB - centerA;
+						ent->setOrAddKeyvalue("origin", (ent->getOrigin() + offset).toKeyvalueString(true));
+						ent->setOrAddKeyvalue("model", "*" + to_string(firstModel));
+					}
+				}
+
+				app->pushEntityUndoState("Deduplicate Models");
+				app->mapRenderer->preRenderEnts();
+			}
+			tooltip(g, "Force entities to use the same BSP model.\n\n"
+				"The model used by the first entity you selected will be applied to all other selected entities."
+			);
+
+			if (ImGui::MenuItem("Duplicate", 0, false, !app->isLoading && anySolidSelected)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Duplicate BSP Model");
+
+				for (Entity* ent : pickEnts) {
+					int oldModelIdx = ent->getBspModelIdx();
+					int newModelIdx = map->duplicate_model(oldModelIdx);
+					ent->setOrAddKeyvalue("model", "*" + to_string(newModelIdx));
+				}
+
 				command->pushUndoState();
 			}
-			else {
-				delete command;
+			tooltip(g, "Create a copy of this BSP model and assign it to this entity.\n\n"
+				"In most cases you need to do this before you can use the scale/vertex/origin features in the Transformation widget. "
+				"This also prevents model edits from affecting multiple entities at once.");
 
-				if (newIndex == -2) {
-					confirmMerge = 2;
+			if (ImGui::MenuItem("Merge", "", false, !app->isLoading && app->pickInfo.ents.size() > 1)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Merge Models");
+
+				// remove origins from models so that they merge at offsets seen in the editor
+				int newIndex = map->merge_models(app->pickInfo.getEnts(), false);
+
+				if (newIndex >= 0 || newIndex == -3) {
+					command->pushUndoState();
+				}
+				else {
+					delete command;
+
+					if (newIndex == -2) {
+						confirmMerge = 2;
+					}
 				}
 			}
-		}
-		tooltip(g, "Merge solid entity models together.");
+			tooltip(g, "Merge solid entity models together.");
+
+			if (ImGui::MenuItem("Select Shared")) {
+				int oldSelection = app->pickInfo.ents.size();
+				vector<int> modelIndexes = app->pickInfo.getModelIndexes();
+
+				for (int i = 0; i < map->ents.size(); i++) {
+					int modelIdx = map->ents[i]->getBspModelIdx();
+					if (modelIdx <= 0) {
+						continue;
+					}
+
+					for (int k = 0; k < modelIndexes.size(); k++) {
+						if (modelIdx == modelIndexes[k]) {
+							app->pickInfo.selectEnt(i);
+							break;
+						}
+					}
+				}
+
+				logf("Selected %d additional entities\n", app->pickInfo.ents.size() - oldSelection);
+
+				app->postSelectEnt();
+			}
+			tooltip(g, "Select entities that share the selected BSP model(s).");
+
+			ImGui::EndMenu();
+		}		
 
 		if (ImGui::BeginMenu("Edit BSP Hulls", !app->isLoading)) {
 			if (ImGui::BeginMenu("Create", !app->invalidSolid && app->isTransformableSolid && anyValidHeadnode[0])) {
@@ -3016,7 +3074,7 @@ void Gui::drawDebugWidget() {
 					ImGui::Text("Model polies: %d", model.nFaces);
 
 					ImGui::Text("Face ID: %d", app->pickInfo.getFaceIndex());
-					ImGui::Text("Face Edges: %d", face.nEdges);
+
 					vec3 faceNormal = plane.vNormal * (face.nPlaneSide ? -1 : 1);
 
 					if (face.iTextureInfo < map->texinfoCount) {
@@ -3061,6 +3119,20 @@ void Gui::drawDebugWidget() {
 					const char* isVis = map->is_leaf_visible(leafPick, app->cameraOrigin) ? " (visible!)" : "";
 
 					ImGui::Text("Leaf IDs:%s%s", leafList.c_str(), isVis);
+				}
+			}
+
+			if (app->pickInfo.getFace()) {
+				BSPFACE& face = *app->pickInfo.getFace();
+				if (ImGui::CollapsingHeader(("Face Edges: " + to_string(face.nEdges)).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					for (int i = 0; i < face.nEdges; i++) {
+						int32_t edgeIdx = map->surfedges[face.iFirstEdge + i];
+						BSPEDGE& edge = map->edges[abs(edgeIdx)];
+						ImGui::Text("Edge %d = [%d, %d] ", edgeIdx, edge.iVertex[0], edge.iVertex[1]);
+
+						app->drawBox(map->verts[edge.iVertex[0]], 8, COLOR4(0, 128, 0, 255));
+					}
 				}
 			}
 
@@ -7002,6 +7074,8 @@ void Gui::drawTextureTool() {
 				if (validTexture) {
 					userStoppedEditing = true;
 				}
+
+				app->pickCount++;
 			}
 
 			set<int> modelRefreshes;
@@ -7216,7 +7290,7 @@ void Gui::drawTextureTool() {
 		byte* palette = (byte*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize + 2);
 		byte* srcPixels = (byte*)(map->textures + texOffset + tex.nOffsets[0]);
 
-		if (!originalTexture) {
+		if (!originalTexture && tex.nOffsets[0] != 0) {
 			originalTexture = new Texture(resizeOriginalWidth, resizeOriginalHeight);
 
 			COLOR3* srcColors = new COLOR3[tex.nWidth * tex.nHeight];
@@ -7233,7 +7307,7 @@ void Gui::drawTextureTool() {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		}
 
-		if (!previewTexture || reloadPreview) {
+		if ((!previewTexture || reloadPreview) && tex.nOffsets[0] != 0) {
 			if (previewTexture) {
 				delete previewTexture;
 			}
@@ -7328,19 +7402,23 @@ void Gui::drawTextureTool() {
 		ImGui::Text("Resized (%dx%d):", resizeWidth, resizeHeight);
 		ImGui::NextColumn();
 		int imgWidth = ImGui::GetContentRegionAvail().x;
-		float aspect = (float)originalTexture->height / originalTexture->width;
-		ImGui::Image(originalTexture->id, ImVec2(imgWidth, imgWidth * aspect));
+		if (originalTexture) {
+			float aspect = (float)originalTexture->height / originalTexture->width;
+			ImGui::Image(originalTexture->id, ImVec2(imgWidth, imgWidth* aspect));
+		}
 		ImGui::NextColumn();
 		imgWidth = ImGui::GetContentRegionAvail().x;
-		aspect = (float)previewTexture->height / previewTexture->width;
-		ImGui::Image(previewTexture->id, ImVec2(imgWidth, imgWidth * aspect));
+		if (previewTexture) {
+			float aspect = (float)previewTexture->height / previewTexture->width;
+			ImGui::Image(previewTexture->id, ImVec2(imgWidth, imgWidth* aspect));
+		}
 		ImGui::Columns(1);
 
 		ImGui::Dummy(ImVec2(0, 5));
 		ImGui::Separator();
 		ImGui::Dummy(ImVec2(0, 5));
 
-		ImGui::BeginDisabled(resizeWidth == resizeOriginalWidth && resizeHeight == resizeOriginalHeight);
+		ImGui::BeginDisabled((resizeWidth == resizeOriginalWidth && resizeHeight == resizeOriginalHeight) || !originalTexture);
 		if (ImGui::Button("Resize", ImVec2(120, 0))) {
 			LumpReplaceCommand* command = new LumpReplaceCommand("Resize Texture");
 			map->downscale_texture(resizeTextureIdx, resizeWidth, resizeHeight, resampler.mode);

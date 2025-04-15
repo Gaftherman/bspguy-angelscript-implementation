@@ -567,6 +567,25 @@ void Renderer::renderLoop() {
 				glEnable(GL_CULL_FACE);
 			}
 
+			if (gui->showDebugWidget && pickInfo.getFace()) {
+				BSPFACE& face = *pickInfo.getFace();
+				Bsp* map = mapRenderer->map;
+				glDisable(GL_CULL_FACE);
+
+				for (int i = 0; i < face.nEdges; i++) {
+					int32_t edgeIdx = map->surfedges[face.iFirstEdge + i];
+					BSPEDGE& edge = map->edges[abs(edgeIdx)];
+					int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
+					drawBox(map->verts[vertIdx], 8, COLOR4(0, 128, 0, 255));
+					drawLine(map->verts[edge.iVertex[0]], map->verts[edge.iVertex[1]], COLOR4(128, 0, 255, 255));
+				
+					vec3 start = map->verts[edge.iVertex[0]];
+					vec3 end = map->verts[edge.iVertex[1]];
+					drawArrow(start, end, COLOR4(0, 255, 0, 255));
+				}
+				glEnable(GL_CULL_FACE);
+			}
+
 			glCheckError("Rendering debug clipnodes");
 
 			if ((g_settings.render_flags & (RENDER_ORIGIN | RENDER_MAP_BOUNDARY)) || hasCullbox) {
@@ -2576,6 +2595,35 @@ void Renderer::drawLine(vec3 start, vec3 end, COLOR4 color) {
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &verts[0], 2);
 	buffer.upload();
 	buffer.draw(GL_LINES);
+}
+
+void Renderer::drawArrow(vec3 start, vec3 end, COLOR4 color) {
+	struct cArrow {
+		cCube shaft; // minor todo: one face can be omitted. make a new struct
+		cPyramid tip;
+	};
+	int arrowVerts = 6 * 6 + (6 + 3 * 4);
+	
+	vec3 angles = VecToAngles((end - start).normalize());
+	mat4x4 rotMat;
+	rotMat.loadIdentity();
+	rotMat.rotateZ(-angles.x * (PI / 180.0f));
+	rotMat.rotateY(-angles.y * (PI / 180.0f));
+
+	float len = (end - start).length();
+	cArrow arrow;
+	arrow.shaft = cCube(vec3(-1, -1, -1), vec3(len - 16, 1, 1), color);
+	arrow.tip = cPyramid(vec3(len - 16, 0, 0), 4, 16, color);
+
+	cVert* rawVerts = (cVert*)&arrow;
+	for (int k = 0; k < arrowVerts; k++) {
+		vec3* pos = (vec3*)&rawVerts[k].x;
+		*pos = (rotMat * vec4(*pos, 1)).xyz() + start.flip();
+	}
+
+	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &arrow, arrowVerts);
+	buffer.upload();
+	buffer.draw(GL_TRIANGLES);
 }
 
 void Renderer::drawLine2D(vec2 start, vec2 end, COLOR4 color) {
