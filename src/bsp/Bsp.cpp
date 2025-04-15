@@ -3083,8 +3083,11 @@ bool Bsp::subdivide_face(int faceIdx, bool dryRunForExtents) {
 
 			*vertPtr++ = cutPoly[i];
 
-			// TODO: make fewer edges and make use of both vertexes?
-			*surfedgePtr++ = -(edgeOffset + i);
+			// IMPORTANT: Logically it shouldn't matter if you use the first or second index of
+			// the edge, but using the first one crashes the software renderer. You will see the
+			// face stretching out to infinity before the crash. Doesn't make sense because the
+			// same verts are visited and in the same order, just with a different offset.
+			*surfedgePtr++ = edgeOffset + i;
 		}
 	}
 
@@ -4952,6 +4955,7 @@ bool Bsp::validate() {
 	}
 	int numBadExtent = 0;
 	int numBadRadTexture = 0;
+	int numBadSubdivides = 0;
 	for (int i = 0; i < faceCount; i++) {
 		if (faces[i].iPlane < 0 || faces[i].iPlane >= planeCount) {
 			logf("Bad plane reference in face %d: %d / %d\n", i, faces[i].iPlane, planeCount);
@@ -4996,7 +5000,52 @@ bool Bsp::validate() {
 				numBadRadTexture++;
 			}
 		}
-		
+
+		// undo my fuckup subdivided faces in v5 that crash the software renderer
+		bool isBspguyFuckupFace = true;
+		BSPEDGE& firstEdge = edges[abs(surfedges[faces[i].iFirstEdge])];
+		int lastVert0 = firstEdge.iVertex[0] - 1;
+		for (int k = 0; k < faces[i].nEdges; k++) {
+			int32_t edgeIdx = surfedges[faces[i].iFirstEdge + k];
+			BSPEDGE& edge = edges[abs(edgeIdx)];
+
+			if (edgeIdx >= 0) {
+				// fuckups have all negative edge indices
+				isBspguyFuckupFace = false;
+				break;
+			}
+
+			if (edge.iVertex[0] != lastVert0 + 1) {
+				// fuckup edge 1st indice is always incremented by 1
+				isBspguyFuckupFace = false;
+				break;
+			}
+
+			// fuckup edge 2nd index is always the 1st + 1, until the last edge, which wraps
+			// to the 1st index of the 1st edge
+			if (k < faces[i].nEdges - 1) {
+				if (edge.iVertex[1] != edge.iVertex[0] + 1) {
+					isBspguyFuckupFace = false;
+					break;
+				}
+			}
+			else if (edge.iVertex[1] != firstEdge.iVertex[0]) {
+				// last edge should wrap around to the first
+				isBspguyFuckupFace = false;
+				break;
+			}
+
+			lastVert0 = edge.iVertex[0];
+		}
+
+		if (isBspguyFuckupFace) {
+			numBadSubdivides++;
+
+			// easy fix. Just use the 2nd indice in each edge instead of the 1st.
+			for (int k = 0; k < faces[i].nEdges; k++) {
+				surfedges[faces[i].iFirstEdge + k] *= -1;
+			}
+		}
 	}
 	if (numBadExtent) {
 		logf("Bad Surface Extents on %d faces\n", numBadExtent);
@@ -5004,6 +5053,10 @@ bool Bsp::validate() {
 	}
 	if (numBadRadTexture) {
 		logf("%d faces have invalid RAD textures. VHLT will complain about malformed faces.\n", numBadRadTexture);
+		isValid = false;
+	}
+	if (numBadSubdivides) {
+		logf("Bad v5 subdivides detected on %d faces. These crash the software renderer. (fixed!)\n", numBadSubdivides);
 		isValid = false;
 	}
 
