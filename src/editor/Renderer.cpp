@@ -567,6 +567,7 @@ void Renderer::renderLoop() {
 				glEnable(GL_CULL_FACE);
 			}
 
+			/*
 			if (gui->showDebugWidget && pickInfo.getFace()) {
 				BSPFACE& face = *pickInfo.getFace();
 				Bsp* map = mapRenderer->map;
@@ -585,6 +586,7 @@ void Renderer::renderLoop() {
 				}
 				glEnable(GL_CULL_FACE);
 			}
+			*/
 
 			glCheckError("Rendering debug clipnodes");
 

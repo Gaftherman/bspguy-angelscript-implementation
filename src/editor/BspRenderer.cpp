@@ -244,6 +244,7 @@ void BspRenderer::loadTextures() {
 }
 
 void BspRenderer::reload() {
+	g_app->isLoading = true;
 	preloadTextures();
 	updateLightmapInfos();
 	calcFaceMaths();
