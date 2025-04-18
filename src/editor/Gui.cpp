@@ -5413,11 +5413,14 @@ void Gui::drawWelcomePopup() {
 
 void Gui::drawLimitsSummary(Bsp* map, bool modalMode) {
 	if (!loadedStats) {
+		int worldleafCount = map->modelCount > 0 ? map->models[0].nVisLeafs : 0;
+
 		stats.clear();
 		stats.push_back(calcStat("AllocBlock", map->calc_allocblock_usage(), g_limits.max_allocblocks, false));
 		stats.push_back(calcStat("clipnodes", map->clipnodeCount, g_limits.max_clipnodes, false));
 		stats.push_back(calcStat("nodes", map->nodeCount, g_limits.max_nodes, false));
 		stats.push_back(calcStat("leaves", map->leafCount, g_limits.max_leaves, false));
+		stats.push_back(calcStat("worldleaves", worldleafCount, g_limits.max_worldleaves, false));
 		stats.push_back(calcStat("models", map->modelCount, g_limits.max_models, false));
 		stats.push_back(calcStat("faces", map->faceCount, g_limits.max_faces, false));
 		stats.push_back(calcStat("texinfos", map->texinfoCount, g_limits.max_texinfos, false));

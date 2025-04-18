@@ -24,6 +24,7 @@ struct MapLimits {
 	int max_faces;
 	int max_clipnodes;
 	int max_leaves;
+	int max_worldleaves; // a bug in the HL client lowers the leaf limit per-model
 	int max_marksurfaces;
 	int max_surfedges;
 	int max_edges;

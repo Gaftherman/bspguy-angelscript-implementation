@@ -765,6 +765,7 @@ void init_limits() {
 	g_engine_limits[ENGINE_HALF_LIFE].max_faces = 65535;
 	g_engine_limits[ENGINE_HALF_LIFE].max_clipnodes = 32767;
 	g_engine_limits[ENGINE_HALF_LIFE].max_leaves = 32760;
+	g_engine_limits[ENGINE_HALF_LIFE].max_worldleaves = 8192;
 	g_engine_limits[ENGINE_HALF_LIFE].max_marksurfaces = 65535;
 	g_engine_limits[ENGINE_HALF_LIFE].max_surfedges = 512000;
 	g_engine_limits[ENGINE_HALF_LIFE].max_edges = 256000;
@@ -786,6 +787,7 @@ void init_limits() {
 	g_engine_limits[ENGINE_SVEN_COOP].max_faces = 65535;
 	g_engine_limits[ENGINE_SVEN_COOP].max_clipnodes = 32768;
 	g_engine_limits[ENGINE_SVEN_COOP].max_leaves = 65536;
+	g_engine_limits[ENGINE_SVEN_COOP].max_worldleaves = 65536;
 	g_engine_limits[ENGINE_SVEN_COOP].max_marksurfaces = 65535;
 	g_engine_limits[ENGINE_SVEN_COOP].max_surfedges = 512000;
 	g_engine_limits[ENGINE_SVEN_COOP].max_edges = 256000;
