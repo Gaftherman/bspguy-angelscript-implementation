@@ -366,17 +366,15 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 	g_app->sprShader->modelMat->translate(ori.x, ori.z, -ori.y);
 	g_app->sprShader->modelMat->scale(scale, scale, scale);
 
+	// Worldcraft only sets y rotation, copy to Z (logic from Half-Life's env_sprite)
+	if (opts.vp_type == 0 && angles.y != 0 && angles.z == 0)
+	{
+		angles.z = angles.y;
+		angles.y = 0;
+	}
+
 	vec3 camAngles = vec3(0, -90 - g_app->cameraAngles.z, g_app->cameraAngles.x) * (PI / 180.0f);
 	vec3 entAngles = angles * (PI / 180.0f);
-
-	/*
-	// Worldcraft only sets y rotation, copy to Z
-	if (vp_type == 0 && pev->angles.y != 0 && pev->angles.z == 0)
-	{
-		pev->angles.z = pev->angles.y;
-		pev->angles.y = 0;
-	}
-	*/
 
 	int sprType = opts.vp_type > 0 ? opts.vp_type-1 : header->mode;
 
@@ -393,7 +391,7 @@ void SprRenderer::draw(vec3 ori, vec3 angles, Entity* ent, EntRenderOpts opts, C
 		g_app->sprShader->modelMat->rotateY(camAngles.y);
 		break;
 	case ORIENTED:
-		g_app->sprShader->modelMat->rotateY(entAngles.y);
+		g_app->sprShader->modelMat->rotateY(entAngles.y + PI);
 		g_app->sprShader->modelMat->rotateZ(entAngles.x);
 		g_app->sprShader->modelMat->rotateX(-entAngles.z);
 		break;
