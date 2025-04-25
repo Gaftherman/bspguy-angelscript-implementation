@@ -13,6 +13,7 @@
 // - hiding entity breaks point ents (crystal_mission_hl_4 squadmaker wave2_monster then check changevalues)
 // - black models for transparent textures (frightmanor)
 // - can't see model poly count in ent selection mode
+// - new tinyfd has folder picker?
 
 // todo:
 // ripent saftey warning

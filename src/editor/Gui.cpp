@@ -6694,10 +6694,6 @@ void Gui::drawLightMapTool() {
 		{
 			ImGui::Text("Multiple faces selected");
 		}
-		else
-		{
-			ImGui::Text("No face selected");
-		}
 
 	}
 	ImGui::End();
@@ -6737,6 +6733,55 @@ void Gui::drawTextureTool() {
 		if (mapRenderer == NULL || map == NULL || app->pickMode != PICK_FACE || app->pickInfo.faces.size() == 0)
 		{
 			ImGui::Text("No face selected");
+
+			static char findtex[MAXTEXTURENAME];
+			static char findfaceid[256];
+
+			ImGui::Dummy(ImVec2(0, 20));
+
+			ImGui::Text("Texture Name");
+			ImGui::InputText("##Texture", findtex, MAXTEXTURENAME);
+			ImGui::SameLine();
+			if (ImGui::Button("Find##texture")) {
+				int numSelect = 0;
+
+				for (int i = 0; i < map->faceCount; i++) {
+					BSPFACE& face = map->faces[i];
+					BSPTEXTUREINFO& tinfo = map->texinfos[face.iTextureInfo];
+					BSPMIPTEX* tex = map->get_texture(tinfo.iMiptex);
+
+					if ((tex && !strcmp(findtex, tex->szName)) || (!tex && findtex[0] == 0)) {
+						app->pickInfo.selectFace(i);
+						numSelect++;
+					}
+				}
+
+				logf("Selected %d faces with texture '%s'\n", numSelect, findtex);
+				g_app->mapRenderer->highlightPickedFaces(true);
+				g_app->updateTextureAxes();
+			}
+			tooltip(g, "Select all faces that use the given texture");
+
+			ImGui::Dummy(ImVec2(0, 20));
+
+			ImGui::Text("Face ID");
+			ImGui::InputText("##Face ID", findfaceid, 256);
+			ImGui::SameLine();
+			if (ImGui::Button("Find##faceid")) {
+				int faceid = atoi(findfaceid);
+
+				if (faceid >= 0 && faceid < map->faceCount) {
+					app->pickInfo.selectFace(faceid);
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+					logf("Selected face %d\n", faceid);
+				}
+				else {
+					logf("Invalid face ID %d (max is %d)\n", faceid, map->faceCount);
+				}
+			}
+			tooltip(g, "Select the face with the given ID. Useful for toubleshooting errors in the engine or compilers.");
+
 			ImGui::End();
 			return;
 		}
