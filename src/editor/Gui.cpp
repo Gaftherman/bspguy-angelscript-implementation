@@ -394,6 +394,9 @@ void Gui::draw3dContextMenus() {
 			if (ImGui::MenuItem("Paste texture", "Ctrl+V", false, copiedMiptex >= 0 && copiedMiptex < map->textureCount)) {
 				pasteTexture();
 			}
+
+			ImGui::Separator();
+
 			if (ImGui::MenuItem("Select all of this texture", "", false, app->pickInfo.faces.size() == 1)) {
 				Bsp* map = app->pickInfo.getMap();
 				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
@@ -433,6 +436,34 @@ void Gui::draw3dContextMenus() {
 				g_app->pickCount++;
 			}
 			tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
+
+			if (ImGui::MenuItem("Select bad extents of this texture", "", false, app->pickInfo.faces.size() == 1)) {
+				Bsp* map = app->pickInfo.getMap();
+				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
+				uint32_t selectedMiptex = texinfo.iMiptex;
+
+				g_app->mapRenderer->highlightPickedFaces(false);
+
+				app->pickInfo.deselect();
+				for (int i = 0; i < map->faceCount; i++) {
+					BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
+					if (info.iMiptex == selectedMiptex) {
+
+						int size[2];
+						if (GetFaceLightmapSize(map, i, size)) {
+							continue;
+						}
+
+						app->pickInfo.selectFace(i);
+					}
+				}
+				g_app->mapRenderer->highlightPickedFaces(true);
+				g_app->updateTextureAxes();
+
+				logf("Selected %d faces\n", app->pickInfo.faces.size());
+				g_app->pickCount++;
+			}
+			tooltip(g, "Select faces with bad surface extents that use this texture.");
 
 			Bsp* map = app->pickInfo.getMap();
 			bool isEmbedded = false;
