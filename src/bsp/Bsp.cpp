@@ -3395,9 +3395,9 @@ int Bsp::count_faces_for_mip(int miptex) {
 
 bool Bsp::fix_bad_surface_extents_with_scale(int faceIdx) {
 	BSPFACE& face = faces[faceIdx];
-	BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+	BSPTEXTUREINFO* info = &texinfos[face.iTextureInfo];
 
-	if (info.nFlags & TEX_SPECIAL) {
+	if (info->nFlags & TEX_SPECIAL) {
 		return false;
 	}
 
@@ -3406,12 +3406,15 @@ bool Bsp::fix_bad_surface_extents_with_scale(int faceIdx) {
 		return false;
 	}
 
-	vec2 oldScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
+	info = get_unique_texinfo(faceIdx);
+
+	vec2 oldScale(1.0f / info->vS.length(), 1.0f / info->vT.length());
+	BSPTEXTUREINFO oldInfo = *info;
 
 	bool scaledOk = false;
 	for (int i = 0; i < 128; i++) {
-		info.vS *= 0.5f;
-		info.vT *= 0.5f;
+		info->vS *= 0.5f;
+		info->vT *= 0.5f;
 
 		if (GetFaceLightmapSize(this, faceIdx, size)) {
 			scaledOk = true;
@@ -3419,16 +3422,15 @@ bool Bsp::fix_bad_surface_extents_with_scale(int faceIdx) {
 		}
 	}
 
+	int32_t texOffset = ((int32_t*)textures)[info->iMiptex + 1];
+	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+
 	if (!scaledOk) {
-		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		*info = oldInfo;
 		logf("Failed to fix face %s with scales %f %f\n", tex.szName, oldScale.x, oldScale.y);
-		return false;
 	}
 	else {
-		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-		vec2 newScale(1.0f / info.vS.length(), 1.0f / info.vT.length());
+		vec2 newScale(1.0f / info->vS.length(), 1.0f / info->vT.length());
 
 		vec3 center = get_face_center(faceIdx);
 		logf("Scaled up %s from %.2fx%.2f -> %.2fx%.2f (%d %d %d)\n",
