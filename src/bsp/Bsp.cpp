@@ -3327,6 +3327,8 @@ void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 		bad_extent_mips.insert(info.iMiptex);
 	}
 
+	unordered_set<int> embedded_mips;
+	unordered_set<int> resized_mips;
 	for (int mip : bad_extent_mips) {
 		int32_t texOffset = ((int32_t*)textures)[mip + 1];
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
@@ -3337,6 +3339,7 @@ void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 
 		if (tex.nWidth > minTextureDim || tex.nHeight > minTextureDim) {
 			embed_texture(mip, wads);
+			embedded_mips.insert(mip);
 		}
 	}
 
@@ -3356,10 +3359,19 @@ void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 
 		if (downscale_texture(info.iMiptex, minTextureDim, false)) {
 			// retry after downscaling
+			resized_mips.insert(info.iMiptex);
 			numShrink++;
 			fa--;
 			continue;
 		}
+	}
+
+	for (int mip : embedded_mips) {
+		if (resized_mips.find(mip) != resized_mips.end()) {
+			continue;
+		}
+
+		unembed_texture(mip, wads);
 	}
 
 	logf("Downscaled %d textures\n", numShrink);
