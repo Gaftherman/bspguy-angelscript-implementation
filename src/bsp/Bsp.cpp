@@ -8183,6 +8183,44 @@ BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(const char* texName) {
 			return get_embedded_rad_texinfo(info);
 		}
 	}
+
+	int hashOffset = strlen("__rad12345");
+	const char* searchhash = texName + hashOffset;
+	if (strlen(texName) < 12)
+		return NULL;
+
+	// no texture with that exact name exists, probably because bspguy changed the texinfo part
+	// try finding a match on the last part of the texture name which should be unique per texture
+	int matchOffset = 0;
+	int matchIdx = -1;
+
+	for (int i = 0; i < texinfoCount; i++) {
+		BSPTEXTUREINFO& info = texinfos[i];
+		BSPMIPTEX* tex = get_texture(info.iMiptex);
+
+		if (!is_embedded_rad_texture_name(tex->szName) || strlen(texName) < 12) {
+			continue;
+		}
+
+		const char* hashpart = tex->szName + strlen("__rad12345");
+
+		if (tex && !strncmp(searchhash, hashpart, MAXTEXTURENAME - hashOffset)) {
+			int offset = atoi(&tex->szName[5]);
+
+			if (matchIdx == -1 || offset == matchOffset) {
+				matchOffset = offset;
+				matchIdx = i;
+			}
+			else {
+				matchIdx = -1;
+				break;
+			}
+		}
+	}
+
+	if (matchIdx != 1) {
+		return get_embedded_rad_texinfo(texinfos[matchIdx]);
+	}
 	
 	return NULL;
 }

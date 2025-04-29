@@ -14,6 +14,8 @@
 // - black models for transparent textures (frightmanor)
 // - can't see model poly count in ent selection mode
 // - new tinyfd has folder picker?
+// - scale until valid scales ALL faces not just selected
+// - broken merged models if only one has HULL 0
 
 // todo:
 // ripent saftey warning
@@ -770,7 +772,7 @@ void init_limits() {
 	g_engine_limits[ENGINE_HALF_LIFE].max_marksurfaces = 65535;
 	g_engine_limits[ENGINE_HALF_LIFE].max_surfedges = 512000;
 	g_engine_limits[ENGINE_HALF_LIFE].max_edges = 256000;
-	g_engine_limits[ENGINE_HALF_LIFE].max_textures = 1024;
+	g_engine_limits[ENGINE_HALF_LIFE].max_textures = 4096;
 	g_engine_limits[ENGINE_HALF_LIFE].max_lightdata = 48 * 1024 * 1024;
 	g_engine_limits[ENGINE_HALF_LIFE].max_lightstyles = 32;
 	g_engine_limits[ENGINE_HALF_LIFE].max_visdata = 8 * 1024 * 1024;
