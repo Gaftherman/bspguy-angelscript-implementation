@@ -3298,7 +3298,7 @@ void Gui::drawKeyvalueEditor() {
 
 			if (fgdClass != NULL) {
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip((fgdClass->description).c_str());
+					ImGui::SetTooltip("%s", (fgdClass->description).c_str());
 				}
 			}
 
@@ -3618,7 +3618,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef*>& keys, 
 				tooltip += " : " + keyvalue.description;
 			}
 			//ImGui::SetTooltip((key + "(" + keyvalue.valueType + ") : " + niceName).c_str());
-			ImGui::SetTooltip(tooltip.c_str());
+			ImGui::SetTooltip("%s", tooltip.c_str());
 		}
 		ImGui::NextColumn();
 
@@ -3668,7 +3668,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef*>& keys, 
 						if (choice.desc.size()) {
 							tooltip += " : " + choice.desc;
 						}
-						ImGui::SetTooltip(tooltip.c_str());
+						ImGui::SetTooltip("%s", tooltip.c_str());
 					}
 				}
 
@@ -3734,7 +3734,7 @@ void Gui::drawKeyvalueEditor_SmartEditTab_GroupKeys(vector<KeyvalueDef*>& keys, 
 			}
 		}
 		if (ImGui::IsItemHovered() && ImGui::GetItemRectSize().x < ImGui::CalcTextSize(keyValues[bufferIdx]).x) {
-			ImGui::SetTooltip(keyValues[bufferIdx]);
+			ImGui::SetTooltip("%s", keyValues[bufferIdx]);
 		}
 
 		if (ImGui::IsItemHovered()) {
@@ -3844,7 +3844,7 @@ void Gui::drawKeyvalueEditor_FlagsTab(Fgd* fgd) {
 				if (desc.length()) {
 					tip += " : " + desc;
 				}
-				ImGui::SetTooltip(tip.c_str());
+				ImGui::SetTooltip("%s", tip.c_str());
 			}
 		}
 
@@ -4168,7 +4168,7 @@ void Gui::drawKeyvalueEditor_RawEditTab() {
 					ImGui::SetTooltip("This key does not exist in all selected entities");
 				}
 				else if (ImGui::GetItemRectSize().x - 50 < ImGui::CalcTextSize(keyNames[i]).x) {
-					ImGui::SetTooltip(keyNames[i]);
+					ImGui::SetTooltip("%s", keyNames[i]);
 				}
 			}
 
@@ -4213,7 +4213,7 @@ void Gui::drawKeyvalueEditor_RawEditTab() {
 					ImGui::SetTooltip("This value differs between the selected entities");
 				}
 				else if (ImGui::GetItemRectSize().x - 50 < ImGui::CalcTextSize(keyValues[i]).x) {
-					ImGui::SetTooltip(keyValues[i]);
+					ImGui::SetTooltip("%s", keyValues[i]);
 				}
 			}
 			if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -7447,7 +7447,7 @@ void Gui::drawTextureTool() {
 					reloadPreview = true;
 				}
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(resamplers[i].desc);
+					ImGui::SetTooltip("%s", resamplers[i].desc);
 				}
 			}
 			ImGui::EndCombo();
