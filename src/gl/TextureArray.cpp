@@ -54,7 +54,7 @@ void TextureArray::getBucketDimensions(int& width, int& height) {
 		if (width % height == 0) {
 			height = width;
 		}
-		else if (width % height == 0) {
+		else if (height % width == 0) {
 			width = height;
 		}
 	}

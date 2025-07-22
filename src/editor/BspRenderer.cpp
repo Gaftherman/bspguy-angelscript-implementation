@@ -95,6 +95,7 @@ void BspRenderer::preloadTextures() {
 	for (int i = 0; i < map->textureCount; i++) {
 		int32_t texOffset = ((int32_t*)map->textures)[i + 1];
 		if (texOffset == -1) {
+			miptexToTexArray[i] = glTextureArray->tally(16, 16);
 			continue;
 		}
 		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
