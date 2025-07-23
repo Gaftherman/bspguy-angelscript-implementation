@@ -855,8 +855,10 @@ bool Bsp::move(vec3 offset, int modelIdx) {
 void Bsp::move_texinfo(int idx, vec3 offset) {
 	BSPTEXTUREINFO& info = texinfos[idx];
 
-	int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(info.iMiptex);
+	if (!tex) {
+		return;
+	}
 
 	vec3 offsetDir = offset.normalize();
 	float offsetLen = offset.length();
@@ -882,11 +884,11 @@ void Bsp::move_texinfo(int idx, vec3 offset) {
 	info.shiftT -= shiftAmountT;
 
 	// minimize shift values (just to be safe. floats can be p wacky and zany)
-	while (fabs(info.shiftS) > tex.nWidth) {
-		info.shiftS += (info.shiftS < 0) ? (int)tex.nWidth : -(int)(tex.nWidth);
+	while (fabs(info.shiftS) > tex->nWidth) {
+		info.shiftS += (info.shiftS < 0) ? (int)tex->nWidth : -(int)(tex->nWidth);
 	}
-	while (fabs(info.shiftT) > tex.nHeight) {
-		info.shiftT += (info.shiftT < 0) ? (int)tex.nHeight : -(int)(tex.nHeight);
+	while (fabs(info.shiftT) > tex->nHeight) {
+		info.shiftT += (info.shiftT < 0) ? (int)tex->nHeight : -(int)(tex->nHeight);
 	}
 }
 
@@ -906,8 +908,6 @@ void Bsp::resize_lightmaps(LIGHTMAP* oldLightmaps, LIGHTMAP* newLightmaps) {
 			continue;
 
 		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
-		int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
 		int size[2];
 		GetFaceLightmapSize(this, i, size);
@@ -1554,18 +1554,20 @@ STRUCTCOUNT Bsp::remove_unused_model_structures(bool deleteModels) {
 		BSPTEXTUREINFO& tinfo = texinfos[faces[i].iTextureInfo];
 		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(tinfo);
 		if (radinfo) {
-			int32_t texOffset = ((int32_t*)textures)[tinfo.iMiptex + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+			BSPMIPTEX* tex = get_texture(tinfo.iMiptex);
+			if (!tex) {
+				continue;
+			}
 
-			int oldIndex = atoi(&tex.szName[5]);
+			int oldIndex = atoi(&tex->szName[5]);
 			int newIndex = remap.texInfo[oldIndex];
 
 			// from VHLT loadtextures.cpp
-			tex.szName[5] = '0' + (newIndex / 10000) % 10; // store the original texinfo
-			tex.szName[6] = '0' + (newIndex / 1000) % 10;
-			tex.szName[7] = '0' + (newIndex / 100) % 10;
-			tex.szName[8] = '0' + (newIndex / 10) % 10;
-			tex.szName[9] = '0' + (newIndex) % 10;
+			tex->szName[5] = '0' + (newIndex / 10000) % 10; // store the original texinfo
+			tex->szName[6] = '0' + (newIndex / 1000) % 10;
+			tex->szName[7] = '0' + (newIndex / 100) % 10;
+			tex->szName[8] = '0' + (newIndex / 10) % 10;
+			tex->szName[9] = '0' + (newIndex) % 10;
 		}
 	}
 
@@ -2639,10 +2641,12 @@ int Bsp::deduplicate_models(bool allowTextureShift, bool dryrun) {
 				BSPFACE& faceA = faces[modelA.iFirstFace + fa];
 				BSPTEXTUREINFO& infoA = texinfos[faceA.iTextureInfo];
 				BSPPLANE& planeA = planes[faceA.iPlane];
-				int32_t texOffset = ((int32_t*)textures)[infoA.iMiptex + 1];
-				BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-				float tw = 1.0f / (float)tex.nWidth;
-				float th = 1.0f / (float)tex.nHeight;
+				BSPMIPTEX* tex = get_texture(infoA.iMiptex);
+				if (!tex) {
+					continue;
+				}
+				float tw = 1.0f / (float)tex->nWidth;
+				float th = 1.0f / (float)tex->nHeight;
 
 				vector<CompareVert> vertsA;
 				for (int e = 0; e < faceA.nEdges; e++) {
@@ -2824,28 +2828,32 @@ float Bsp::calc_allocblock_usage() {
 }
 
 void Bsp::get_scaled_texture_dimensions(int textureIdx, float scale, int& newWidth, int& newHeight) {
-	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-
-	newWidth = max(16, (((int)(tex.nWidth * scale) + 7) / 16) * 16);
-	newHeight = max(16, (((int)(tex.nHeight * scale) + 7) / 16) * 16);
-	if (newWidth == tex.nWidth) {
-		newWidth = max(16, ((int)(tex.nWidth * scale) / 16) * 16);
+	BSPMIPTEX* tex = get_texture(textureIdx);
+	if (!tex) {
+		return;
 	}
-	if (newHeight == tex.nHeight) {
-		newHeight = max(16, ((int)(tex.nHeight * scale) / 16) * 16);
+
+	newWidth = max(16, (((int)(tex->nWidth * scale) + 7) / 16) * 16);
+	newHeight = max(16, (((int)(tex->nHeight * scale) + 7) / 16) * 16);
+	if (newWidth == tex->nWidth) {
+		newWidth = max(16, ((int)(tex->nWidth * scale) / 16) * 16);
+	}
+	if (newHeight == tex->nHeight) {
+		newHeight = max(16, ((int)(tex->nHeight * scale) / 16) * 16);
 	}
 }
 
 bool Bsp::has_bad_extents(int textureIdx, float scale) {
-	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(textureIdx);
+	if (!tex) {
+		return false;
+	}
 
 	int newWidth, newHeight;
 	get_scaled_texture_dimensions(textureIdx, scale, newWidth, newHeight);
 
-	float actualScaleX = (float)newWidth / tex.nWidth;
-	float actualScaleY = (float)newHeight / tex.nHeight;
+	float actualScaleX = (float)newWidth / tex->nWidth;
+	float actualScaleY = (float)newHeight / tex->nHeight;
 
 	for (int i = 0; i < faceCount; i++) {
 		BSPTEXTUREINFO& info = texinfos[faces[i].iTextureInfo];
@@ -2856,7 +2864,7 @@ bool Bsp::has_bad_extents(int textureIdx, float scale) {
 
 		BSPTEXTUREINFO oldInfo = info;
 		
-		adjust_resized_texture_coordinates(faces[i], info, newWidth, newHeight, tex.nWidth, tex.nHeight);
+		adjust_resized_texture_coordinates(faces[i], info, newWidth, newHeight, tex->nWidth, tex->nHeight);
 
 		int size[2];
 		if (!GetFaceLightmapSize(this, i, size)) {
@@ -3222,9 +3230,11 @@ void Bsp::fix_all_bad_surface_extents_with_subdivide(int subdivideLimitPerTextur
 	unordered_set<int> subdivide_mips;
 	for (auto item : bad_extent_mips_count) {
 		if (item.second < subdivideLimitPerTexture && item.second > 0) {
-			int32_t texOffset = ((int32_t*)textures)[item.first + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-			logf("%d subdivides needed for texture %s (%dx%d)\n", item.second, tex.szName, tex.nWidth, tex.nHeight);
+			BSPMIPTEX* tex = get_texture(item.first);
+			if (!tex) {
+				continue;
+			}
+			logf("%d subdivides needed for texture %s (%dx%d)\n", item.second, tex->szName, tex->nWidth, tex->nHeight);
 			subdivide_mips.insert(item.first);
 		}
 	}
@@ -3253,11 +3263,13 @@ void Bsp::fix_all_bad_surface_extents_with_subdivide(int subdivideLimitPerTextur
 			fa--;
 		}
 		else {
-			int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+			BSPMIPTEX* tex = get_texture(info.iMiptex);
+			if (!tex) {
+				continue;
+			}
 			vec3 center = get_face_center(faceIdx);
 			if (!repeatErrors.count(faceIdx)) {
-				logf("Failed to subdivide face %d %s (%d %d %d)\n", faceIdx, tex.szName,
+				logf("Failed to subdivide face %d %s (%d %d %d)\n", faceIdx, tex->szName,
 					(int)center.x, (int)center.y, (int)center.z);
 				repeatErrors.insert(faceIdx);
 			}
@@ -3330,14 +3342,16 @@ void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 	unordered_set<int> embedded_mips;
 	unordered_set<int> resized_mips;
 	for (int mip : bad_extent_mips) {
-		int32_t texOffset = ((int32_t*)textures)[mip + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-
-		if (tex.nOffsets[0] != 0) {
+		BSPMIPTEX* tex = get_texture(mip);
+		if (!tex) {
 			continue;
 		}
 
-		if (tex.nWidth > minTextureDim || tex.nHeight > minTextureDim) {
+		if (tex->nOffsets[0] != 0) {
+			continue;
+		}
+
+		if (tex->nWidth > minTextureDim || tex->nHeight > minTextureDim) {
 			embed_texture(mip, wads);
 			embedded_mips.insert(mip);
 		}
@@ -3422,19 +3436,21 @@ bool Bsp::fix_bad_surface_extents_with_scale(int faceIdx) {
 		}
 	}
 
-	int32_t texOffset = ((int32_t*)textures)[info->iMiptex + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(info->iMiptex);
+	if (!tex) {
+		return false;
+	}
 
 	if (!scaledOk) {
 		*info = oldInfo;
-		logf("Failed to fix face %s with scales %f %f\n", tex.szName, oldScale.x, oldScale.y);
+		logf("Failed to fix face %s with scales %f %f\n", tex->szName, oldScale.x, oldScale.y);
 	}
 	else {
 		vec2 newScale(1.0f / info->vS.length(), 1.0f / info->vT.length());
 
 		vec3 center = get_face_center(faceIdx);
 		logf("Scaled up %s from %.2fx%.2f -> %.2fx%.2f (%d %d %d)\n",
-			tex.szName, oldScale.x, oldScale.y, newScale.x, newScale.y,
+			tex->szName, oldScale.x, oldScale.y, newScale.x, newScale.y,
 			(int)center.x, (int)center.y, (int)center.z);
 	}
 
@@ -3510,9 +3526,11 @@ vec3 Bsp::get_face_ut_reference(int faceIdx) {
 int Bsp::get_default_texture_idx() {
 	int32_t totalTextures = ((int32_t*)textures)[0];
 	for (uint i = 0; i < totalTextures; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-		if (strcmp(tex.szName, "aaatrigger") == 0) {
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			continue;
+		}
+		if (strcmp(tex->szName, "aaatrigger") == 0) {
 			return i;
 		}
 	}
@@ -3535,26 +3553,30 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 		return false;
 	}
 
+	BSPMIPTEX* tex = get_texture(textureId);
+	if (!tex) {
+		return false;
+	}
+
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
-	int oldWidth = tex.nWidth;
-	int oldHeight = tex.nHeight;
+	int oldWidth = tex->nWidth;
+	int oldHeight = tex->nHeight;
 
-	tex.nWidth = newWidth;
-	tex.nHeight = newHeight;
+	tex->nWidth = newWidth;
+	tex->nHeight = newHeight;
 
 	int lastMipSize = (oldWidth >> 3) * (oldHeight >> 3);
-	byte* pixels = (byte*)(textures + texOffset + tex.nOffsets[0]);
-	byte* palette = (byte*)(textures + texOffset + tex.nOffsets[3] + lastMipSize);
+	byte* pixels = (byte*)(textures + texOffset + tex->nOffsets[0]);
+	byte* palette = (byte*)(textures + texOffset + tex->nOffsets[3] + lastMipSize);
 	COLOR3* paletteColors = (COLOR3*)(palette + 2); // skip color count
 
 	int newWidths[4];
 	int newHeights[4];
 	int newOffset[4];
 	for (int i = 0; i < 4; i++) {
-		newWidths[i] = tex.nWidth >> (1 * i);
-		newHeights[i] = tex.nHeight >> (1 * i);
+		newWidths[i] = tex->nWidth >> (1 * i);
+		newHeights[i] = tex->nHeight >> (1 * i);
 
 		if (i > 0) {
 			newOffset[i] = newOffset[i - 1] + newWidths[i - 1] * newHeights[i - 1];
@@ -3564,10 +3586,10 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 		}
 	}
 
-	float srcScaleX = (float)oldWidth / tex.nWidth;
-	float srcScaleY = (float)oldHeight / tex.nHeight;
+	float srcScaleX = (float)oldWidth / tex->nWidth;
+	float srcScaleY = (float)oldHeight / tex->nHeight;
 
-	byte* srcPixels = (byte*)(textures + texOffset + tex.nOffsets[0]);
+	byte* srcPixels = (byte*)(textures + texOffset + tex->nOffsets[0]);
 	COLOR3* srcColors = new COLOR3[oldWidth * oldHeight];
 	for (int i = 0; i < oldWidth * oldHeight; i++) {
 		srcColors[i] = paletteColors[srcPixels[i]];
@@ -3575,7 +3597,7 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 
 	COLOR3* dstColors = new COLOR3[newWidth * newHeight];
 	vector<COLOR3> newColors = Texture::resample(srcColors, oldWidth, oldHeight, dstColors,
-		newWidth, newHeight, resampleMode, tex.szName[0] == '{', paletteColors[255]);
+		newWidth, newHeight, resampleMode, tex->szName[0] == '{', paletteColors[255]);
 
 	if (newColors.empty()) {
 		for (int i = newColors.size(); i < 256; i++) {
@@ -3616,7 +3638,7 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 	memcpy(newPalette + 2, &newColors[0], sizeof(COLOR3) * newColors.size());
 
 	for (int i = 0; i < 4; i++) {
-		tex.nOffsets[i] = newOffset[i];
+		tex->nOffsets[i] = newOffset[i];
 	}
 
 	adjust_resized_texture_coordinates(textureId, oldWidth, oldHeight);
@@ -3631,24 +3653,21 @@ bool Bsp::downscale_texture(int textureId, int newWidth, int newHeight, int resa
 		((int32_t*)textures)[k + 1] -= removedBytes;
 	}
 
-	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
-	}
-
-	logf("Downscale %s %dx%d -> %dx%d\n", tex.szName, oldWidth, oldHeight, tex.nWidth, tex.nHeight);
+	logf("Downscale %s %dx%d -> %dx%d\n", tex->szName, oldWidth, oldHeight, tex->nWidth, tex->nHeight);
 
 	return true;
 }
 
 bool Bsp::downscale_texture(int textureId, int minDim, bool allowWad) {
-	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(textureId);
+	if (!tex) {
+		return false;
+	}
 
-	int oldWidth = tex.nWidth;
-	int oldHeight = tex.nHeight;
-	int newWidth = tex.nWidth;
-	int newHeight = tex.nHeight;
+	int oldWidth = tex->nWidth;
+	int oldHeight = tex->nHeight;
+	int newWidth = tex->nWidth;
+	int newHeight = tex->nHeight;
 
 	float scale = get_scale_to_fix_bad_extents(textureId);
 
@@ -3663,19 +3682,19 @@ bool Bsp::downscale_texture(int textureId, int minDim, bool allowWad) {
 	}
 	
 	if (oldWidth == newWidth && oldHeight == newHeight) {
-		logf("Failed to downscale texture %s %dx%d\n", tex.szName, oldWidth, oldHeight);
+		logf("Failed to downscale texture %s %dx%d\n", tex->szName, oldWidth, oldHeight);
 		return false;
 	}
 
-	if (tex.nOffsets[0] == 0) {
+	if (tex->nOffsets[0] == 0) {
 		if (allowWad) {
-			tex.nWidth = newWidth;
-			tex.nHeight = newHeight;
+			tex->nWidth = newWidth;
+			tex->nHeight = newHeight;
 			adjust_resized_texture_coordinates(textureId, oldWidth, oldHeight);
-			logf("Texture coords were updated for %s. The WAD texture must be updated separately.\n", tex.szName);
+			logf("Texture coords were updated for %s. The WAD texture must be updated separately.\n", tex->szName);
 		}
 		else {
-			logf("Can't downscale WAD texture %s\n", tex.szName);
+			logf("Can't downscale WAD texture %s\n", tex->szName);
 		}
 		
 		return false;
@@ -3686,10 +3705,12 @@ bool Bsp::downscale_texture(int textureId, int minDim, bool allowWad) {
 
 string Bsp::get_texture_source(string texname, vector<Wad*>& wads) {
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			return name + ".bsp";
+		}
 
-		if (tex.nOffsets[0] != 0 && !strcasecmp(tex.szName, texname.c_str())) {
+		if (tex->nOffsets[0] != 0 && !strcasecmp(tex->szName, texname.c_str())) {
 			return name + ".bsp";
 		}
 	}
@@ -3713,13 +3734,15 @@ void Bsp::remove_unused_wads(vector<Wad*>& wads) {
 	int missing_textures = 0;
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			continue;
+		}
 
-		if (tex.nOffsets[0] == 0) {
+		if (tex->nOffsets[0] == 0) {
 			bool foundTexture = false;
 			for (int k = 0; k < wads.size(); k++) {
-				if (wads[k]->hasTexture(tex.szName)) {
+				if (wads[k]->hasTexture(tex->szName)) {
 					used_wads.insert(wads[k]);
 					foundTexture = true;
 					break;
@@ -3806,30 +3829,34 @@ vector<string> Bsp::get_wad_names() {
 }
 
 bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
-	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(textureId);
+	if (!tex) {
+		return false;
+	}
 
-	if (tex.nOffsets[0] != 0) {
-		logf("Texture %s is already embedded\n", tex.szName);
+	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
+
+	if (tex->nOffsets[0] != 0) {
+		logf("Texture %s is already embedded\n", tex->szName);
 		return false;
 	}
 
 	bool embedded = false;
 	for (int k = 0; k < wads.size(); k++) {
-		if (wads[k]->hasTexture(tex.szName)) {
-			WADTEX* wadTex = wads[k]->readTexture(tex.szName);
+		if (wads[k]->hasTexture(tex->szName)) {
+			WADTEX* wadTex = wads[k]->readTexture(tex->szName);
 
-			if (tex.nHeight != wadTex->nHeight || tex.nWidth != wadTex->nWidth) {
-				logf("Failed to embed texture %s from wad %s (dimensions don't match)\n", tex.szName, wads[k]->filename.c_str());
+			if (tex->nHeight != wadTex->nHeight || tex->nWidth != wadTex->nWidth) {
+				logf("Failed to embed texture %s from wad %s (dimensions don't match)\n", tex->szName, wads[k]->filename.c_str());
 				delete wadTex;
 				continue;
 			}
 
 			for (int i = 0; i < 4; i++) {
-				tex.nOffsets[i] = wadTex->nOffsets[i];
+				tex->nOffsets[i] = wadTex->nOffsets[i];
 			}
 
-			int sz = tex.nWidth * tex.nHeight;	   // miptex 0
+			int sz = tex->nWidth * tex->nHeight;	   // miptex 0
 			int sz2 = sz / 4;  // miptex 1
 			int sz3 = sz2 / 4; // miptex 2
 			int sz4 = sz3 / 4; // miptex 3
@@ -3850,7 +3877,7 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 			memcpy(newTexData + startOffset, wadTex->data, texDataSz);
 			memcpy(newTexData + startOffset + texDataSz, lumps[LUMP_TEXTURES] + startOffset, oldRemainder);
 
-			logf("Embedded texture %s from wad %s\n", tex.szName, wads[k]->filename.c_str());
+			logf("Embedded texture %s from wad %s\n", tex->szName, wads[k]->filename.c_str());
 
 			delete wadTex;
 			delete[] lumps[LUMP_TEXTURES];
@@ -3864,7 +3891,7 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 	}
 
 	if (!embedded) {
-		logf("Failed to embed %s. Texture not found in any loaded WAD.\n", tex.szName);
+		logf("Failed to embed %s. Texture not found in any loaded WAD.\n", tex->szName);
 	}
 
 	return embedded;
@@ -3872,14 +3899,18 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 
 int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
 
-	if (tex.nOffsets[0] == 0) {
-		logf("Texture %s is already unembedded\n", tex.szName);
+	BSPMIPTEX* tex = get_texture(textureId);
+	if (!tex) {
 		return 0;
 	}
 
-	int sz = tex.nWidth * tex.nHeight;	   // miptex 0
+	if (tex->nOffsets[0] == 0) {
+		logf("Texture %s is already unembedded\n", tex->szName);
+		return 0;
+	}
+
+	int sz = tex->nWidth * tex->nHeight;	   // miptex 0
 	int sz2 = sz / 4;  // miptex 1
 	int sz3 = sz2 / 4; // miptex 2
 	int sz4 = sz3 / 4; // miptex 3
@@ -3891,14 +3922,14 @@ int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	bool wasResized = false;
 	bool isInWad = false;
 	for (int k = 0; k < wads.size(); k++) {
-		if (wads[k]->hasTexture(tex.szName)) {
-			WADTEX* wadTex = wads[k]->readTexture(tex.szName);
+		if (wads[k]->hasTexture(tex->szName)) {
+			WADTEX* wadTex = wads[k]->readTexture(tex->szName);
 
-			if (tex.nWidth != wadTex->nWidth || tex.nHeight != wadTex->nHeight) {
-				int oldWidth = tex.nWidth;
-				int oldHeight = tex.nHeight;
-				tex.nWidth = wadTex->nWidth;
-				tex.nHeight = wadTex->nHeight;
+			if (tex->nWidth != wadTex->nWidth || tex->nHeight != wadTex->nHeight) {
+				int oldWidth = tex->nWidth;
+				int oldHeight = tex->nHeight;
+				tex->nWidth = wadTex->nWidth;
+				tex->nHeight = wadTex->nHeight;
 				adjust_resized_texture_coordinates(textureId, oldWidth, oldHeight);
 				wasResized = true;
 			}
@@ -3909,7 +3940,7 @@ int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 		}
 	}
 	if (!isInWad && !force) {
-		logf("Aborted unembed of %s. No WAD contains this texture. Data would be lost.\n", tex.szName);
+		logf("Aborted unembed of %s. No WAD contains this texture. Data would be lost.\n", tex->szName);
 		return 0;
 	}
 
@@ -3922,14 +3953,14 @@ int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	}
 
 	for (int i = 0; i < 4; i++) {
-		tex.nOffsets[i] = 0;
+		tex->nOffsets[i] = 0;
 	}
 
 	byte* newTexData = new byte[newTexBufferSz];
 	memcpy(newTexData, lumps[LUMP_TEXTURES], endOffset);
 	memcpy(newTexData + endOffset, lumps[LUMP_TEXTURES] + endOffset + texDataSz, newTexBufferSz - endOffset);
 
-	logf("Unembedded texture %s\n", tex.szName);
+	logf("Unembedded texture %s\n", tex->szName);
 	delete[] lumps[LUMP_TEXTURES];
 	lumps[LUMP_TEXTURES] = newTexData;
 	header.lump[LUMP_TEXTURES].nLength -= texDataSz;
@@ -3993,16 +4024,18 @@ WADTEX Bsp::load_texture(int textureIdx) {
 		return out;
 	}
 
-	int32_t texOffset = ((int32_t*)textures)[textureIdx + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(textureIdx);
+	if (!tex) {
+		return out;
+	}
 	memcpy(&out, &tex, sizeof(BSPMIPTEX));
 
 	int sz = out.getDataSize();
 	out.data = new byte[sz];
 
-	if (tex.nOffsets[0] != 0) {
+	if (tex->nOffsets[0] != 0) {
 		// embedded texture
-		memcpy(out.data, ((byte*)&tex) + tex.nOffsets[0], sz);
+		memcpy(out.data, ((byte*)&tex) + tex->nOffsets[0], sz);
 	}
 	else {
 		// try loading from WAD
@@ -4012,9 +4045,9 @@ WADTEX Bsp::load_texture(int textureIdx) {
 		bool foundTex = false;
 
 		for (int k = 0; k < wads.size(); k++) {
-			if (wads[k]->hasTexture(tex.szName)) {
+			if (wads[k]->hasTexture(tex->szName)) {
 				
-				WADTEX* wadtex = wads[k]->readTexture(tex.szName);
+				WADTEX* wadtex = wads[k]->readTexture(tex->szName);
 
 				if (!wadtex) {
 					logf("Failed to read texture %s from WAD: %s\n", wads[k]->filename.c_str());
@@ -4023,7 +4056,7 @@ WADTEX Bsp::load_texture(int textureIdx) {
 
 				if (wadtex->nHeight != out.nHeight || wadtex->nWidth != out.nWidth) {
 					debugf("Not using texture %s from wad because dimensions don't match: %s\n",
-						tex.szName, wads[k]->filename.c_str());
+						tex->szName, wads[k]->filename.c_str());
 					delete wadtex;
 					continue;
 				}
@@ -4102,11 +4135,13 @@ void Bsp::adjust_resized_texture_coordinates(BSPFACE& face, BSPTEXTUREINFO& info
 }
 
 void Bsp::adjust_resized_texture_coordinates(int textureId, int oldWidth, int oldHeight) {
-	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(textureId);
+	if (!tex) {
+		return;
+	}
 	
-	int newWidth = tex.nWidth;
-	int newHeight = tex.nHeight;
+	int newWidth = tex->nWidth;
+	int newHeight = tex->nHeight;
 
 	for (int i = 0; i < faceCount; i++) {
 		BSPFACE& face = faces[i];
@@ -4126,28 +4161,32 @@ int Bsp::downscale_invalid_textures(vector<Wad*>& wads) {
 	int count = 0;
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			continue;
+		}
 
-		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
+		if (tex->nWidth * tex->nHeight > g_limits.max_texturepixels) {
 			embed_texture(i, wads);
 		}
 	}
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			continue;
+		}
 
-		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
-			if (tex.nOffsets[0] == 0) {
-				logf("Skipping WAD texture %s (failed to embed)\n", tex.szName);
+		if (tex->nWidth * tex->nHeight > g_limits.max_texturepixels) {
+			if (tex->nOffsets[0] == 0) {
+				logf("Skipping WAD texture %s (failed to embed)\n", tex->szName);
 				continue;
 			}
 
-			int oldWidth = tex.nWidth;
-			int oldHeight = tex.nHeight;
-			int newWidth = tex.nWidth;
-			int newHeight = tex.nHeight;
+			int oldWidth = tex->nWidth;
+			int oldHeight = tex->nHeight;
+			int newWidth = tex->nWidth;
+			int newHeight = tex->nHeight;
 
 			float ratio = oldHeight / (float)oldWidth;
 
@@ -4181,11 +4220,13 @@ bool Bsp::rename_texture(const char* oldName, const char* newName) {
 	}
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			continue;
+		}
 		
-		if (!strncmp(tex.szName, oldName, 16)) {
-			strncpy(tex.szName, newName, 16);
+		if (!strncmp(tex->szName, oldName, 16)) {
+			strncpy(tex->szName, newName, 16);
 			logf("Renamed texture '%s' -> '%s'\n", oldName, newName);
 			return true;
 		}
@@ -4998,8 +5039,6 @@ bool Bsp::validate() {
 
 		BSPTEXTUREINFO* radinfo = get_embedded_rad_texinfo(info);
 		if (radinfo) {
-			int32_t radTexOffset = ((int32_t*)textures)[info.iMiptex + 1];
-			BSPMIPTEX& radTex = *((BSPMIPTEX*)(textures + radTexOffset));
 			BSPFACE& face = faces[i];
 			BSPPLANE& plane = planes[face.iPlane];
 
@@ -5008,10 +5047,11 @@ bool Bsp::validate() {
 			float distscale = dotProduct(texnormal, faceNormal);
 
 			if (distscale == 0) {
-				int32_t radTexOffset = ((int32_t*)textures)[info.iMiptex + 1];
-				BSPMIPTEX& radTex = *((BSPMIPTEX*)(textures + radTexOffset));
-				debugf("Invalid RAD texture axes in %s\n", radTex.szName);
-				numBadRadTexture++;
+				BSPMIPTEX* radTex = get_texture(info.iMiptex);
+				if (radTex) {
+					debugf("Invalid RAD texture axes in %s\n", radTex->szName);
+					numBadRadTexture++;
+				}
 			}
 		}
 
@@ -5278,11 +5318,15 @@ bool Bsp::validate() {
 	}
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			int32_t texOffset = ((int32_t*)textures)[i + 1];
+			logf("Invalid offset %d for texture ID %d\n", texOffset, i);
+			continue;
+		}
 
-		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
-			logf("Texture '%s' too large (%dx%d)\n", tex.szName, tex.nWidth, tex.nHeight);
+		if (tex->nWidth * tex->nHeight > g_limits.max_texturepixels) {
+			logf("Texture '%s' too large (%dx%d)\n", tex->szName, tex->nWidth, tex->nHeight);
 		}
 	}
 
@@ -8153,8 +8197,10 @@ BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(BSPTEXTUREINFO& info) {
 		return NULL;
 	}
 
-	int32_t texOffset = ((int32_t*)textures)[info.iMiptex + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+	BSPMIPTEX* tex = get_texture(info.iMiptex);
+	if (!tex) {
+		return NULL;
+	}
 
 	/*
 	* -------------------------------------------
@@ -8178,8 +8224,8 @@ BSPTEXTUREINFO* Bsp::get_embedded_rad_texinfo(BSPTEXTUREINFO& info) {
 	* changes, and leave the rest alone. The original map can be used to load lost texinfos.
 	*/
 
-	if (is_embedded_rad_texture_name(tex.szName)) {
-		int offset = atoi(&tex.szName[5]);
+	if (is_embedded_rad_texture_name(tex->szName)) {
+		int offset = atoi(&tex->szName[5]);
 		if (offset >= 0 && offset < texinfoCount) {
 			return &texinfos[offset];
 		}
@@ -8262,13 +8308,16 @@ int Bsp::count_missing_textures() {
 	int missing_textures = 0;
 
 	for (int i = 0; i < textureCount; i++) {
-		int32_t texOffset = ((int32_t*)textures)[i + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(textures + texOffset));
+		BSPMIPTEX* tex = get_texture(i);
+		if (!tex) {
+			missing_textures++;
+			continue;
+		}
 
-		if (tex.nOffsets[0] == 0) {
+		if (tex->nOffsets[0] == 0) {
 			bool foundTexture = false;
 			for (int k = 0; k < wads.size(); k++) {
-				if (wads[k]->hasTexture(tex.szName)) {
+				if (wads[k]->hasTexture(tex->szName)) {
 					foundTexture = true;
 					break;
 				}
@@ -8278,8 +8327,8 @@ int Bsp::count_missing_textures() {
 			}
 		}
 
-		if (tex.nWidth * tex.nHeight > g_limits.max_texturepixels) {
-			logf("Texture '%s' too large (%dx%d)\n", tex.szName, tex.nWidth, tex.nHeight);
+		if (tex->nWidth * tex->nHeight > g_limits.max_texturepixels) {
+			logf("Texture '%s' too large (%dx%d)\n", tex->szName, tex->nWidth, tex->nHeight);
 		}
 	}
 
@@ -8676,7 +8725,7 @@ unordered_map<string, string> Bsp::estimate_texlights(int epsilon) {
 BSPMIPTEX* Bsp::get_texture(int iMiptex) {
 	if (iMiptex < textureCount) {
 		int32_t texOffset = ((int32_t*)textures)[iMiptex + 1];
-		if (texOffset + sizeof(BSPMIPTEX) <= header.lump[LUMP_TEXTURES].nLength) {
+		if (texOffset + sizeof(BSPMIPTEX) <= header.lump[LUMP_TEXTURES].nLength && texOffset > 0) {
 			return ((BSPMIPTEX*)(textures + texOffset));
 		}
 	}
@@ -9143,6 +9192,7 @@ void Bsp::update_lump_pointers() {
 	surfedgeCount = header.lump[LUMP_SURFEDGES].nLength / sizeof(int32_t);
 	edgeCount = header.lump[LUMP_EDGES].nLength / sizeof(BSPEDGE);
 	textureCount = *((int32_t*)(lumps[LUMP_TEXTURES]));
+	texDataLength = header.lump[LUMP_TEXTURES].nLength;
 	lightDataLength = header.lump[LUMP_LIGHTING].nLength;
 	visDataLength = header.lump[LUMP_VISIBILITY].nLength;
 

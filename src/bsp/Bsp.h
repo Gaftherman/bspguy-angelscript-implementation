@@ -103,6 +103,7 @@ public:
 	int textureCount;
 	int lightDataLength;
 	int visDataLength;
+	int texDataLength;
 	
 	vector<Entity*> ents;
 

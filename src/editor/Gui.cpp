@@ -470,10 +470,9 @@ void Gui::draw3dContextMenus() {
 			if (map && app->pickInfo.getFace()) {
 				BSPFACE& face = *app->pickInfo.getFace();
 				BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-				if (info.iMiptex > 0 && info.iMiptex < map->textureCount) {
-					int32_t texOffset = ((int32_t*)map->textures)[info.iMiptex + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-					isEmbedded = tex.nOffsets[0] != 0;
+				BSPMIPTEX* tex = map->get_texture(info.iMiptex);
+				if (tex) {
+					isEmbedded = tex->nOffsets[0] != 0;
 				}
 			}
 
@@ -1297,17 +1296,17 @@ void Gui::drawMenuBar() {
 		tooltip(g, "Render special faces that are normally invisible and/or have special rendering properties (e.g. the SKY texture).");
 
 		if (ImGui::BeginMenu("Clipnodes")) {
-			if (ImGui::MenuItem("Clipnodes (World)", 0, g_settings.render_flags & RENDER_WORLD_CLIPNODES)) {
+			if (ImGui::MenuItem("World", 0, g_settings.render_flags & RENDER_WORLD_CLIPNODES)) {
 				g_settings.render_flags ^= RENDER_WORLD_CLIPNODES;
 			}
 			tooltip(g, "Render clipnode hulls for worldspawn");
 
-			if (ImGui::MenuItem("Clipnodes (Entities)", 0, g_settings.render_flags & RENDER_ENT_CLIPNODES)) {
+			if (ImGui::MenuItem("Entities", 0, g_settings.render_flags & RENDER_ENT_CLIPNODES)) {
 				g_settings.render_flags ^= RENDER_ENT_CLIPNODES;
 			}
 			tooltip(g, "Render clipnode hulls for solid entities");
 
-			if (ImGui::MenuItem("Clipnode Transparency", 0, transparentClipnodes)) {
+			if (ImGui::MenuItem("Transparency", 0, transparentClipnodes)) {
 				transparentClipnodes = !transparentClipnodes;
 				g_app->mapRenderer->updateClipnodeOpacity(transparentClipnodes ? 128 : 255);
 			}
@@ -1846,10 +1845,11 @@ void Gui::drawMenuBar() {
 				int count = 0;
 				int fail = 0;
 				for (int i = 0; i < map->textureCount; i++) {
-					int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+					BSPMIPTEX* tex = map->get_texture(i);
+					if (!tex)
+						continue;
 
-					if (tex.nOffsets[0] != 0) {
+					if (tex->nOffsets[0] != 0) {
 						continue;
 					}
 
@@ -1874,10 +1874,9 @@ void Gui::drawMenuBar() {
 				int count = 0;
 				int fail = 0;
 				for (int i = 0; i < map->textureCount; i++) {
-					int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+					BSPMIPTEX* tex = map->get_texture(i);
 
-					if (tex.nOffsets[0] == 0) {
+					if (!tex || tex->nOffsets[0] == 0) {
 						continue;
 					}
 
@@ -2891,20 +2890,24 @@ void Gui::drawToolbar() {
 		ImGui::SameLine();
 		if (ImGui::ImageButton("facepickicon", (ImTextureID)faceIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
 			
-			int modelIdx = app->pickInfo.getModelIndex();
-			BSPMODEL* model = app->pickInfo.getModel();
+			vector<int> modelIndexes = app->pickInfo.getModelIndexes();
 			Bsp* map = app->pickInfo.getMap();
 			BspRenderer* mapRenderer = app->mapRenderer;
 			app->deselectObject();
 
 			// don't select all worldspawn faces because it lags the program
-			if (modelIdx > 0 && model) {
-				for (int i = 0; i < model->nFaces; i++) {
-					int faceIdx = model->iFirstFace + i;
-					app->pickInfo.selectFace(faceIdx);
+			if (modelIndexes.size() > 0 && modelIndexes[0] != 0) {
+				for (int idx : modelIndexes) {
+					BSPMODEL& model = map->models[idx];
+
+					for (int i = 0; i < model.nFaces; i++) {
+						int faceIdx = model.iFirstFace + i;
+						app->pickInfo.selectFace(faceIdx);
+					}
 				}
 			}
 			g_app->mapRenderer->highlightPickedFaces(true);
+			g_app->updateTextureAxes();
 			
 			app->pickMode = PICK_FACE;
 			app->pickCount++; // force texture tool refresh
@@ -3119,11 +3122,15 @@ void Gui::drawDebugWidget() {
 
 					if (face.iTextureInfo < map->texinfoCount) {
 						BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-						int32_t texOffset = ((int32_t*)map->textures)[info.iMiptex + 1];
-						BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+						BSPMIPTEX* tex = map->get_texture(info.iMiptex);
 						ImGui::Text("Texinfo ID: %d", face.iTextureInfo);
 						ImGui::Text("Texture ID: %d", info.iMiptex);
-						ImGui::Text("Texture: %s (%dx%d)", tex.szName, tex.nWidth, tex.nHeight);
+						if (tex) {
+							ImGui::Text("Texture: %s (%dx%d)", tex->szName, tex->nWidth, tex->nHeight);
+						}
+						else {
+							ImGui::Text("Texture: INVALID OFFSET");
+						}
 					}
 					ImGui::Text("Lightmap Offset: %d", face.nLightmapOffset);
 					ImGui::Text("Light Styles: [%d, %d, %d, %d]", face.nStyles[0], face.nStyles[1], face.nStyles[2], face.nStyles[3]);
@@ -5730,10 +5737,9 @@ void Gui::drawAllocBlockLimitTab(Bsp* map) {
 			int size[2];
 			GetFaceLightmapSize(map, i, size);
 
-			int32_t texOffset = ((int32_t*)map->textures)[tinfo.iMiptex + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+			BSPMIPTEX* tex = map->get_texture(tinfo.iMiptex);
 
-			string texname = tex.szName;
+			string texname = tex ? tex->szName : "INVALID OFFSET";
 			AllocInfoInt& info = infos[texname];
 			info.faceCount++;
 			info.val += size[0] * size[1];
@@ -5882,13 +5888,15 @@ void Gui::drawFaceExtentsLimitTab() {
 		}
 
 		for (int mip : bad_extent_mips) {
-			int32_t texOffset = ((int32_t*)map->textures)[mip + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+			BSPMIPTEX* tex = map->get_texture(mip);
+			if (!tex) {
+				continue;
+			}
 
 			ExtentInfo info;
-			info.texname = tex.szName;
+			info.texname = tex->szName;
 			info.faceCount = to_string(map->count_faces_for_mip(mip));
-			info.dimensions = to_string(tex.nWidth) + "x" + to_string(tex.nHeight);
+			info.dimensions = to_string(tex->nWidth) + "x" + to_string(tex->nHeight);
 			info.sort = map->get_subdivisions_needed_to_fix_mip_extents(mip);
 			info.subsNeeded = to_string(info.sort);
 			info.mip = mip;
@@ -6767,6 +6775,7 @@ void Gui::drawTextureTool() {
 
 			static char findtex[MAXTEXTURENAME];
 			static char findfaceid[256];
+			static char findtexid[256];
 
 			ImGui::Dummy(ImVec2(0, 20));
 
@@ -6781,7 +6790,7 @@ void Gui::drawTextureTool() {
 					BSPTEXTUREINFO& tinfo = map->texinfos[face.iTextureInfo];
 					BSPMIPTEX* tex = map->get_texture(tinfo.iMiptex);
 
-					if ((tex && !strcmp(findtex, tex->szName)) || (!tex && findtex[0] == 0)) {
+					if ((tex && !strcasecmp(findtex, tex->szName)) || (!tex && findtex[0] == 0)) {
 						app->pickInfo.selectFace(i);
 						numSelect++;
 					}
@@ -6792,6 +6801,31 @@ void Gui::drawTextureTool() {
 				g_app->updateTextureAxes();
 			}
 			tooltip(g, "Select all faces that use the given texture");
+
+			ImGui::Dummy(ImVec2(0, 20));
+
+			ImGui::Text("Texture ID");
+			ImGui::InputText("##TextureId", findtexid, 256);
+			ImGui::SameLine();
+			if (ImGui::Button("Find##textureidbut")) {
+				int numSelect = 0;
+				int texid = atoi(findtexid);
+
+				for (int i = 0; i < map->faceCount; i++) {
+					BSPFACE& face = map->faces[i];
+					BSPTEXTUREINFO& tinfo = map->texinfos[face.iTextureInfo];
+
+					if (tinfo.iMiptex == texid) {
+						app->pickInfo.selectFace(i);
+						numSelect++;
+					}
+				}
+
+				logf("Selected %d faces with texture ID %d\n", numSelect, texid);
+				g_app->mapRenderer->highlightPickedFaces(true);
+				g_app->updateTextureAxes();
+			}
+			tooltip(g, "Select all faces that use the given texture ID.");
 
 			ImGui::Dummy(ImVec2(0, 20));
 
@@ -6824,18 +6858,17 @@ void Gui::drawTextureTool() {
 				BSPFACE& face = map->faces[faceIdx];
 				BSPPLANE& plane = map->planes[face.iPlane];
 				BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
-				int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
+				BSPMIPTEX* tex = map->get_texture(texinfo.iMiptex);
 
 				width = height = 0;
-				if (texOffset != -1) {
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-					width = tex.nWidth;
-					height = tex.nHeight;
-					strncpy(textureName, tex.szName, MAXTEXTURENAME);
-					isEmbedded = tex.nOffsets[0] != 0;
+				if (tex) {
+					width = tex->nWidth;
+					height = tex->nHeight;
+					strncpy(textureName, tex->szName, MAXTEXTURENAME);
+					isEmbedded = tex->nOffsets[0] != 0;
 
-					int w = tex.nWidth;
-					int h = tex.nHeight;
+					int w = tex->nWidth;
+					int h = tex->nHeight;
 					int sz = w * h;	   // miptex 0
 					int sz2 = sz / 4;  // miptex 1
 					int sz3 = sz2 / 4; // miptex 2
@@ -7013,9 +7046,8 @@ void Gui::drawTextureTool() {
 				bool isActuallyEmbedded = false;
 
 				if (mip > 0 && mip < map->textureCount) {
-					int32_t texOffset = ((int32_t*)map->textures)[mip + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-					isActuallyEmbedded = tex.nOffsets[0] != 0;
+					BSPMIPTEX* tex = map->get_texture(mip);
+					isActuallyEmbedded = tex && tex->nOffsets[0] != 0;
 				}
 
 				if (!isEmbedded && isActuallyEmbedded) {
@@ -7083,9 +7115,9 @@ void Gui::drawTextureTool() {
 		if (refreshAfterFacePaste) {
 			textureChanged = true;
 			refreshAfterFacePaste = false;
-			int32_t texOffset = ((int32_t*)map->textures)[copiedMiptex + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-			strncpy(textureName, tex.szName, MAXTEXTURENAME);
+			BSPMIPTEX* tex = map->get_texture(copiedMiptex);
+			if (tex)
+				strncpy(textureName, tex->szName, MAXTEXTURENAME);
 		}
 		if (!validTexture) {
 			ImGui::PopStyleColor();
@@ -7099,17 +7131,20 @@ void Gui::drawTextureTool() {
 			int faceIdx = app->pickInfo.faces[0];
 			BSPFACE& face = map->faces[faceIdx];
 			BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
-			int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-			int lastMipSize = (tex.nWidth >> 3) * (tex.nHeight >> 3);
-			byte* palette = (byte*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize);
-			COLOR3* paletteColors = (COLOR3*)(palette + 2); // skip color count
+			BSPMIPTEX* tex = map->get_texture(texinfo.iMiptex);
+			if (tex) {
+				int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
+				int lastMipSize = (tex->nWidth >> 3) * (tex->nHeight >> 3);
+				byte* palette = (byte*)(map->textures + texOffset + tex->nOffsets[3] + lastMipSize);
+				COLOR3* paletteColors = (COLOR3*)(palette + 2); // skip color count
 
-			resizeWidth = resizeOriginalWidth = width;
-			resizeHeight = resizeOriginalHeight = height;
-			resizeTextureIdx = texinfo.iMiptex;
-			resizeMasked = tex.szName[0] == '{';
-			resizeMaskColor = paletteColors[255];
+				resizeWidth = resizeOriginalWidth = width;
+				resizeHeight = resizeOriginalHeight = height;
+				resizeTextureIdx = texinfo.iMiptex;
+				resizeMasked = tex->szName[0] == '{';
+				resizeMaskColor = paletteColors[255];
+			}
+			
 		}
 		ImGui::EndDisabled();
 
@@ -7129,13 +7164,12 @@ void Gui::drawTextureTool() {
 				int32_t totalTextures = ((int32_t*)map->textures)[0];
 
 				for (uint i = 0; i < totalTextures; i++) {
-					int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-					BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-					if (!strcasecmp(tex.szName, textureName)) {
+					BSPMIPTEX* tex = map->get_texture(i);
+					if (!strcasecmp(tex->szName, textureName)) {
 						validTexture = true;
 						newMiptex = i;
 						// force matching case of real texture reference
-						strncpy(textureName, tex.szName, MAXTEXTURENAME);
+						strncpy(textureName, tex->szName, MAXTEXTURENAME);
 						textureName[MAXTEXTURENAME-1] = 0;
 						break;
 					}
@@ -7362,70 +7396,73 @@ void Gui::drawTextureTool() {
 
 		static ResampOption resampler = resamplers[1];
 
-		int32_t texOffset = ((int32_t*)map->textures)[resizeTextureIdx + 1];
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+		BSPMIPTEX* tex = map->get_texture(resizeTextureIdx);
 
-		int lastMipSize = (tex.nWidth >> 3) * (tex.nHeight >> 3);
-		byte* palette = (byte*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize + 2);
-		byte* srcPixels = (byte*)(map->textures + texOffset + tex.nOffsets[0]);
+		if (tex) {
+			int32_t texOffset = ((int32_t*)map->textures)[resizeTextureIdx + 1];
 
-		if (!originalTexture && tex.nOffsets[0] != 0) {
-			originalTexture = new Texture(resizeOriginalWidth, resizeOriginalHeight);
+			int lastMipSize = (tex->nWidth >> 3) * (tex->nHeight >> 3);
+			byte* palette = (byte*)(map->textures + texOffset + tex->nOffsets[3] + lastMipSize + 2);
+			byte* srcPixels = (byte*)(map->textures + texOffset + tex->nOffsets[0]);
 
-			COLOR3* srcColors = new COLOR3[tex.nWidth * tex.nHeight];
-			for (int i = 0; i < tex.nWidth * tex.nHeight; i++) {
-				srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
+			if (!originalTexture && tex->nOffsets[0] != 0) {
+				originalTexture = new Texture(resizeOriginalWidth, resizeOriginalHeight);
+
+				COLOR3* srcColors = new COLOR3[tex->nWidth * tex->nHeight];
+				for (int i = 0; i < tex->nWidth * tex->nHeight; i++) {
+					srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
+				}
+
+				COLOR4* texColors = (COLOR4*)originalTexture->data;
+				for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+					texColors[i] = COLOR4(srcColors[i], 255);
+				}
+
+				originalTexture->upload(GL_RGBA);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			}
 
-			COLOR4* texColors = (COLOR4*)originalTexture->data;
-			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
-				texColors[i] = COLOR4(srcColors[i], 255);
-			}
+			if ((!previewTexture || reloadPreview) && tex->nOffsets[0] != 0) {
+				if (previewTexture) {
+					delete previewTexture;
+				}
+				previewTexture = new Texture(resizeWidth, resizeHeight);
 
-			originalTexture->upload(GL_RGBA);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		}
+				COLOR3* srcColors = new COLOR3[tex->nWidth * tex->nHeight];
+				for (int i = 0; i < tex->nWidth * tex->nHeight; i++) {
+					srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
+				}
 
-		if ((!previewTexture || reloadPreview) && tex.nOffsets[0] != 0) {
-			if (previewTexture) {
-				delete previewTexture;
-			}
-			previewTexture = new Texture(resizeWidth, resizeHeight);
-			
-			COLOR3* srcColors = new COLOR3[tex.nWidth * tex.nHeight];
-			for (int i = 0; i < tex.nWidth * tex.nHeight; i++) {
-				srcColors[i] = ((COLOR3*)palette)[srcPixels[i]];
-			}
+				COLOR3* dstColors = new COLOR3[resizeWidth * resizeHeight];
+				vector<COLOR3> newPal = Texture::resample(srcColors, tex->nWidth, tex->nHeight, dstColors, resizeWidth, resizeHeight,
+					resampler.mode, resizeMasked, resizeMaskColor);
 
-			COLOR3* dstColors = new COLOR3[resizeWidth * resizeHeight];
-			vector<COLOR3> newPal = Texture::resample(srcColors, tex.nWidth, tex.nHeight, dstColors, resizeWidth, resizeHeight,
-				resampler.mode, resizeMasked, resizeMaskColor);
-
-			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
-				bool foundColor = false;
-				for (int k = 0; k < newPal.size(); k++) {
-					if (newPal[k] == dstColors[i]) {
-						dstColors[i] = newPal[k];
-						foundColor = true;
-						break;
+				for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+					bool foundColor = false;
+					for (int k = 0; k < newPal.size(); k++) {
+						if (newPal[k] == dstColors[i]) {
+							dstColors[i] = newPal[k];
+							foundColor = true;
+							break;
+						}
+					}
+					if (!foundColor) {
+						dstColors[i] = COLOR3(0, 0, 0);
 					}
 				}
-				if (!foundColor) {
-					dstColors[i] = COLOR3(0, 0, 0);
+
+				COLOR4* texColors = (COLOR4*)previewTexture->data;
+
+				for (int i = 0; i < resizeWidth * resizeHeight; i++) {
+					texColors[i] = COLOR4(dstColors[i], 255);
 				}
+
+				delete[] dstColors;
+
+				previewTexture->upload(GL_RGBA);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				reloadPreview = false;
 			}
-
-			COLOR4* texColors = (COLOR4*)previewTexture->data;
-
-			for (int i = 0; i < resizeWidth * resizeHeight; i++) {
-				texColors[i] = COLOR4(dstColors[i], 255);
-			}
-
-			delete[] dstColors;
-
-			previewTexture->upload(GL_RGBA);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			reloadPreview = false;
 		}
 
 		ImGui::SetNextItemWidth(200);

@@ -93,14 +93,13 @@ void BspRenderer::preloadTextures() {
 
 	glTextureArray->clear();
 	for (int i = 0; i < map->textureCount; i++) {
-		int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-		if (texOffset == -1) {
+		BSPMIPTEX* tex = map->get_texture(i);
+		if (!tex) {
 			miptexToTexArray[i] = glTextureArray->tally(16, 16);
 			continue;
 		}
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 		
-		miptexToTexArray[i] = glTextureArray->tally(tex.nWidth, tex.nHeight);
+		miptexToTexArray[i] = glTextureArray->tally(tex->nWidth, tex->nHeight);
 	}
 }
 
@@ -159,31 +158,32 @@ void BspRenderer::loadTextures() {
 	glTexturesSwap = new Texture * [map->textureCount];
 	for (int i = 0; i < map->textureCount; i++) {
 		int32_t texOffset = ((int32_t*)map->textures)[i + 1];
-		if (texOffset == -1) {
+		BSPMIPTEX* tex = map->get_texture(i);
+
+		if (!tex) {
 			Texture* missingCopy = generateMissingTexture(16, 16);
 			glTexturesSwap[i] = missingCopy;
 			glTextureArray->add(missingCopy);
 			glTexturesSwap[i]->generateMipMaps(3);
 			continue;
 		}
-		BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
 
 		COLOR3* palette = NULL;
 		byte* src = NULL;
 		WADTEX* wadTex = NULL;
 
-		int lastMipSize = (tex.nWidth / 8) * (tex.nHeight / 8);
+		int lastMipSize = (tex->nWidth / 8) * (tex->nHeight / 8);
 
-		if (tex.nOffsets[0] <= 0) {
+		if (tex->nOffsets[0] <= 0) {
 
 			bool foundInWad = false;
 			for (int k = 0; k < wads.size(); k++) {
-				if (wads[k]->hasTexture(tex.szName)) {
-					wadTex = wads[k]->readTexture(tex.szName);
+				if (wads[k]->hasTexture(tex->szName)) {
+					wadTex = wads[k]->readTexture(tex->szName);
 
-					if (wadTex->nWidth != tex.nWidth || wadTex->nHeight != tex.nHeight) {
+					if (wadTex->nWidth != tex->nWidth || wadTex->nHeight != tex->nHeight) {
 						debugf("Found a texture named %s in %s but the dimensions don't match. Skipping.\n",
-							tex.szName, wads[k]->filename.c_str());
+							tex->szName, wads[k]->filename.c_str());
 						delete wadTex;
 						wadTex = NULL;
 						continue;
@@ -199,7 +199,7 @@ void BspRenderer::loadTextures() {
 			}
 
 			if (!foundInWad) {
-				Texture* missingCopy = generateMissingTexture(tex.nWidth, tex.nHeight);
+				Texture* missingCopy = generateMissingTexture(tex->nWidth, tex->nHeight);
 				glTexturesSwap[i] = missingCopy;
 				glTextureArray->add(missingCopy);
 				glTexturesSwap[i]->generateMipMaps(3);
@@ -207,15 +207,15 @@ void BspRenderer::loadTextures() {
 			}
 		}
 		else {
-			palette = (COLOR3*)(map->textures + texOffset + tex.nOffsets[3] + lastMipSize + 2);
-			src = map->textures + texOffset + tex.nOffsets[0];
+			palette = (COLOR3*)(map->textures + texOffset + tex->nOffsets[3] + lastMipSize + 2);
+			src = map->textures + texOffset + tex->nOffsets[0];
 			embedCount++;
 		}
 
-		COLOR4* imageData = new COLOR4[tex.nWidth * tex.nHeight];
+		COLOR4* imageData = new COLOR4[tex->nWidth * tex->nHeight];
 
-		int sz = tex.nWidth * tex.nHeight;
-		bool hasAlpha = tex.szName[0] == '{';
+		int sz = tex->nWidth * tex->nHeight;
+		bool hasAlpha = tex->szName[0] == '{';
 
 		for (int k = 0; k < sz; k++) {
 			imageData[k] = COLOR4(palette[src[k]], 255);
@@ -231,7 +231,7 @@ void BspRenderer::loadTextures() {
 
 		// map->textures + texOffset + tex.nOffsets[0]
 
-		glTexturesSwap[i] = new Texture(tex.nWidth, tex.nHeight, imageData);
+		glTexturesSwap[i] = new Texture(tex->nWidth, tex->nHeight, imageData);
 		glTextureArray->add(glTexturesSwap[i]);
 		glTexturesSwap[i]->generateMipMaps(3);
 	}
@@ -605,7 +605,7 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		}
 		BSPFACE& face = map->faces[faceIdx];
 		BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
-		int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
+		BSPMIPTEX* tex = map->get_texture(texinfo.iMiptex);
 		TexArrayOffset& texArrayOffset = miptexToTexArray[texinfo.iMiptex];
 		float texArrayIdx = texArrayOffset.layer;
 
@@ -615,10 +615,9 @@ int BspRenderer::refreshModel(int modelIdx, bool refreshClipnodes) {
 		}
 
 		int texWidth, texHeight;
-		if (texOffset != -1) {
-			BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
-			texWidth = tex.nWidth;
-			texHeight = tex.nHeight;
+		if (tex) {
+			texWidth = tex->nWidth;
+			texHeight = tex->nHeight;
 		}
 		else {
 			// missing texture
@@ -1618,15 +1617,17 @@ void BspRenderer::updateFaceUVs(int faceIdx) {
 
 	BSPFACE& face = map->faces[faceIdx];
 	BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
-	int32_t texOffset = ((int32_t*)map->textures)[texinfo.iMiptex + 1];
-	BSPMIPTEX& tex = *((BSPMIPTEX*)(map->textures + texOffset));
+	BSPMIPTEX* tex = map->get_texture(texinfo.iMiptex);
+	if (!tex) {
+		return;
+	}
 
 	for (int i = 0; i < rface->vertCount; i++) {
 		lightmapVert& vert = rgroup->verts[rface->vertOffset + i];
 		vec3 pos = vec3(vert.x, -vert.z, vert.y);
 
-		float tw = 1.0f / (float)tex.nWidth;
-		float th = 1.0f / (float)tex.nHeight;
+		float tw = 1.0f / (float)tex->nWidth;
+		float th = 1.0f / (float)tex->nHeight;
 		float fU = dotProduct(texinfo.vS, pos) + texinfo.shiftS;
 		float fV = dotProduct(texinfo.vT, pos) + texinfo.shiftT;
 		vert.u = fU * tw;
@@ -1655,7 +1656,7 @@ uint BspRenderer::getFaceTextureId(int faceIdx) {
 	BSPFACE& face = map->faces[faceIdx];
 	BSPTEXTUREINFO& texinfo = map->texinfos[face.iTextureInfo];
 
-	if (texinfo.iMiptex > 0 && texinfo.iMiptex < numLoadedTextures)
+	if (texinfo.iMiptex >= 0 && texinfo.iMiptex < numLoadedTextures)
 		return glTextures[texinfo.iMiptex]->id;
 	else
 		return 0;
