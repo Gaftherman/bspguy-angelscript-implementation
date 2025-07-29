@@ -3371,9 +3371,10 @@ void Bsp::fix_bad_surface_extents_with_downscale(int minTextureDim) {
 			continue;
 		}
 
-		if (downscale_texture(info.iMiptex, minTextureDim, false)) {
+		int mip = info.iMiptex;
+		if (downscale_texture(mip, minTextureDim, false)) {
 			// retry after downscaling
-			resized_mips.insert(info.iMiptex);
+			resized_mips.insert(mip);
 			numShrink++;
 			fa--;
 			continue;
