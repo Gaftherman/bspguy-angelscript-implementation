@@ -47,6 +47,19 @@ char const* bmpFilterPatterns[1] = { "*.bmp" };
 
 bool editWasOpen = false;
 
+const char* g_optimize_tip =
+"Removes \"unnecesary\" structures in the BSP data. Potentially unsafe.\n\n"
+
+"What the program considers unnecesary for Half-Life may become a fatal error for another game."
+"In most cases mods do not significantly change default entity behavior, but there is a risk.\n\n"
+
+"An example of commonly deleted structures would be the visible hull 0 for entities like "
+"trigger_once, which are invisible and so don't need textured faces. Entities "
+"like func_illusionary also don't need any clipnodes because they're not meant to be collidable.\n\n"
+
+"Check the Messages widget to see which entities had their hulls deleted. You may want to selectively "
+"delete hulls yourself if you run into problems.";
+
 void tooltip(ImGuiContext& g, const char* text) {
 	if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
 		ImGui::BeginTooltip();
@@ -125,13 +138,15 @@ void Gui::draw() {
 
 	drawMenuBar();
 
-	drawToolbar();
+	if (!app->mapArrangeMode)
+		drawToolbar();
+
 	drawStatusMessage();
 
 	if (showDebugWidget) {
 		drawDebugWidget();
 	}
-	if (showKeyvalueWidget) {
+	if (showKeyvalueWidget && !g_app->mapArrangeMode) {
 		drawKeyvalueEditor();
 	}
 	if (showTransformWidget) {
@@ -140,7 +155,7 @@ void Gui::draw() {
 	if (showLogWidget) {
 		drawLog();
 	}
-	if (showSettingsWidget) {
+	if (showSettingsWidget && !g_app->mapArrangeMode) {
 		drawSettings();
 	}
 	if (showHelpWidget) {
@@ -149,10 +164,10 @@ void Gui::draw() {
 	if (showAboutWidget) {
 		drawAbout();
 	}
-	if (showLimitsWidget) {
+	if (showLimitsWidget && !g_app->mapArrangeMode) {
 		drawLimits();
 	}
-	if (showTextureWidget) {
+	if (showTextureWidget && !g_app->mapArrangeMode) {
 		drawTextureTool();
 	}
 	/*
@@ -160,7 +175,7 @@ void Gui::draw() {
 		drawLightMapTool();
 	}
 	*/
-	if (showEntityReport) {
+	if (showEntityReport && !g_app->mapArrangeMode) {
 		drawEntityReport();
 	}
 	if (g_settings.first_load) {
@@ -1003,15 +1018,13 @@ void Gui::drawEditOptions(bool isMainMenu) {
 	}
 }
 
-void Gui::drawMenuBar() {
+void Gui::drawStandardMenuBar() {
 	ImGuiContext& g = *GImGui;
-
-	ImGui::BeginMainMenuBar();
 
 	if (ImGui::BeginMenu("File"))
 	{
 		if (ImGui::MenuItem("Open", "Ctrl+O", false, !app->isLoading)) {
-			g_app->openMap(NULL);
+			g_app->openMap((char*)NULL);
 		}
 
 		if (ImGui::BeginMenu("Recent Files", !app->isLoading)) {
@@ -1031,7 +1044,7 @@ void Gui::drawMenuBar() {
 					}
 				}
 
-				ImGui::Separator();				
+				ImGui::Separator();
 			}
 
 			if (ImGui::MenuItem("Clear", NULL, false, g_settings.recentFiles.size())) {
@@ -1100,7 +1113,7 @@ void Gui::drawMenuBar() {
 				char* fname = tinyfd_saveFileDialog("Export Embedded Textures", defaultPath.c_str(),
 					1, wadFilterPatterns, "Half-Life Package (*.wad)");
 
-				if (fname) {					
+				if (fname) {
 					vector<WADTEX> wadTextures;
 					for (int i = 0; i < map->textureCount; i++) {
 						int32_t offset = ((int32_t*)map->textures)[i + 1];
@@ -1212,13 +1225,15 @@ void Gui::drawMenuBar() {
 			if (fname)
 				g_app->merge(fname);
 		}
-
 		tooltip(g, ("Merge one other BSP into the current file.\n\n"
-			"Equivalent CLI command:\nbspguy merge " + map->name + " -noscript -noripent -maps \""
-			+ map->name + ",other_map\"\n\nUse the CLI for automatic arrangement and optimization of "
-			"many maps. The CLI also offers ripent fixes and script setup which can "
-			"generate a playable map without you having to make any manual edits (Sven Co-op only).").c_str());
-		
+			"Equivalent CLI command:\nbspguy merge " + map->name + " -noripent -maps \""
+			+ map->name + ",other_map\"").c_str());
+
+		if (ImGui::MenuItem("Merge Multiple", NULL, false, !app->isLoading) && g_app->confirmMapExit()) {
+			showMergePopup = true;
+		}
+		tooltip(g, "Merge multiple BSPs into a new file.");
+
 		if (ImGui::MenuItem("Reload", 0, false, !app->isLoading)) {
 			app->reloadMaps();
 			refresh();
@@ -1683,17 +1698,7 @@ void Gui::drawMenuBar() {
 
 				command->pushUndoState();
 			}
-			tooltip(g, "Removes \"unnecesary\" structures in the BSP data. Potentially unsafe.\n\n"
-
-				"What the program considers unnecesary for Half-Life may become a fatal error for another game."
-				"In most cases mods do not significantly change default entity behavior, but there is a risk.\n\n"
-
-				"An example of commonly deleted structures would be the visible hull 0 for entities like "
-				"trigger_once, which are invisible and so don't need textured faces. Entities "
-				"like func_illusionary also don't need any clipnodes because they're not meant to be collidable.\n\n"
-
-				"Check the Messages widget to see which entities had their hulls deleted. You may want to selectively "
-				"delete hulls yourself if you run into problems.");
+			tooltip(g, g_optimize_tip);
 
 			ImGui::Separator();
 
@@ -2048,7 +2053,47 @@ void Gui::drawMenuBar() {
 		}
 		ImGui::EndMenu();
 	}
+}
 
+void Gui::drawMenuBar() {
+	ImGuiContext& g = *GImGui;
+
+	ImGui::BeginMainMenuBar();
+	bool mergeMode = g_app->mapArrangeMode;
+
+	if (g_app->mapArrangeMode) {
+		if (ImGui::BeginMenu("Merge Multiple"))
+		{
+			if (ImGui::MenuItem("Cancel Merge")) {
+				g_app->openMap(g_app->openMapAfterMergeCancel.c_str());
+				g_app->openMapAfterMergeCancel = "";
+			}
+			if (ImGui::MenuItem("Merge")) {
+				vector<Bsp*> bsps;
+				for (BspRenderer* renderer : app->arrangeBsps) {
+					bsps.push_back(renderer->map);
+				}
+				vector<MapMergeOp> mergeOps;
+				if (BspMerger::solveMerge(bsps, mergeOps) == 0) {
+					Bsp* result = BspMerger::createMergedMap(bsps, mergeOps, app->mergeOptimize, app->mergeNohull2, app->mergeRipentMode);
+					if (result) {
+						app->openMap(result);
+					}
+					else {
+						logf("Merge failed!\n");
+					}
+				}
+				else {
+					logf("Merger unable to solve\n");
+				}
+			}
+
+			ImGui::EndMenu();
+		}
+	}
+	else {
+		drawStandardMenuBar();
+	}
 
 	string fpsText = to_string((int)ImGui::GetIO().Framerate) + " FPS";
 	float fpsWidth = smallFont->CalcTextSizeA(g_settings.fontSize * g_smallFontSizeMult, FLT_MAX, FLT_MAX, fpsText.c_str()).x;
@@ -2281,6 +2326,11 @@ void Gui::drawPopups() {
 			delete g_app->mergeResult.map;
 			g_app->mergeResult.map = NULL;
 			loadedStats = false;
+			
+			if (showMergePopupAfterFailPopup) {
+				showMergePopupAfterFailPopup = false;
+				showMergePopup = true;
+			}
 		}
 		ImGui::Dummy(ImVec2(0.0f, 20.0f));
 
@@ -2846,6 +2896,183 @@ void Gui::drawPopups() {
 		}
 		ImGui::EndPopup();
 	}
+
+	if (showMergePopup) {
+		ImGui::OpenPopup("Merge Multiple");
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(600, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(500, 300), ImVec2(FLT_MAX, app->windowHeight));
+	if (ImGui::BeginPopupModal("Merge Multiple", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		static bool optimizeMerge = false;
+		static bool forceNohull2 = false;
+		static int ripentmode = 0;
+		static char mapList[8192];
+		static int numSelected = 0;
+		static bool dirtyMaplist = true;
+
+		if (dirtyMaplist) {
+			numSelected = splitString(mapList, "|").size();
+			dirtyMaplist = false;
+		}
+
+		ImGui::TextWrapped((to_string(numSelected) + " BSPs selected for merging:").c_str());
+
+		ImGui::Columns(2, 0, false);
+		ImGui::SetColumnWidth(0, 450);
+		ImGui::SetColumnWidth(1, 50);
+		ImGui::SetNextItemWidth(450);
+		ImGui::InputText("##mergelist", mapList, 8192); ImGui::NextColumn();
+
+		if (ImGui::Button(" ... ")) {
+			char* fname = tinyfd_openFileDialog("Merge Multiple", "",
+				1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
+
+			if (fname) {
+				strncpy(mapList, fname, 8192);
+				mapList[8191] = 0;
+				dirtyMaplist = true;
+			}
+		}
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		ImGui::Columns(4, 0, false);
+		ImGui::SetColumnWidth(0, 130);
+		ImGui::SetColumnWidth(1, 80);
+		ImGui::SetColumnWidth(2, 80);
+		ImGui::SetColumnWidth(3, 200);
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Series Ripent: "); ImGui::NextColumn();
+
+		ImGui::RadioButton("No", &ripentmode, 0); ImGui::NextColumn();
+		if (ImGui::IsItemHovered()) {
+			tooltip(g, "Do not touch any of the map entity logic.\n");
+		}
+
+		ImGui::RadioButton("Yes", &ripentmode, 1); ImGui::NextColumn();
+		if (ImGui::IsItemHovered()) {
+			tooltip(g,
+				"Ripent the maps so that they play as a connected map series. This requires the bspguy\n"
+				"map script/plugin to be added to the map CFG. The plugin ensures only one map's entities\n"
+				"are active at once. This saves you time and reduces lag in maps with lots of entities.\n\n"
+
+				"The following changes will be applied:\n"
+				"- trigger_changelevel is replaced with trigger_once for map transition logic.\n"
+				"- trigger_changesky is added for map transitions that change the skybox.\n"
+				"- bspguy_equip entities are added where you can set up CFG loadouts for each map.\n"
+				"- various entities and keyvalues are added for the bspguy plugin transition logic.\n"
+			);
+		}
+
+		ImGui::RadioButton("Yes (scriptless)", &ripentmode, 2); ImGui::NextColumn();
+		if (ImGui::IsItemHovered()) {
+			tooltip(g,
+				"This removes the need for the bspguy map script/plugin by emulating its functionality with map\n"
+				"entities. The resulting entity logic will be more complex and error-prone. This also greatly\n"
+				"increases the active entity count as entities from all maps will be loaded at once.\n\n"
+
+				"Enabling this option will apply these additional ripent changes:\n"
+				"- entities are renamed to prevent conflicts between maps.\n"
+				"- monsters are replaced with squadmakers and spawned when needed to reduce lag.\n"
+				"- spawns are disabled in all but the first map.\n"
+				"- info_player_start/coop/dm2 is replaced with info_player_deathmatch.\n"
+				"- trigger_auto is replaced with trigger_relay and triggered on map transitions.\n"
+			);
+		}
+
+		ImGui::Columns(1);
+		ImGui::Dummy(ImVec2(0, 2));
+		ImGui::Text("Preparations:");
+		ImGui::SameLine();
+		ImGui::Dummy(ImVec2(3, 0));
+		ImGui::SameLine();
+		
+		ImGui::Checkbox("Optimize", &optimizeMerge);
+		tooltip(g, (string("Optimizes maps before merging. Try this if map limits are exceeded.\n\nOptimizing ") + g_optimize_tip).c_str());
+
+		ImGui::SameLine();
+		ImGui::Dummy(ImVec2(10, 0));
+		ImGui::SameLine();
+		ImGui::Checkbox("No Hull 2", &forceNohull2);
+		tooltip(g, "Forces redirection of hull 2 to hull 1 in each map before merging. This reduces "
+			"clipnodes and collision accuracy for large monsters and pushables.");
+
+		ImGui::Dummy(ImVec2(0, 2));
+		ImGui::Text("Map Size: ");
+		ImGui::SameLine();
+		ImGui::Dummy(ImVec2(30, 0));
+		ImGui::SameLine();
+		ImGui::Text((string("+/-") + to_string(g_settings.mapsize_max)).c_str());
+		if (ImGui::IsItemHovered())
+			tooltip(g, "Change the Map Size in the Settings menu to adjust the bounds for merged maps.\n");
+
+		ImGui::Dummy(ImVec2(0, 10));
+
+		if (numSelected < 2) {
+			ImGui::BeginDisabled();
+		}
+		if (ImGui::Button("Merge")) {
+			vector<string> input_maps = splitString(mapList, "|");
+
+			MergeResult result = BspMerger::createMergedMap(input_maps, "merged_map", optimizeMerge,
+				forceNohull2, ripentmode);
+		
+			if (result.invalidMaps) {
+				string msg = "One or more of the input maps failed to load.";
+				int ret = tinyfd_messageBox(
+					"Invalid Map", /* NULL or "" */
+					msg.c_str(), /* NULL or "" may contain \n \t */
+					"ok", /* "ok" "okcancel" "yesno" "yesnocancel" */
+					"error", /* "info" "warning" "error" "question" */
+					0);
+			}
+			else if (result.overflow) {
+				g_app->mergeResult = result;
+				showMergePopup = false;
+				ImGui::CloseCurrentPopup();
+				showMergePopupAfterFailPopup = true;
+			}
+			else if (result.notEnoughSpace) {
+				string msg = "The merger failed to fit all maps inside the configured Map Size.\n\n"
+					"Do you want to try arranging the maps yourself?";
+				int ret = tinyfd_messageBox(
+					"Packing Failure", /* NULL or "" */
+					msg.c_str(), /* NULL or "" may contain \n \t */
+					"yesno", /* "ok" "okcancel" "yesno" "yesnocancel" */
+					"warning", /* "info" "warning" "error" "question" */
+					0);
+
+				if (result.map)
+					delete result.map;
+
+				if (ret == 1) {
+					showMergePopup = false;
+					showTransformWidget = true;
+					ImGui::CloseCurrentPopup();
+					g_app->mergeMultiple(input_maps, optimizeMerge, forceNohull2, ripentmode);
+				}
+			}
+			else if (result.map->isWritable()) {
+				g_app->openMap(result.map);
+				showMergePopup = false;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		if (numSelected < 2) {
+			ImGui::EndDisabled();
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Cancel")) {
+			showMergePopup = false;
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 void Gui::drawToolbar() {
@@ -2937,7 +3164,17 @@ void Gui::drawStatusMessage() {
 	bool worldspawnOri = app->mapRenderer->mapOffset != vec3();
 	bool showStatus = sharedStructs || concave || invalidsolid || badSurfaceExtents
 		|| lightmapTooLarge || sharedStructs || app->forceAngleRotation
-		|| dutchAngle || angleKey || worldspawnOri;
+		|| dutchAngle || angleKey || worldspawnOri || app->mapArrangeMode;
+
+	int mergeSolveResult = 0;
+	if (app->mapArrangeMode) {
+		vector<Bsp*> bsps;
+		for (BspRenderer* renderer : app->arrangeBsps) {
+			bsps.push_back(renderer->map);
+		}
+		vector<MapMergeOp> mergeOps;
+		mergeSolveResult = BspMerger::solveMerge(bsps, mergeOps);
+	}
 	
 	static int lastPickCount = 0;
 
@@ -3035,6 +3272,26 @@ void Gui::drawStatusMessage() {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "WORLD ORIGIN");
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Worldspawn has an origin. This will break the game.\n\nEither apply the transformation or delete the origin key to fix.\n");
+				}
+			}
+			if (app->mapArrangeMode) {
+				if (mergeSolveResult == 0) {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "MERGEABLE");
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("The maps can be merged as is.\n");
+					}
+				}
+				else if (mergeSolveResult == -1) {
+					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "MAP OVERLAP");
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("Maps are overlapping and can't be merged.\n");
+					}
+				}
+				else if (mergeSolveResult == -2) {
+					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "MERGE UNSOLVED");
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("The maps do not overlap, but the map merger is unable to figure out how to merge them.\n");
+					}
 				}
 			}
 			windowWidth = ImGui::GetWindowWidth();

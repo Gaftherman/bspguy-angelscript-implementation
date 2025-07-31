@@ -93,6 +93,8 @@ private:
 	bool openSavedTabs = false;
 	bool transparentClipnodes = true;
 	bool showDownscalePopup = false;
+	bool showMergePopup = false;
+	bool showMergePopupAfterFailPopup = false;
 	bool showRadPrepPopup = false;
 	bool refreshTexlightList = false;
 	unordered_map<string, string> texlights;
@@ -143,6 +145,7 @@ private:
 	void draw3dContextMenus();
 	void drawEditOptions(bool isMainMenu);
 	void drawMenuBar();
+	void drawStandardMenuBar();
 	void drawStatusBar();
 	void drawPopups();
 	void drawToolbar();

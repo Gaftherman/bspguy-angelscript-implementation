@@ -5238,6 +5238,11 @@ bool Bsp::validate() {
 			logf("Backwards mins/maxs in model %d. Mins: (%f, %f, %f) Maxs: (%f %f %f)\n", i,
 				models[i].nMins.x, models[i].nMins.y, models[i].nMins.z,
 				models[i].nMaxs.x, models[i].nMaxs.y, models[i].nMaxs.z);
+
+			get_model_hull_bounds(i, 0, models[i].nMins, models[i].nMaxs);
+			logf("    Recalculated as Mins: (%f, %f, %f) Maxs: (%f %f %f)\n", i,
+				models[i].nMins.x, models[i].nMins.y, models[i].nMins.z,
+				models[i].nMaxs.x, models[i].nMaxs.y, models[i].nMaxs.z);
 			isValid = false;
 		}
 
@@ -7729,6 +7734,7 @@ int Bsp::add_model(string serialized) {
 }
 
 int Bsp::merge_models(vector<Entity*> mergeEnts, bool allowClipnodeOverlap) {
+	// Note: much of this code is duplicated in BspMerger::solveMerge
 	struct MergedEntity {
 		Entity* ent;
 		vec3 min[MAX_MAP_HULLS];

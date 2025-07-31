@@ -11,14 +11,14 @@ BspMerger::BspMerger() {
 
 }
 
-MergeResult BspMerger::merge(vector<Bsp*> maps, vec3 gap, string output_name, bool noripent, bool noscript, bool nomove, int max_dim) {
-	merge_max_dim = max_dim;
-
+MergeResult BspMerger::merge(vector<Bsp*> maps, vec3 gap, string output_name, bool noripent, bool noscript, bool nomove, bool forcemove, int max_dim) {
 	MergeResult result;
 	result.fpath = "";
 	result.map = NULL;
 	result.moveFixes = vec3();
 	result.overflow = false;
+	result.notEnoughSpace = false;
+	result.invalidMaps = false;
 	
 	if (maps.size() <= 1) {
 		logf("\nMore than 1 map is required for merging. Aborting merge.\n");
@@ -27,7 +27,14 @@ MergeResult BspMerger::merge(vector<Bsp*> maps, vec3 gap, string output_name, bo
 
 	result.fpath = maps[1]->path;
 
-	vector<vector<vector<MAPBLOCK>>> blocks = separate(maps, gap, nomove, result);
+	merge_max_dim = max_dim;
+	vector<vector<vector<MAPBLOCK>>> blocks;
+	blocks = separate(maps, gap, nomove, result);
+
+	if (result.notEnoughSpace) {
+		merge_max_dim = INT32_MAX; // force them to not overlap
+		blocks = separate(maps, gap, nomove, result);
+	}
 
 	if (blocks.empty()) {
 		return result;
@@ -131,6 +138,245 @@ MergeResult BspMerger::merge(vector<Bsp*> maps, vec3 gap, string output_name, bo
 	return result;
 }
 
+void BspMerger::preprocessMaps(vector<Bsp*> maps, bool optimize, bool nohull2) {
+	for (int i = 0; i < maps.size(); i++) {
+		logf("Preprocessing %s:\n", maps[i]->name.c_str());
+
+		logf("    Deleting unused data...\n");
+		STRUCTCOUNT removed = maps[i]->remove_unused_model_structures();
+		g_progress.clear();
+		removed.print_delete_stats(2);
+
+		if (nohull2 || (optimize && !maps[i]->has_hull2_ents())) {
+			logf("    Deleting hull 2...\n");
+			maps[i]->delete_hull(2, 1);
+			maps[i]->remove_unused_model_structures().print_delete_stats(2);
+		}
+
+		if (optimize) {
+			logf("    Optmizing...\n");
+			maps[i]->delete_unused_hulls().print_delete_stats(2);
+		}
+
+		logf("\n");
+	}
+}
+
+MergeResult BspMerger::createMergedMap(vector<string> fpaths, string output_name, bool optimize, bool nohull2, int ripentmode) {
+	vector<Bsp*> maps;
+
+	MergeResult result;
+	result.fpath = "";
+	result.map = NULL;
+	result.moveFixes = vec3();
+	result.overflow = false;
+	result.notEnoughSpace = false;
+	result.invalidMaps = false;
+
+	for (int i = 0; i < fpaths.size(); i++) {
+		Bsp* map = new Bsp(fpaths[i]);
+		if (!map->valid) {
+			result.invalidMaps = true;
+			return result;
+		}
+		maps.push_back(map);
+	}
+
+	preprocessMaps(maps, optimize, nohull2);
+
+	vec3 gap = vec3(0, 0, 0);
+
+	int max_dim = g_settings.mapsize_max;
+
+	BspMerger merger;
+	result = merger.merge(maps, gap, output_name,
+		ripentmode == 0, ripentmode == 2, false, true, max_dim);
+	Bsp* mergedMap = result.map;
+
+	for (int i = 0; i < maps.size(); i++) {
+		if (maps[i] != mergedMap)
+			delete maps[i];
+	}
+
+	return result;
+}
+
+Bsp* BspMerger::createMergedMap(vector<Bsp*> maps, vector<MapMergeOp> merge_opts, bool optimize,
+	bool nohull2, int ripentmode) {
+
+	preprocessMaps(maps, optimize, nohull2);
+
+	vector<MAPBLOCK> sourceBlocks;
+
+	for (Bsp* map : maps) {
+		vec3 moveAmount = map->ents[0]->getOrigin();
+		map->ents[0]->removeKeyvalue("origin");
+
+		if (moveAmount == vec3())
+			continue;
+
+		logf("\nMoving map %s to (%d %d %d)\n", map->name.c_str(), (int)moveAmount.x, (int)moveAmount.y, (int)moveAmount.z);
+
+		map->move(moveAmount);
+		map->zero_entity_origins("func_ladder");
+		map->zero_entity_origins("func_water"); // water is sometimes invisible after moving in sven
+		map->zero_entity_origins("func_mortar_field"); // mortars don't appear in sven
+
+		MAPBLOCK block;
+		block.map = map;
+		block.merge_name = map->name;
+		block.offset = moveAmount;
+		block.size = block.maxs - block.mins;
+		map->get_bounding_box(block.mins, block.maxs);
+		sourceBlocks.push_back(block);
+
+		if (ripentmode != 0) {
+			// tag ents with the map they belong to
+			for (int i = 0; i < map->ents.size(); i++) {
+				map->ents[i]->setOrAddKeyvalue("$s_bspguy_map_source", toLowerCase(map->name));
+			}
+		}
+	}
+
+	Bsp* lastMergeMap = NULL;
+	for (MapMergeOp& op : merge_opts) {
+		logf("\nMerging map %s into %s\n", op.mapb->name.c_str(), op.mapa->name.c_str());
+		BspMerger merger;
+		merger.merge(*op.mapa, *op.mapb);
+		lastMergeMap = op.mapa;
+	}
+
+	if (ripentmode != 0) {
+		logf("\nUpdating map series entity logic:\n");
+		BspMerger merger;
+		merger.update_map_series_entity_logic(lastMergeMap, sourceBlocks, maps, lastMergeMap->name, maps[0]->name, ripentmode == 2);
+	}
+
+	return lastMergeMap;
+}
+
+int BspMerger::solveMerge(vector<Bsp*> maps, vector<MapMergeOp>& mergeOps) {
+	// Note: much of this code is duplicated in Bsp::merge_models
+	struct MergedMap {
+		Bsp* map;
+		vec3 min;
+		vec3 max;
+	};
+
+	vector<MergedMap> mergedMaps;
+
+	for (Bsp* map : maps) {
+		MergedMap ment;
+		map->get_bounding_box(ment.min, ment.max);
+
+		ment.map = map;
+		mergedMaps.push_back(ment);
+	}
+
+	// check if any bounds overlap
+	for (MergedMap& enta : mergedMaps) {
+		for (MergedMap& entb : mergedMaps) {
+			if (enta.map == entb.map)
+				continue;
+
+			if (boxesIntersect(enta.min, enta.max, entb.min, entb.max)) {
+				return -1;
+			}
+		}
+	}
+
+	// create a BSP tree of the models by expanding a bounding box to enclose
+	// 1 additional object at each step. Multiple bounding boxes can be expanding in parallel
+
+	// do a dry run in case the merger can't find the right order to merge things
+	while (mergedMaps.size() > 1) {
+
+		// find the best next expansion. Something that will not intersect more than one new entity
+		// and which creates the smallest bounding box.
+		bool foundMerge = false;
+
+		for (int i = 0; i < mergedMaps.size(); i++) {
+			MergedMap& enta = mergedMaps[i];
+
+			int bestMerge = -1;
+			Bsp* bestMergeEnt = NULL;
+			float bestVolume = FLT_MAX;
+
+			vec3 amin = enta.min;
+			vec3 amax = enta.max;
+
+			for (int k = 0; k < mergedMaps.size(); k++) {
+				MergedMap& entb = mergedMaps[k];
+				if (enta.map == entb.map)
+					continue;
+
+				vec3 bmin = entb.min;
+				vec3 bmax = entb.max;
+				vec3 mergedMins = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
+				vec3 mergedMaxs = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
+				vec3 mergedSize = mergedMaxs - mergedMins;
+
+				float volume = mergedSize.x * mergedSize.y * mergedSize.z;
+				if (volume >= bestVolume) {
+					//logf("Merge %d to %d would be bigger than to %d\n", enta.ent->getBspModelIdx(), entb.ent->getBspModelIdx(), bestMergeEnt->getBspModelIdx());
+					continue;
+				}
+
+				BSPPLANE separator = Bsp::get_separation_plane(amin, amax, bmin, bmax);
+				if (separator.nType == -1) {
+					// can't find a separating plane
+					//logf("No sep plane with %d and %d\n", enta.ent->getBspModelIdx(), entb.ent->getBspModelIdx());
+					continue;
+				}
+
+				bool wouldMergeIntersectOtherEnts = false;
+				for (const MergedMap& entc : mergedMaps) {
+					if (entc.map == enta.map || entc.map == entb.map)
+						continue;
+
+					if (boxesIntersect(mergedMins, mergedMaxs, entc.min, entc.max)) {
+						wouldMergeIntersectOtherEnts = true;
+						break;
+					}
+				}
+
+				if (!wouldMergeIntersectOtherEnts) {
+					bestVolume = volume;
+					bestMerge = k;
+					bestMergeEnt = entb.map;
+				}
+			}
+
+			if (bestMerge != -1) {
+				//logf("will merge %d into %d\n", enta.ent->getBspModelIdx(), mergedEnts[bestMerge].ent->getBspModelIdx());
+
+				// A absorbs B
+				vec3 amin = enta.min;
+				vec3 amax = enta.max;
+				vec3 bmin = mergedMaps[bestMerge].min;
+				vec3 bmax = mergedMaps[bestMerge].max;
+				enta.min = vec3(min(amin.x, bmin.x), min(amin.y, bmin.y), min(amin.z, bmin.z));
+				enta.max = vec3(max(amax.x, bmax.x), max(amax.y, bmax.y), max(amax.z, bmax.z));
+				mergedMaps.erase(mergedMaps.begin() + bestMerge); // goodbye, B
+
+				MapMergeOp op;
+				op.mapa = enta.map;
+				op.mapb = bestMergeEnt;
+				mergeOps.push_back(op);
+
+				foundMerge = true;
+				break;
+			}
+		}
+
+		if (!foundMerge) {
+			return -2;
+		}
+	}
+
+	return 0;
+}
+
 void BspMerger::merge(MAPBLOCK& dst, MAPBLOCK& src, string resultType) {
 	string thisName = dst.merge_name.size() ? dst.merge_name : dst.map->name;
 	string otherName = src.merge_name.size() ? src.merge_name : src.map->name;
@@ -177,6 +423,7 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 				if (nomove) {
 					logf("Merge aborted because the maps overlap.\n");
 					blocks[i].suggest_intersection_fix(blocks[k], result);
+					result.notEnoughSpace = true;
 				}
 
 				break;
@@ -226,7 +473,8 @@ vector<vector<vector<MAPBLOCK>>> BspMerger::separate(vector<Bsp*>& maps, vec3 ga
 	}
 
 	if (maxMapsPerRow * maxMapsPerCol * maxMapsPerLayer < maps.size()) {
-		logf("Not enough space to merge all maps! Try moving them individually before merging.");
+		logf("Not enough space to merge all maps! Try moving them individually before merging.\n");
+		result.notEnoughSpace = true;
 		return orderedBlocks;
 	}
 

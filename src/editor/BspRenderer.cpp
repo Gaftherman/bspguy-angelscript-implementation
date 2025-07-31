@@ -1513,7 +1513,8 @@ BspRenderer::~BspRenderer() {
 
 	delete glTextureArray;
 
-	delete map;
+	if (map)
+		delete map;
 }
 
 void BspRenderer::delayLoadData() {
@@ -1766,7 +1767,8 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 		if (wireframePass)
 			drawModelWireframe(0, false);
 		else {
-			drawModel(map->ents[0], 0, transparencyPass, false);
+			if (map->modelCount > 0)
+				drawModel(map->ents[0], 0, transparencyPass, false);
 		}
 	}
 
@@ -2116,9 +2118,8 @@ void BspRenderer::drawPointEntities() {
 	}
 }
 
-bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx) {
+bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx, float& bestDist) {
 	bool foundBetterPick = false;
-	float bestDist = FLT_MAX;
 	entIdx = -1;
 	faceIdx = -1;
 
@@ -2206,6 +2207,8 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 	if (!(g_settings.render_flags & (RENDER_TEXTURES | RENDER_LIGHTMAPS))) {
 		return false;
 	}
+	if (map->modelCount == 0)
+		return false;
 
 	start -= offset;
 

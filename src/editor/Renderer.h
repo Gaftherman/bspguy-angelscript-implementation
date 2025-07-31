@@ -111,6 +111,13 @@ public:
 	bool isHovered = false;
 	bool isIconified = false;
 
+	bool mapArrangeMode = false; // user is arranging maps for a multi-map merge
+	vector<BspRenderer*> arrangeBsps; // maps the user is arranging
+	string openMapAfterMergeCancel; // map to open after cancelling a multi merge
+	bool mergeOptimize; // optimize before merging arranged maps
+	bool mergeNohull2; // strip hull 2 before merging arranged maps
+	int mergeRipentMode; // ripent mode for merging arranged maps
+
 	bool forceAngleRotation = false; // force solid entities to respect their angles key, for previewing
 
 	int windowWidth;
@@ -122,13 +129,16 @@ public:
 	void addMap(Bsp* map);
 
 	void renderLoop();
+	void renderArrangeMaps();
 	void postLoadFgdsAndTextures();
 	void postLoadFgds();
 	void reloadMaps();
 	void openMap(const char* path);
+	void openMap(Bsp* map);
 	void saveSettings();
 	void loadSettings();
 	void merge(string fpath);
+	void mergeMultiple(vector<string> fpaths, bool optimizeMerge, bool forceNohull2, int ripentmode);
 	void handleResize(int width, int height);
 	bool confirmMapExit();
 

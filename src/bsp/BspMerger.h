@@ -10,6 +10,13 @@ struct MergeResult {
 	vec3 moveFixes;
 	vec3 moveFixes2;
 	bool overflow;
+	bool notEnoughSpace;
+	bool invalidMaps;
+};
+
+struct MapMergeOp {
+	Bsp* mapa;
+	Bsp* mapb;
 };
 
 // bounding box for a map, used for arranging maps for merging
@@ -50,11 +57,23 @@ public:
 	// noripent - don't change any entity logic
 	// noscript - don't add support for the bspguy map script (worse performance + buggy, but simpler)
 	// nomove - abort the merge if the maps overlap
-	MergeResult merge(vector<Bsp*> maps, vec3 gap, string output_name, bool noripent, bool noscript, bool nomove, int max_dim);
+	// forcemove - increase map size cube if maps don't fit in the requested map size, but still set the failure flag
+	MergeResult merge(vector<Bsp*> maps, vec3 gap, string output_name, bool noripent, bool noscript, bool nomove, bool forcemove, int max_dim);
+
+	static MergeResult createMergedMap(vector<string> fpaths, string output_name, bool optimize,
+		bool nohull2, int ripentmode);
+
+	static Bsp* createMergedMap(vector<Bsp*> maps, vector<MapMergeOp> merge_opts, bool optimize,
+		bool nohull2, int ripentmode);
+
+	// find a series of separation planes that will separate all BSPs
+	static int solveMerge(vector<Bsp*> maps, vector<MapMergeOp>& mergeOps);
 
 private:
 	int merge_ops = 0;
 	int merge_max_dim;
+
+	static void preprocessMaps(vector<Bsp*> maps, bool optimize, bool nohull2);
 
 	// wrapper around BSP data merging for nicer console output
 	void merge(MAPBLOCK& dst, MAPBLOCK& src, string resultName);

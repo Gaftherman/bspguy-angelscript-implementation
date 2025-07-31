@@ -529,6 +529,9 @@ void Renderer::renderLoop() {
 		}
 		glCheckError("Rendering models and sprites");
 		
+		if (mapArrangeMode)
+			renderArrangeMaps();
+
 		// draw transparent entity faces
 		mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
 		glCheckError("Rendering BSP (transparency pass)");
@@ -1098,6 +1101,84 @@ void Renderer::renderLoop() {
 	glfwTerminate();
 }
 
+void Renderer::renderArrangeMaps() {
+	struct RenderMap {
+		BspRenderer* renderer;
+		Entity* controlEnt;
+		vector<OrderedEnt> orderedEnts;
+		vec3 mins, maxs;
+	};
+	vector<RenderMap> renderMaps;
+
+	int idx = 1;
+	for (BspRenderer* arrangeBsp : arrangeBsps) {
+		Entity* controlEnt = mapRenderer->map->ents[idx++];
+		arrangeBsp->map->ents[0]->setOrAddKeyvalue("origin", controlEnt->getOrigin().toKeyvalueString());
+
+		vector<OrderedEnt> orderedEnts;
+		arrangeBsp->getRenderEnts(orderedEnts);
+
+		RenderMap rmap;
+		rmap.controlEnt = controlEnt;
+		rmap.renderer = arrangeBsp;
+		rmap.orderedEnts = orderedEnts;
+		arrangeBsp->map->get_bounding_box(rmap.mins, rmap.maxs);
+
+		renderMaps.push_back(rmap);
+	}
+
+	for (RenderMap& arrangeBsp : renderMaps) {
+		// opaque pass
+		arrangeBsp.renderer->render(arrangeBsp.orderedEnts, false, clipnodeRenderHull, false, false);
+	}
+
+	for (RenderMap& arrangeBsp : renderMaps) {
+		// wireframe pass
+		if (g_settings.render_flags & RENDER_WIREFRAME) {
+			arrangeBsp.renderer->render(arrangeBsp.orderedEnts, false, clipnodeRenderHull, false, true);
+			glCheckError("Rendering BSP (wireframe pass)");
+		}
+	}
+
+	for (RenderMap& arrangeBsp : renderMaps) {
+		// transparency pass
+		arrangeBsp.renderer->render(arrangeBsp.orderedEnts, false, clipnodeRenderHull, true, false);
+	}
+
+	colorShader->bind();
+	colorShader->modelMat->loadIdentity();
+	colorShader->updateMatrixes();
+
+	for (RenderMap& rmap : renderMaps) {
+		Bsp* map = rmap.renderer->map;
+		COLOR4 boxColor = COLOR4(0, 0, 255, 128);
+
+		vector<Entity*> selected = pickInfo.getEnts();
+		for (Entity* selectedEnt : selected) {
+			if (selectedEnt == rmap.controlEnt) {
+				boxColor.g = 128;
+			}
+		}
+
+		bool collision = false;
+		for (RenderMap& othermap : renderMaps) {
+			if (rmap.renderer == othermap.renderer)
+				continue;
+			if (boxesIntersect(rmap.mins, rmap.maxs, othermap.mins, othermap.maxs)) {
+				collision = true;
+				break;
+			}
+		}
+
+		if (collision) {
+			boxColor.r = 255;
+			boxColor.b = 0;
+		}
+
+		drawBox(rmap.mins, rmap.maxs, boxColor);
+	}
+}
+
 void Renderer::postLoadFgds()
 {
 	delete pointEntRenderer;
@@ -1142,6 +1223,7 @@ void Renderer::postLoadFgdsAndTextures() {
 void Renderer::clearMapData() {
 	clearUndoCommands();
 	clearRedoCommands();
+	mapArrangeMode = false;
 
 	/*
 	for (auto item : studioModels) {
@@ -1162,6 +1244,11 @@ void Renderer::clearMapData() {
 		delete mapRenderer;
 		mapRenderer = NULL;
 	}
+
+	for (BspRenderer* arrangeRenderer : arrangeBsps) {
+		delete arrangeRenderer;
+	}
+	arrangeBsps.clear();
 
 	pickInfo = PickInfo();
 
@@ -1236,6 +1323,16 @@ void Renderer::openMap(const char* fpath) {
 		delete map;
 		logf("Failed to load map (not a valid BSP file): %s\n", fpath);
 		return;
+	}
+
+	openMap(map);
+}
+
+void Renderer::openMap(Bsp* map) {
+	for (BspRenderer* render : arrangeBsps) {
+		if (render->map == map) {
+			render->map = NULL; // don't delete the map about to be opened;
+		}
 	}
 
 	clearMapData();
@@ -2109,7 +2206,8 @@ void Renderer::cameraContextMenus() {
 		getPickRay(pickStart, pickDir);
 
 		int entIdx, faceIdx;
-		mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, entIdx, faceIdx);
+		float bestDist = FLT_MAX;
+		mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, entIdx, faceIdx, bestDist);
 
 		if (entIdx != 0 && pickInfo.isEntSelected(entIdx)) {
 			gui->openContextMenu(pickInfo.getEntIndex());
@@ -2196,7 +2294,7 @@ void Renderer::shortcutControls() {
 			gui->showTransformWidget = !gui->showTransformWidget;
 		}
 		if (anyCtrlPressed && pressed[GLFW_KEY_O] && !oldPressed[GLFW_KEY_O]) {
-			openMap(NULL);
+			openMap((char*)NULL);
 		}
 		if (anyCtrlPressed && anyAltPressed && pressed[GLFW_KEY_S] && !oldPressed[GLFW_KEY_S]) {
 			gui->saveAs();
@@ -2259,7 +2357,21 @@ void Renderer::pickObject() {
 	
 	int oldEntIdx = pickInfo.getEntIndex();
 	int clickedEnt, clickedFace;
-	mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace);
+	float bestDist = FLT_MAX;
+	mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, bestDist);
+
+	if (mapArrangeMode) {
+		int bestMapPick = -1;
+		for (int i = 0; i < arrangeBsps.size(); i++) {
+			if (arrangeBsps[i]->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, bestDist)) {
+				bestMapPick = i;
+			}
+		}
+
+		if (bestMapPick != -1) {
+			clickedEnt = bestMapPick + 1;
+		}
+	}
 
 	if (movingEnt && oldEntIdx != pickInfo.getEntIndex()) {
 		ungrabEnts();
@@ -4265,7 +4377,7 @@ void Renderer::unhideSelectedEnts() {
 void Renderer::hideSelectedEnts() {
 	vector<Entity*> ents = pickInfo.getEnts();
 	
-	if (ents.empty())
+	if (ents.empty() || mapArrangeMode)
 		return;
 
 	for (Entity* ent : ents) {
@@ -4295,7 +4407,7 @@ void Renderer::unhideEnts() {
 }
 
 void Renderer::cutEnts() {
-	if (pickInfo.getEntIndex() <= 0)
+	if (pickInfo.getEntIndex() <= 0 || mapArrangeMode)
 		return;
 
 	Bsp* map = mapRenderer->map;
@@ -4319,7 +4431,7 @@ void Renderer::cutEnts() {
 }
 
 void Renderer::copyEnts(bool stringifyBspModels) {
-	if (pickInfo.getEntIndex() <= 0)
+	if (pickInfo.getEntIndex() <= 0 || mapArrangeMode)
 		return;
 
 	Bsp* map = mapRenderer->map;
@@ -4346,6 +4458,9 @@ bool Renderer::canPasteEnts() {
 }
 
 void Renderer::pasteEnts(bool noModifyOrigin) {
+	if (mapArrangeMode)
+		return;
+
 	const char* clipBoardText = ImGui::GetClipboardText();
 	if (!clipBoardText) {
 		logf("No entity data in clipboard\n");
@@ -4406,6 +4521,8 @@ void Renderer::pasteEnts(bool noModifyOrigin) {
 }
 
 void Renderer::pasteEntsFromText(string text, bool noModifyOrigin) {
+	if (mapArrangeMode)
+		return;
 	Bsp* map = pickInfo.getMap() ? pickInfo.getMap() : mapRenderer->map;
 
 	CreateEntityFromTextCommand* createCommand = 
@@ -4450,7 +4567,7 @@ void Renderer::pasteEntsFromText(string text, bool noModifyOrigin) {
 }
 
 void Renderer::deleteEnts() {
-	if (pickInfo.getEntIndex() <= 0)
+	if (pickInfo.getEntIndex() <= 0 || mapArrangeMode)
 		return;
 
 	DeleteEntitiesCommand* deleteCommand = new DeleteEntitiesCommand("Delete Entity", pickInfo.ents);
@@ -4809,7 +4926,7 @@ void Renderer::merge(string fpath) {
 	map2->remove_unused_model_structures().print_delete_stats(2);
 
 	BspMerger merger;
-	mergeResult = merger.merge(maps, vec3(), thismap->name, true, true, true, g_settings.mapsize_max);
+	mergeResult = merger.merge(maps, vec3(), thismap->name, true, true, true, false, g_settings.mapsize_max);
 
 	if (!mergeResult.map || !mergeResult.map->valid) {
 		delete map2;
@@ -4837,6 +4954,53 @@ void Renderer::merge(string fpath) {
 	command->pushUndoState();
 }
 
+void Renderer::mergeMultiple(vector<string> fpaths, bool optimizeMerge, bool forceNohull2, int ripentmode) {
+	openMapAfterMergeCancel = mapRenderer->map->path;
+	mergeOptimize = optimizeMerge;
+	mergeNohull2 = forceNohull2;
+	mergeRipentMode = ripentmode;
+	clearMapData();
+
+	mapArrangeMode = true;
+	pickMode = PICK_OBJECT;
+
+	Bsp* mergeMap = new Bsp();
+
+	Entity* worldspawn = new Entity();
+	worldspawn->setOrAddKeyvalue("classname", "worldspawn");
+	mergeMap->ents.push_back(worldspawn);
+
+	float lastMapMax = -g_settings.mapsize_max;
+	for (string path : fpaths) {
+		Bsp* map = new Bsp(path);
+
+		vec3 mins, maxs;
+		map->get_bounding_box(mins, maxs);
+
+		float offsetX = lastMapMax - mins.x;
+
+		vec3 offset(offsetX, 0, 0);
+
+		Entity* mapEnt = new Entity();
+		mapEnt->setOrAddKeyvalue("origin", offset.toKeyvalueString());
+		mapEnt->setOrAddKeyvalue("classname", "map");
+		mapEnt->setOrAddKeyvalue("targetname", map->name);		
+
+		lastMapMax = (offset.x + maxs.x) + 16;
+
+		BspRenderer* mapRenderer = new BspRenderer(map, pointEntRenderer);
+		mapRenderer->mapOffset = offset;
+		arrangeBsps.push_back(mapRenderer);
+		mergeMap->ents.push_back(mapEnt);
+	}
+
+	addMap(mergeMap);
+
+	gui->refresh();
+	updateCullBox();
+
+}
+
 void Renderer::getWindowSize(int& width, int& height) {
 	glfwGetWindowSize(window, &width, &height);
 }
@@ -4850,7 +5014,7 @@ bool Renderer::entityHasFgd(string cname) {
 }
 
 bool Renderer::confirmMapExit() {
-	if (emptyMapLoaded)
+	if (emptyMapLoaded || mapArrangeMode)
 		return true;
 
 	if (g_settings.confirm_exit) {

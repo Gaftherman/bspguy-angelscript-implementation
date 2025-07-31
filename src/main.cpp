@@ -238,7 +238,7 @@ int test() {
 	removed.print_delete_stats(1);
 
 	BspMerger merger;
-	Bsp* result = merger.merge(maps, vec3(1, 1, 1), "yabma_move", false, false, false, 32768).map;
+	Bsp* result = merger.merge(maps, vec3(1, 1, 1), "yabma_move", false, false, false, false, 32768).map;
 	logf("\n");
 	if (result != NULL) {
 		result->write("yabma_move.bsp");
@@ -298,7 +298,7 @@ int merge_maps(CommandLine& cli) {
 
 	BspMerger merger;
 	Bsp* result = merger.merge(maps, gap, output_name,
-		cli.hasOption("-noripent"), cli.hasOption("-noscript"), false, max_dim).map;
+		cli.hasOption("-noripent"), cli.hasOption("-noscript"), false, false, max_dim).map;
 
 	logf("\n");
 	if (result->isWritable()) {
