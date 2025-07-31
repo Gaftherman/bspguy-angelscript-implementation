@@ -2927,15 +2927,19 @@ int Bsp::allocblock_reduction() {
 		for (int fa = 0; fa < model.nFaces; fa++) {
 			BSPFACE& face = faces[model.iFirstFace + fa];
 			BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
-			if (info.vS.length() > 0.01f) {
-				info.vS = info.vS.normalize(0.01f);
-				anyScales = true;
-			}
-			if (info.vT.length() > 0.01f) {
-				info.vT = info.vT.normalize(0.01f);
-				anyScales = true;
-			}
 			
+			if (info.vS.length() > 0.01f || info.vT.length() > 0.01f) {
+				BSPTEXTUREINFO* newinfo = get_unique_texinfo(model.iFirstFace + fa);
+
+				if (info.vS.length() > 0.01f) {
+					newinfo->vS = info.vS.normalize(0.01f);
+					anyScales = true;
+				}
+				if (info.vT.length() > 0.01f) {
+					newinfo->vT = info.vT.normalize(0.01f);
+					anyScales = true;
+				}
+			}			
 		}
 
 		if (anyScales) {
