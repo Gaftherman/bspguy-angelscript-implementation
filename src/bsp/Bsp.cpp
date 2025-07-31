@@ -4033,7 +4033,7 @@ WADTEX Bsp::load_texture(int textureIdx) {
 	if (!tex) {
 		return out;
 	}
-	memcpy(&out, &tex, sizeof(BSPMIPTEX));
+	memcpy(&out, tex, sizeof(BSPMIPTEX));
 
 	int sz = out.getDataSize();
 	out.data = new byte[sz];
