@@ -6,6 +6,7 @@
 #include <fstream>
 #include "globals.h"
 #include <algorithm>
+#include <float.h>
 
 BspMerger::BspMerger() {
 
