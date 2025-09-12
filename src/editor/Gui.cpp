@@ -7422,7 +7422,7 @@ void Gui::drawTextureTool() {
 
 				for (uint i = 0; i < totalTextures; i++) {
 					BSPMIPTEX* tex = map->get_texture(i);
-					if (!strcasecmp(tex->szName, textureName)) {
+					if (tex && !strcasecmp(tex->szName, textureName)) {
 						validTexture = true;
 						newMiptex = i;
 						// force matching case of real texture reference
