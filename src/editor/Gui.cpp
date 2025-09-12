@@ -5661,13 +5661,13 @@ void Gui::drawHelp() {
 void Gui::drawAbout() {
 	ImGui::SetNextWindowSize(ImVec2(500, 140), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("About", &showAboutWidget)) {
-		ImGui::InputText("Version", (char*)g_version_string, strlen(g_version_string), ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputText("Version", (char*)g_version_string, strlen(g_version_string)+1, ImGuiInputTextFlags_ReadOnly);
 
 		static char* author = "w00tguy";
-		ImGui::InputText("Author", author, strlen(author), ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputText("Author", author, strlen(author)+1, ImGuiInputTextFlags_ReadOnly);
 
 		static char* url = "https://github.com/wootguy/bspguy";
-		ImGui::InputText("Contact", url, strlen(url), ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputText("Contact", url, strlen(url)+1, ImGuiInputTextFlags_ReadOnly);
 	}
 
 	ImGui::End();
