@@ -4,6 +4,8 @@
 #include <vector>
 #include "Polygon3D.h"
 #include <future>
+#include "colors.h"
+#include "primitives.h"
 
 class NavMesh;
 class PointEntRenderer;
@@ -59,6 +61,7 @@ struct FaceMath {
 	float fdist;
 	vector<vec3> verts;
 	vector<vec2> localVerts;
+	int index; // used to map a face to an element in some other list (e.g. leaf node mesh -> leaf index)
 };
 
 struct RenderEnt {
@@ -102,6 +105,17 @@ struct RenderClipnodes {
 	vector<FaceMath> faceMaths[MAX_MAP_HULLS];
 };
 
+struct RenderRange {
+	int start, end;
+};
+
+struct RenderLeaves {
+	VertexBuffer* leafBuffer;
+	VertexBuffer* wireframeLeafBuffer;
+	vector<FaceMath> faceMaths;
+	RenderRange leafRanges[65535]; // maps a leaf index to it's start/end vertex in leafBuffer
+};
+
 struct OrderedEnt {
 	Entity* ent;
 	int modelIdx;
@@ -110,6 +124,8 @@ struct OrderedEnt {
 
 struct BSPMODEL;
 struct BSPFACE;
+struct BSPLEAF;
+struct NodeVolumeCuts;
 
 struct EntityState {
 	int index;
@@ -120,28 +136,35 @@ class PickInfo {
 public:
 	vector<int> ents; // selected entity indexes
 	vector<int> faces; // selected face indexes
+	vector<int> leaves; // selected leaf indexes
 
 	PickInfo() {}
 
 	Bsp* getMap();
 	void selectEnt(int entIdx);
 	void selectFace(int faceIdx);
+	void selectLeaf(int leafIdx);
 	void deselect();
 	void deselectEnt(int entIdx);
 	void deselectFace(int faceIdx);
+	void deselectLeaf(int leafIdx);
 	Entity* getEnt();
 	int getEntIndex();
 	int getModelIndex();
 	BSPMODEL* getModel();
 	BSPFACE* getFace();
 	int getFaceIndex();
+	int getLeafIndex();
 	vec3 getOrigin(); // origin of the selected entity
 	bool isFaceSelected(int faceIdx);
+	bool isLeafSelected(int leafIdx);
 	bool isEntSelected(int entIdx);
 	vector<Entity*> getEnts();
 	vector<BSPFACE*> getFaces();
+	vector<BSPLEAF*> getLeaves();
 	vector<int> getModelIndexes();
 	bool shouldHideSelection();
+	void selectLeafFaces(); // highlights all faces referenced in selected leaves
 };
 
 class Wad;
@@ -161,6 +184,7 @@ public:
 	void getRenderEnts(vector<OrderedEnt>& ents); // calc ent data for multipass rendering
 	void render(const vector<OrderedEnt>& orderedEnts, bool highlightAlwaysOnTop,
 		int clipnodeHull, bool transparencyPass, bool wireframePass);
+	void renderLeaves();
 
 	bool willDrawModel(Entity* ent, int modelIdx, bool transparent);
 	void drawModel(Entity* ent, int modelIdx, bool transparent, bool highlight);
@@ -168,8 +192,9 @@ public:
 	void drawModelClipnodes(int modelIdx, bool highlight, int hullIdx);
 	void drawPointEntities();
 
-	bool pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx, float& bestDist);
+	bool pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx, int& leafIdx, float& bestDist);
 	bool pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int modelIdx, int hullIdx, int testEntidx, int& faceIdx, float& bestDist);
+	bool pickLeaf(vec3 start, vec3 dir, int& leafIdx, float& bestDist);
 	bool pickFaceMath(vec3 start, vec3 dir, FaceMath& faceMath, float& bestDist);
 
 	void refreshEnt(int entIdx);
@@ -198,6 +223,7 @@ public:
 	bool isFinishedLoading();
 
 	void highlightPickedFaces(bool highlight);
+	void highlightPickedLeaves(bool highlight);
 	void updateFaceUVs(int faceIdx);
 	uint getFaceTextureId(int faceIdx);
 	int addTextureToMap(string textureName); // adds a texture reference if found in a loaded WAD
@@ -214,6 +240,7 @@ private:
 	RenderEnt* renderEnts = NULL;
 	RenderModel* renderModels = NULL;
 	RenderClipnodes* renderClipnodes = NULL;
+	RenderLeaves* renderLeafDat = NULL;
 	FaceMath* faceMaths = NULL;
 	VertexBuffer* pointEnts = NULL;
 
@@ -259,6 +286,9 @@ private:
 	void loadLightmaps();
 	void loadClipnodes();
 	void generateClipnodeBuffer(int modelIdx);
+	void generateLeafBuffer();
+	void generateNodeMesh(NodeVolumeCuts* volume, COLOR4 color, vector<cVert>& allVerts,
+		vector<cVert>& wireframeVerts, vector<FaceMath>& faceMaths, int elementIndex);
 	void generateNavMeshBuffer();
 	void deleteRenderModel(RenderModel* renderModel);
 	void deleteRenderModelClipnodes(RenderClipnodes* renderModel);

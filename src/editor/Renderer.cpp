@@ -536,6 +536,12 @@ void Renderer::renderLoop() {
 		mapRenderer->render(orderedEnts, transformTarget == TRANSFORM_VERTEX, clipnodeRenderHull, true, false);
 		glCheckError("Rendering BSP (transparency pass)");
 
+		if (pickMode == PICK_LEAF) {
+			mapRenderer->renderLeaves();
+		}
+
+		glCheckError("Rendering leaf selection");
+
 		if (!mapRenderer->isFinishedLoading()) {
 			isLoading = true;
 		}
@@ -2205,9 +2211,9 @@ void Renderer::cameraContextMenus() {
 		vec3 pickStart, pickDir;
 		getPickRay(pickStart, pickDir);
 
-		int entIdx, faceIdx;
+		int entIdx, faceIdx, leafIdx;
 		float bestDist = FLT_MAX;
-		mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, entIdx, faceIdx, bestDist);
+		mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, entIdx, faceIdx, leafIdx, bestDist);
 
 		if (entIdx != 0 && pickInfo.isEntSelected(entIdx)) {
 			gui->openContextMenu(pickInfo.getEntIndex());
@@ -2356,14 +2362,14 @@ void Renderer::pickObject() {
 	}
 	
 	int oldEntIdx = pickInfo.getEntIndex();
-	int clickedEnt, clickedFace;
+	int clickedEnt, clickedFace, clickedLeaf;
 	float bestDist = FLT_MAX;
-	mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, bestDist);
+	mapRenderer->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, clickedLeaf, bestDist);
 
 	if (mapArrangeMode) {
 		int bestMapPick = -1;
 		for (int i = 0; i < arrangeBsps.size(); i++) {
-			if (arrangeBsps[i]->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, bestDist)) {
+			if (arrangeBsps[i]->pickPoly(pickStart, pickDir, clipnodeRenderHull, clickedEnt, clickedFace, clickedLeaf, bestDist)) {
 				bestMapPick = i;
 			}
 		}
@@ -2456,6 +2462,32 @@ void Renderer::pickObject() {
 		}
 		//logf("%d selected faces\n", pickInfo.faces.size());
 		
+		gui->showLightmapEditorUpdate = true;
+	}
+	else if (pickMode == PICK_LEAF) {
+		mapRenderer->highlightPickedFaces(false);
+		mapRenderer->highlightPickedLeaves(false);
+
+		if (multiselect) {
+			if (pickInfo.isLeafSelected(clickedLeaf)) {
+				pickInfo.deselectLeaf(clickedLeaf);
+			}
+			else if (clickedLeaf != -1) {
+				pickInfo.selectLeaf(clickedLeaf);
+			}
+		}
+		else {
+			pickInfo.deselect();
+
+			if (clickedLeaf != -1) {
+				pickInfo.selectLeaf(clickedLeaf);
+			}
+		}
+
+		//pickInfo.selectLeafFaces();
+		mapRenderer->highlightPickedFaces(true);
+		mapRenderer->highlightPickedLeaves(true);
+
 		gui->showLightmapEditorUpdate = true;
 	}
 

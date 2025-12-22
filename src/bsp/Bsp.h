@@ -131,12 +131,18 @@ public:
 	// returns true if leaf is in the PVS from the given position
 	bool is_leaf_visible(int ileaf, vec3 pos);
 
+	// return PVS of the given leaf (leaf indexes which are potentially visible)
+	vector<int> get_pvs(int ileaf);
+
 	bool is_face_visible(int faceIdx, vec3 pos, vec3 angles);
 
 	int count_visible_polys(vec3 pos, vec3 angles);
 
 	// get leaf index from world position
 	int get_leaf(vec3 pos, int hull);
+
+	// get leaf index from face index
+	int get_leaf_from_face(int faceIdx);
 
 	// strips a collision hull from the given model index
 	// and redirects to the given hull, if redirect>0

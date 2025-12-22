@@ -527,6 +527,13 @@ void BspRenderer::deleteRenderClipnodes() {
 		delete[] renderClipnodes;
 	}
 
+	if (renderLeafDat != NULL && renderLeafDat->leafBuffer) {
+		delete renderLeafDat->leafBuffer;
+		delete renderLeafDat->wireframeLeafBuffer;
+		renderLeafDat->leafBuffer = NULL;
+		renderLeafDat->wireframeLeafBuffer = NULL;
+	}
+
 	renderClipnodes = NULL;
 }
 
@@ -891,6 +898,13 @@ bool BspRenderer::refreshModelClipnodes(int modelIdx) {
 		return false;
 	}
 
+	if (modelIdx == 0 && renderLeafDat != NULL && renderLeafDat->leafBuffer) {
+		delete renderLeafDat->leafBuffer;
+		delete renderLeafDat->wireframeLeafBuffer;
+		renderLeafDat->leafBuffer = NULL;
+		renderLeafDat->wireframeLeafBuffer = NULL;
+	}
+
 	deleteRenderModelClipnodes(&renderClipnodes[modelIdx]);
 	generateClipnodeBuffer(modelIdx);
 
@@ -909,6 +923,7 @@ bool BspRenderer::refreshModelClipnodes(int modelIdx) {
 void BspRenderer::loadClipnodes() {
 	numRenderClipnodes = map->modelCount;
 	renderClipnodes = new RenderClipnodes[numRenderClipnodes];
+	renderLeafDat = new RenderLeaves();
 	memset(renderClipnodes, 0, numRenderClipnodes * sizeof(RenderClipnodes));
 
 	for (int i = 0; i < numRenderClipnodes; i++) {
@@ -1150,11 +1165,6 @@ void BspRenderer::generateClipnodeBuffer(int modelIdx) {
 	
 	for (int i = 0; i < MAX_MAP_HULLS; i++) {
 		vector<NodeVolumeCuts> solidNodes = map->get_model_leaf_volume_cuts(modelIdx, i, CONTENTS_SOLID);
-
-		vector<CMesh> solidMeshes;
-		for (int k = 0; k < solidNodes.size(); k++) {
-			solidMeshes.push_back(clipper.clip(solidNodes[k].cuts));
-		}
 		
 		static COLOR4 hullColors[] = {
 			COLOR4(255, 255, 255, 128),
@@ -1168,109 +1178,9 @@ void BspRenderer::generateClipnodeBuffer(int modelIdx) {
 		vector<cVert> wireframeVerts;
 		vector<FaceMath> faceMaths;
 
-		for (int m = 0; m < solidMeshes.size(); m++) {
-			CMesh& mesh = solidMeshes[m];
+		for (int k = 0; k < solidNodes.size(); k++) {
 			clipnodeLeafCount++;
-
-			for (int i = 0; i < mesh.faces.size(); i++) {
-
-				if (!mesh.faces[i].visible) {
-					continue;
-				}
-
-				set<int> uniqueFaceVerts;
-
-				for (int k = 0; k < mesh.faces[i].edges.size(); k++) {
-					for (int v = 0; v < 2; v++) {
-						int vertIdx = mesh.edges[mesh.faces[i].edges[k]].verts[v];
-						if (!mesh.verts[vertIdx].visible) {
-							continue;
-						}
-						uniqueFaceVerts.insert(vertIdx);
-					}
-				}
-
-				vector<vec3> faceVerts;
-				for (auto vertIdx : uniqueFaceVerts) {
-					faceVerts.push_back(mesh.verts[vertIdx].pos);
-				}
-
-				sortPlanarVerts(faceVerts);
-
-				if (faceVerts.size() < 3) {
-					//logf("Degenerate clipnode face discarded\n");
-					continue;
-				}
-
-				vec3 normal = getNormalFromVerts(faceVerts);
-
-				if (dotProduct(mesh.faces[i].normal, normal) < 0) {
-					reverse(faceVerts.begin(), faceVerts.end());
-					normal = normal.invert();
-				}
-
-				// calculations for face picking
-				{
-					FaceMath faceMath;
-					faceMath.plane_z = mesh.faces[i].normal;
-					faceMath.fdist = getDistAlongAxis(mesh.faces[i].normal, faceVerts[0]);
-
-					vec3 v0 = faceVerts[0];
-					vec3 v1;
-					bool found = false;
-					for (int z = 1; z < faceVerts.size(); z++) {
-						if (faceVerts[z] != v0) {
-							v1 = faceVerts[z];
-							found = true;
-							break;
-						}
-					}
-					if (!found) {
-						logf("Failed to find non-duplicate vert for clipnode face\n");
-					}
-
-					vec3 plane_z = mesh.faces[i].normal;
-					vec3 plane_x = faceMath.plane_x = (v1 - v0).normalize();
-					vec3 plane_y = faceMath.plane_y = crossProduct(plane_z, plane_x).normalize();
-					faceMath.worldToLocal = worldToLocalTransform(plane_x, plane_y, plane_z);
-
-					faceMath.verts = vector<vec3>(faceVerts.size());
-					faceMath.localVerts = vector<vec2>(faceVerts.size());
-					for (int k = 0; k < faceVerts.size(); k++) {
-						faceMath.verts[k] = faceVerts[k];
-						faceMath.localVerts[k] = (faceMath.worldToLocal * vec4(faceVerts[k], 1)).xy();
-					}
-
-					faceMaths.push_back(faceMath);
-				}
-
-				// create the verts for rendering
-				{
-					for (int i = 0; i < faceVerts.size(); i++) {
-						faceVerts[i] = faceVerts[i].flip();
-					}
-
-					COLOR4 wireframeColor = { 0, 0, 0, 255 };
-					for (int k = 0; k < faceVerts.size(); k++) {
-						wireframeVerts.push_back(cVert(faceVerts[k], wireframeColor));
-						wireframeVerts.push_back(cVert(faceVerts[(k + 1) % faceVerts.size()], wireframeColor));
-					}
-
-					vec3 lightDir = vec3(1, 1, -1).normalize();
-					float dot = (dotProduct(normal*-1, lightDir) + 1) / 2.0f;
-					if (dot > 0.5f) {
-						dot = dot * dot;
-					}
-					COLOR4 faceColor = color * (dot);
-
-					// convert from TRIANGLE_FAN style verts to TRIANGLES
-					for (int k = 2; k < faceVerts.size(); k++) {
-						allVerts.push_back(cVert(faceVerts[0], faceColor));
-						allVerts.push_back(cVert(faceVerts[k - 1], faceColor));
-						allVerts.push_back(cVert(faceVerts[k], faceColor));
-					}
-				}
-			}
+			generateNodeMesh(&solidNodes[k], color, allVerts, wireframeVerts, faceMaths, solidNodes[k].nodeIdx);
 		}
 
 		cVert* output = new cVert[allVerts.size()];
@@ -1299,7 +1209,169 @@ void BspRenderer::generateClipnodeBuffer(int modelIdx) {
 	}
 
 	if (modelIdx == 0) {
+		generateLeafBuffer();
 		//generateNavMeshBuffer();
+	}
+}
+
+void BspRenderer::generateLeafBuffer() {
+	BSPMODEL& model = map->models[0];
+
+	vec3 min = vec3(model.nMins.x, model.nMins.y, model.nMins.z);
+	vec3 max = vec3(model.nMaxs.x, model.nMaxs.y, model.nMaxs.z);
+
+	renderLeafDat->leafBuffer = NULL;
+	renderLeafDat->wireframeLeafBuffer = NULL;
+
+	Clipper clipper;
+
+	vector<NodeVolumeCuts> leafNodes = map->get_model_leaf_volume_cuts(0, 0, CONTENTS_NOT_SOLID);
+	static COLOR4 color = COLOR4(255, 255, 255, 128);
+
+	vector<cVert> allVerts;
+	vector<cVert> wireframeVerts;
+	vector<FaceMath> faceMaths;
+
+	memset(renderLeafDat->leafRanges, 0, sizeof(renderLeafDat->leafRanges));
+
+	for (int k = 0; k < leafNodes.size(); k++) {
+		clipnodeLeafCount++;
+		int leafIdx = leafNodes[k].leafIdx;
+		renderLeafDat->leafRanges[leafIdx].start = allVerts.size();
+		generateNodeMesh(&leafNodes[k], color, allVerts, wireframeVerts, faceMaths, leafNodes[k].leafIdx);
+		renderLeafDat->leafRanges[leafIdx].end = allVerts.size();
+	}
+
+	cVert* output = new cVert[allVerts.size()];
+	for (int i = 0; i < allVerts.size(); i++) {
+		output[i] = allVerts[i];
+	}
+
+	cVert* wireOutput = new cVert[wireframeVerts.size()];
+	for (int i = 0; i < wireframeVerts.size(); i++) {
+		wireOutput[i] = wireframeVerts[i];
+	}
+
+	if (allVerts.size() == 0 || wireframeVerts.size() == 0) {
+		renderLeafDat->leafBuffer = NULL;
+		renderLeafDat->wireframeLeafBuffer = NULL;
+		return;
+	}
+
+	renderLeafDat->leafBuffer = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, output, allVerts.size());
+	renderLeafDat->leafBuffer->ownData = true;
+
+	renderLeafDat->wireframeLeafBuffer = new VertexBuffer(g_app->colorShader, COLOR_4B | POS_3F, wireOutput, wireframeVerts.size());
+	renderLeafDat->wireframeLeafBuffer->ownData = true;
+
+	renderLeafDat->faceMaths = faceMaths;
+}
+
+void BspRenderer::generateNodeMesh(NodeVolumeCuts* volume, COLOR4 color, vector<cVert>& allVerts,
+	vector<cVert>& wireframeVerts, vector<FaceMath>& faceMaths, int elementIndex) {
+	Clipper clipper;
+	CMesh mesh = clipper.clip(volume->cuts);
+	clipnodeLeafCount++;
+
+	for (int i = 0; i < mesh.faces.size(); i++) {
+
+		if (!mesh.faces[i].visible) {
+			continue;
+		}
+
+		set<int> uniqueFaceVerts;
+
+		for (int k = 0; k < mesh.faces[i].edges.size(); k++) {
+			for (int v = 0; v < 2; v++) {
+				int vertIdx = mesh.edges[mesh.faces[i].edges[k]].verts[v];
+				if (!mesh.verts[vertIdx].visible) {
+					continue;
+				}
+				uniqueFaceVerts.insert(vertIdx);
+			}
+		}
+
+		vector<vec3> faceVerts;
+		for (auto vertIdx : uniqueFaceVerts) {
+			faceVerts.push_back(mesh.verts[vertIdx].pos);
+		}
+
+		sortPlanarVerts(faceVerts);
+
+		if (faceVerts.size() < 3) {
+			//logf("Degenerate clipnode face discarded\n");
+			continue;
+		}
+
+		vec3 normal = getNormalFromVerts(faceVerts);
+
+		if (dotProduct(mesh.faces[i].normal, normal) < 0) {
+			reverse(faceVerts.begin(), faceVerts.end());
+			normal = normal.invert();
+		}
+
+		// calculations for face picking
+		{
+			FaceMath faceMath;
+			faceMath.plane_z = mesh.faces[i].normal;
+			faceMath.fdist = getDistAlongAxis(mesh.faces[i].normal, faceVerts[0]);
+			faceMath.index = elementIndex;
+
+			vec3 v0 = faceVerts[0];
+			vec3 v1;
+			bool found = false;
+			for (int z = 1; z < faceVerts.size(); z++) {
+				if (faceVerts[z] != v0) {
+					v1 = faceVerts[z];
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				logf("Failed to find non-duplicate vert for clipnode face\n");
+			}
+
+			vec3 plane_z = mesh.faces[i].normal;
+			vec3 plane_x = faceMath.plane_x = (v1 - v0).normalize();
+			vec3 plane_y = faceMath.plane_y = crossProduct(plane_z, plane_x).normalize();
+			faceMath.worldToLocal = worldToLocalTransform(plane_x, plane_y, plane_z);
+
+			faceMath.verts = vector<vec3>(faceVerts.size());
+			faceMath.localVerts = vector<vec2>(faceVerts.size());
+			for (int k = 0; k < faceVerts.size(); k++) {
+				faceMath.verts[k] = faceVerts[k];
+				faceMath.localVerts[k] = (faceMath.worldToLocal * vec4(faceVerts[k], 1)).xy();
+			}
+
+			faceMaths.push_back(faceMath);
+		}
+
+		// create the verts for rendering
+		{
+			for (int i = 0; i < faceVerts.size(); i++) {
+				faceVerts[i] = faceVerts[i].flip();
+			}
+
+			COLOR4 wireframeColor = { 0, 0, 0, 255 };
+			for (int k = 0; k < faceVerts.size(); k++) {
+				wireframeVerts.push_back(cVert(faceVerts[k], wireframeColor));
+				wireframeVerts.push_back(cVert(faceVerts[(k + 1) % faceVerts.size()], wireframeColor));
+			}
+
+			vec3 lightDir = vec3(1, 1, -1).normalize();
+			float dot = (dotProduct(normal * -1, lightDir) + 1) / 2.0f;
+			if (dot > 0.5f) {
+				dot = dot * dot;
+			}
+			COLOR4 faceColor = color * (dot);
+
+			// convert from TRIANGLE_FAN style verts to TRIANGLES
+			for (int k = 2; k < faceVerts.size(); k++) {
+				allVerts.push_back(cVert(faceVerts[0], faceColor));
+				allVerts.push_back(cVert(faceVerts[k - 1], faceColor));
+				allVerts.push_back(cVert(faceVerts[k], faceColor));
+			}
+		}
 	}
 }
 
@@ -1593,10 +1665,10 @@ void BspRenderer::highlightPickedFaces(bool highlight) {
 			b = 0;
 		}
 
-		for (int i = 0; i < rface->vertCount; i++) {
-			rgroup->verts[rface->vertOffset + i].r = r;
-			rgroup->verts[rface->vertOffset + i].g = g;
-			rgroup->verts[rface->vertOffset + i].b = b;
+		for (int k = 0; k < rface->vertCount; k++) {
+			rgroup->verts[rface->vertOffset + k].r = r;
+			rgroup->verts[rface->vertOffset + k].g = g;
+			rgroup->verts[rface->vertOffset + k].b = b;
 		}
 
 		uploadGroups.insert(rgroup);
@@ -1606,6 +1678,45 @@ void BspRenderer::highlightPickedFaces(bool highlight) {
 		rgroup->buffer->deleteBuffer();
 		rgroup->buffer->upload();
 	}
+}
+
+void BspRenderer::highlightPickedLeaves(bool highlight) {
+	if (!clipnodesLoaded || !renderLeafDat->leafBuffer)
+		return;
+
+	cVert* verts = (cVert*)renderLeafDat->leafBuffer->data;
+
+	if (!highlight) {
+		for (int i = 0; i < renderLeafDat->leafBuffer->numVerts; i++) {
+			verts[i].c.r = 255;
+			verts[i].c.g = 255;
+			verts[i].c.b = 255;
+		}
+	}
+	else {
+		for (int i = 0; i < g_app->pickInfo.leaves.size(); i++) {
+			uint16_t leafIdx = g_app->pickInfo.leaves[i];
+			RenderRange& range = renderLeafDat->leafRanges[leafIdx];
+
+			uint8_t r, g, b;
+			r = g = b = 255;
+
+			if (highlight) {
+				r = 220;
+				g = 0;
+				b = 0;
+			}
+
+			for (int k = range.start; k < range.end; k++) {
+				verts[k].c.r = r;
+				verts[k].c.g = g;
+				verts[k].c.b = b;
+			}
+		}
+	}
+
+	renderLeafDat->leafBuffer->deleteBuffer();
+	renderLeafDat->leafBuffer->upload();
 }
 
 void BspRenderer::updateFaceUVs(int faceIdx) {
@@ -1849,6 +1960,31 @@ void BspRenderer::render(const vector<OrderedEnt>& orderedEnts, bool highlightAl
 			}
 			g_app->colorShader->popMatrix(MAT_MODEL);
 		}		
+	}
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	delayLoadData();
+}
+
+void BspRenderer::renderLeaves() {
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDepthFunc(GL_LEQUAL);
+
+	// draw clipnodes in a separate pass to prevent interleaving shader binds
+	if (clipnodesLoaded) {
+		g_app->colorShader->bind();
+		g_app->colorShader->modelMat->loadIdentity();
+		g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
+		g_app->colorShader->updateMatrixes();
+
+		if (g_settings.render_flags & RENDER_WORLD_CLIPNODES && !map->ents[0]->hidden) {
+			if (renderLeafDat->leafBuffer) {
+				renderLeafDat->leafBuffer->draw(GL_TRIANGLES);
+				renderLeafDat->wireframeLeafBuffer->draw(GL_LINES);
+			}
+		}
 	}
 
 	glEnable(GL_DEPTH_TEST);
@@ -2118,22 +2254,28 @@ void BspRenderer::drawPointEntities() {
 	}
 }
 
-bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx, float& bestDist) {
+bool BspRenderer::pickPoly(vec3 start, vec3 dir, int hullIdx, int& entIdx, int& faceIdx, int& leafIdx, float& bestDist) {
 	bool foundBetterPick = false;
 	entIdx = -1;
 	faceIdx = -1;
+	leafIdx = -1;
 
 	vec3 pickOffset = vec3(mapOffset.x, mapOffset.y, mapOffset.z);
 	start -= mapOffset;
 
-	if (!map || map->ents.size() == 0)
-	{
+	if (!map || map->ents.size() == 0) {
 		return false;
 	}
 
-	if (!map->ents[0]->hidden && pickModelPoly(start, dir, vec3(), vec3(), 0, hullIdx, 0, faceIdx, bestDist)) {
-		entIdx = 0;
-		foundBetterPick = true;
+	if (!map->ents[0]->hidden) {
+		if (pickModelPoly(start, dir, vec3(), vec3(), 0, hullIdx, 0, faceIdx, bestDist)) {
+			entIdx = 0;
+			foundBetterPick = true;
+		}
+		if (g_app->pickMode == PICK_LEAF && pickLeaf(start, dir, leafIdx, bestDist)) {
+			entIdx = 0;
+			foundBetterPick = true;
+		}
 	}
 
 	for (int i = 0, sz = map->ents.size(); i < sz; i++) {
@@ -2297,6 +2439,30 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 	return foundBetterPick;
 }
 
+bool BspRenderer::pickLeaf(vec3 start, vec3 dir, int& leafIdx, float& bestDist) {
+	BSPMODEL& model = map->models[0];
+
+	if (map->modelCount == 0)
+		return false;
+
+	bool foundBetterPick = false;
+
+	if (clipnodesLoaded) {
+		for (int i = 0; i < renderLeafDat->faceMaths.size(); i++) {
+			FaceMath faceMath = renderLeafDat->faceMaths[i];
+
+			float t = bestDist;
+			if (pickFaceMath(start, dir, faceMath, t)) {
+				foundBetterPick = true;
+				bestDist = t;
+				leafIdx = faceMath.index;
+			}
+		}
+	}
+
+	return foundBetterPick;
+}
+
 bool BspRenderer::pickFaceMath(vec3 start, vec3 dir, FaceMath& faceMath, float& bestDist) {
 	float dot = dotProduct(dir, faceMath.plane_z);
 	if (dot >= 0) {
@@ -2370,9 +2536,14 @@ void PickInfo::selectFace(int faceIdx) {
 	//logf("select face %d\n", faceIdx);
 }
 
+void PickInfo::selectLeaf(int leafIdx) {
+	leaves.push_back(leafIdx);
+}
+
 void PickInfo::deselect() {
 	ents.clear();
 	faces.clear();
+	leaves.clear();
 	g_app->pickCount++;
 	//logf("Deselect\n");
 }
@@ -2390,6 +2561,15 @@ void PickInfo::deselectFace(int faceIdx) {
 	for (int i = 0; i < faces.size(); i++) {
 		if (faces[i] == faceIdx) {
 			faces.erase(faces.begin() + i);
+			return;
+		}
+	}
+}
+
+void PickInfo::deselectLeaf(int leafIdx) {
+	for (int i = 0; i < leaves.size(); i++) {
+		if (leaves[i] == leafIdx) {
+			leaves.erase(leaves.begin() + i);
 			return;
 		}
 	}
@@ -2451,6 +2631,12 @@ int PickInfo::getFaceIndex() {
 	return faceIdx >= 0 && faceIdx < map->faceCount ? faceIdx : -1;
 }
 
+int PickInfo::getLeafIndex() {
+	Bsp* map = getMap();
+	int leafIdx = leaves.size() == 1 ? leaves[0] : -1;
+	return leafIdx >= 0 && leafIdx < map->leafCount ? leafIdx : -1;
+}
+
 vec3 PickInfo::getOrigin() {
 	Entity* ent = getEnt();
 	return ent ? ent->getOrigin() : vec3();
@@ -2459,6 +2645,16 @@ vec3 PickInfo::getOrigin() {
 bool PickInfo::isFaceSelected(int faceIdx) {
 	for (int idx : faces) {
 		if (idx == faceIdx) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool PickInfo::isLeafSelected(int leafIdx) {
+	for (int idx : leaves) {
+		if (idx == leafIdx) {
 			return true;
 		}
 	}
@@ -2504,6 +2700,20 @@ vector<BSPFACE*> PickInfo::getFaces() {
 	return outFaces;
 }
 
+vector<BSPLEAF*> PickInfo::getLeaves() {
+	vector<BSPLEAF*> outLeaves;
+	Bsp* map = getMap();
+
+	for (int i = 0; i < leaves.size(); i++) {
+		int idx = leaves[i];
+		if (map && idx >= 0 && idx < map->leafCount) {
+			outLeaves.push_back(&map->leaves[idx]);
+		}
+	}
+
+	return outLeaves;
+}
+
 vector<int> PickInfo::getModelIndexes() {
 	vector<int> outIdx;
 	Bsp* map = getMap();
@@ -2530,4 +2740,20 @@ bool PickInfo::shouldHideSelection() {
 	}
 
 	return false;
+}
+
+void PickInfo::selectLeafFaces() {
+	Bsp* map = getMap();
+	faces.clear();
+
+	for (int i = 0; i < leaves.size(); i++) {
+		int idx = leaves[i];
+		if (map && idx >= 0 && idx < map->leafCount) {
+			BSPLEAF& leaf = map->leaves[idx];
+
+			for (int k = 0; k < leaf.nMarkSurfaces; k++) {
+				faces.push_back(map->marksurfs[leaf.iFirstMarkSurface + k]);
+			}
+		}
+	}
 }

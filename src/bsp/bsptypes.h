@@ -55,6 +55,8 @@ enum lump_copy_targets {
 #define CONTENTS_CURRENT_UP   -13
 #define CONTENTS_CURRENT_DOWN -14
 #define CONTENTS_TRANSLUCENT  -15
+#define CONTENTS_ANY		0xfffe // special value used only in this program
+#define CONTENTS_NOT_SOLID	0xffff // special value used only in this program
 
 #define PLANE_X 0     // Plane is perpendicular to given axis
 #define PLANE_Y 1
@@ -243,6 +245,7 @@ struct Solid {
 // used to construct bounding volumes for solid leaves
 struct NodeVolumeCuts {
 	int nodeIdx;
+	int leafIdx;
 	vector<BSPPLANE> cuts; // cuts which define the leaf boundaries when applied to a bounding box, in order.
 };
 

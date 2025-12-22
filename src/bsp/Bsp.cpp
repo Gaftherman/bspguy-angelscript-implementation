@@ -431,9 +431,10 @@ void Bsp::get_clipnode_leaf_cuts(int iNode, vector<BSPPLANE>& clipOrder, vector<
 		if (node.iChildren[i] >= 0) {
 			get_clipnode_leaf_cuts(node.iChildren[i], clipOrder, output, contents);
 		}
-		else if (node.iChildren[i] == contents) {
+		else if (node.iChildren[i] == contents || contents == CONTENTS_ANY || (contents == CONTENTS_NOT_SOLID && node.iChildren[i] != CONTENTS_SOLID)) {
 			NodeVolumeCuts nodeVolumeCuts;
 			nodeVolumeCuts.nodeIdx = iNode;
+			nodeVolumeCuts.leafIdx = -1;
 
 			// reverse order of branched planes = order of cuts to the world which define this node's volume
 			// https://qph.fs.quoracdn.net/main-qimg-2a8faad60cc9d437b58a6e215e6e874d
@@ -459,12 +460,16 @@ void Bsp::get_node_leaf_cuts(int iNode, vector<BSPPLANE>& clipOrder, vector<Node
 		}
 		clipOrder.push_back(plane);
 
+		int leafIdx = ~node.iChildren[i];
+
 		if (node.iChildren[i] >= 0) {
 			get_node_leaf_cuts(node.iChildren[i], clipOrder, output, contents);
 		}
-		else if (leaves[~node.iChildren[i]].nContents == contents) {
+		else if (leaves[leafIdx].nContents == contents || contents == CONTENTS_ANY
+			|| (contents == CONTENTS_NOT_SOLID && leaves[leafIdx].nContents != CONTENTS_SOLID)) {
 			NodeVolumeCuts nodeVolumeCuts;
 			nodeVolumeCuts.nodeIdx = iNode;
+			nodeVolumeCuts.leafIdx = leafIdx;
 
 			// reverse order of branched planes = order of cuts to the world which define this node's volume
 			// https://qph.fs.quoracdn.net/main-qimg-2a8faad60cc9d437b58a6e215e6e874d
@@ -5838,6 +5843,20 @@ int Bsp::get_leaf(vec3 pos, int hull) {
 	return lastNode * 2 + lastSide;
 }
 
+int Bsp::get_leaf_from_face(int faceIdx) {
+	for (int i = 0; i < leafCount; i++) {
+		BSPLEAF& leaf = leaves[i];
+
+		for (int k = 0; k < leaf.nMarkSurfaces; k++) {
+			if (marksurfs[leaf.iFirstMarkSurface + k] == faceIdx) {
+				return i;
+			}
+		}
+	}
+
+	return -1;
+}
+
 bool Bsp::is_leaf_visible(int ileaf, vec3 pos) {
 	int ipvsLeaf = get_leaf(pos, 0);
 	BSPLEAF& pvsLeaf = leaves[ipvsLeaf];
@@ -5882,6 +5901,44 @@ bool Bsp::is_leaf_visible(int ileaf, vec3 pos) {
 	//logf("\n");
 
 	return isVisible;
+}
+
+vector<int> Bsp::get_pvs(int ileaf) {
+	BSPLEAF& pvsLeaf = leaves[ileaf];
+	vector<int> pvsLeaves;
+
+	int p = pvsLeaf.nVisOffset; // pvs offset
+	byte* pvs = lumps[LUMP_VISIBILITY];
+
+	bool isVisible = false;
+	int numVisible = 0;
+
+	if (!pvs) {
+		return pvsLeaves;
+	}
+
+	for (int lf = 1; lf < leafCount && p < header.lump[LUMP_VISIBILITY].nLength; p++)
+	{
+		if (pvs[p] == 0) { // prepare to skip leafs
+			if (p + 1 >= header.lump[LUMP_VISIBILITY].nLength) {
+				logf("Failed to read VIS data\n");
+				break;
+			}
+			lf += 8 * pvs[++p]; // next byte holds number of leafs to skip
+		}
+		else
+		{
+			for (byte bit = 1; bit != 0; bit *= 2, lf++)
+			{
+				if ((pvs[p] & bit) && lf < leafCount) // leaf is flagged as visible
+				{
+					pvsLeaves.push_back(lf);
+				}
+			}
+		}
+	}
+
+	return pvsLeaves;
 }
 
 bool Bsp::is_face_visible(int faceIdx, vec3 pos, vec3 angles) {

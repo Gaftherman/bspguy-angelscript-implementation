@@ -28,6 +28,7 @@
 #include "fonts/notosans_unicode.h"
 #include "icons/object.h"
 #include "icons/face.h"
+#include "icons/leaf.h"
 
 // TODO: hack to keep size consistent with bspguy v4. Is there something wrong with the font?
 // "22" should have the same height regardless of font. Maybe FontForge was misused.
@@ -117,6 +118,10 @@ void Gui::init() {
 	faceIconTexture = new Texture(w, h, icon_data);
 	faceIconTexture->upload(GL_RGBA);
 
+	lodepng_decode32(&icon_data, &w, &h, leaf_icon, sizeof(leaf_icon));
+	leafIconTexture = new Texture(w, h, icon_data);
+	leafIconTexture->upload(GL_RGBA);
+
 	glCheckError("icon uploads");
 }
 
@@ -192,11 +197,20 @@ void Gui::draw() {
 			ImGui::OpenPopup("empty_context");
 		}
 	}
-	else {
+	else if (app->pickMode == PICK_FACE) {
 		if (contextMenuEnt != -1 || emptyContextMenu) {
 			emptyContextMenu = 0;
 			contextMenuEnt = -1;
-			ImGui::OpenPopup("face_context");
+			if (app->pickInfo.faces.size())
+				ImGui::OpenPopup("face_context");
+		}
+	}
+	else if (app->pickMode == PICK_LEAF) {
+		if (contextMenuEnt != -1 || emptyContextMenu) {
+			emptyContextMenu = 0;
+			contextMenuEnt = -1;
+			if (app->pickInfo.leaves.size())
+				ImGui::OpenPopup("leaf_context");
 		}
 	}
 
@@ -398,7 +412,7 @@ void Gui::draw3dContextMenus() {
 			emptyWasOpen = false;
 		}
 	}
-	else if (app->pickMode == PICK_FACE && app->pickInfo.faces.size()) {
+	else if (app->pickMode == PICK_FACE) {
 		Bsp* map = app->pickInfo.getMap();
 
 		if (ImGui::BeginPopup("face_context"))
@@ -574,6 +588,28 @@ void Gui::draw3dContextMenus() {
 			if (ImGui::MenuItem("Paste lightmap", "", false, copiedLightmapFace >= 0 && copiedLightmapFace < map->faceCount)) {
 				pasteLightmap();
 			}
+
+			ImGui::EndPopup();
+		}
+	}
+	else if (app->pickMode == PICK_LEAF) {
+		Bsp* map = app->pickInfo.getMap();
+
+		if (ImGui::BeginPopup("leaf_context"))
+		{
+			if (ImGui::MenuItem("Select PVS", "", false, app->pickInfo.leaves.size() >= 1)) {
+				vector<int> pickLeaves = app->pickInfo.leaves;
+
+				for (int i = 0; i < pickLeaves.size(); i++) {
+					vector<int> pvs = map->get_pvs(pickLeaves[i]);
+					for (int k = 0; k < pvs.size(); k++) {
+						app->pickInfo.selectLeaf(pvs[k]);
+					}
+				}
+
+				g_app->mapRenderer->highlightPickedLeaves(true);
+			}
+			tooltip(g, "Select all leaves in the potentially visible set (PVS) of the selected leaf(s).");
 
 			ImGui::EndPopup();
 		}
@@ -2132,6 +2168,8 @@ void Gui::drawStatusBar() {
 		string selectStr = "no selection";
 		int entCount = app->pickInfo.ents.size();
 		int faceCount = app->pickInfo.faces.size();
+		int leafCount = app->pickInfo.leaves.size();
+
 		if (entCount > 1) {
 			selectStr = to_string(entCount) + " entities selected";
 		}
@@ -2140,6 +2178,12 @@ void Gui::drawStatusBar() {
 			string tname = app->pickInfo.getEnt()->getTargetname();
 			string cname = app->pickInfo.getEnt()->getClassname();
 			selectStr = tname.size() ? tname + " - " + cname : cname;
+		}
+		else if (leafCount == 1) {
+			selectStr = "leaf #" + to_string(app->pickInfo.getLeafIndex()) + " selected";
+		}
+		else if (leafCount > 0) {
+			selectStr = to_string(leafCount) + " leaves selected";
 		}
 		else if (faceCount == 1) {
 			selectStr = "face #" + to_string(app->pickInfo.getFaceIndex()) + " selected";
@@ -3122,6 +3166,7 @@ void Gui::drawToolbar() {
 			vector<int> modelIndexes = app->pickInfo.getModelIndexes();
 			Bsp* map = app->pickInfo.getMap();
 			BspRenderer* mapRenderer = app->mapRenderer;
+			app->deselectFaces();
 			app->deselectObject();
 
 			// don't select all worldspawn faces because it lags the program
@@ -3146,6 +3191,22 @@ void Gui::drawToolbar() {
 		if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
 			ImGui::BeginTooltip();
 			ImGui::TextUnformatted("Face selection mode");
+			ImGui::EndTooltip();
+		}
+
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, app->pickMode == PICK_LEAF ? selectColor : dimColor);
+		if (ImGui::ImageButton("leafpickicon", (ImTextureID)leafIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
+			app->deselectFaces();
+			app->deselectObject();
+			g_app->mapRenderer->highlightPickedLeaves(false);
+			app->pickMode = PICK_LEAF;
+			showTextureWidget = false;
+		}
+		ImGui::PopStyleColor();
+		if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
+			ImGui::BeginTooltip();
+			ImGui::TextUnformatted("Leaf selection mode");
 			ImGui::EndTooltip();
 		}
 	}

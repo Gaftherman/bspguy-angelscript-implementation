@@ -108,6 +108,7 @@ private:
 
 	Texture* objectIconTexture;
 	Texture* faceIconTexture;
+	Texture* leafIconTexture;
 
 	bool badSurfaceExtents = false;
 	bool lightmapTooLarge = false;
