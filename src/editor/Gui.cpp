@@ -434,10 +434,17 @@ void Gui::draw3dContextMenus() {
 			}
 			tooltip(g, "Select every face in the map which has this texture.");
 
-			if (ImGui::MenuItem("Select connected planar faces of this texture", "", false, app->pickInfo.faces.size() == 1)) {
+			if (ImGui::MenuItem("Select connected planar faces of this texture", "", false)) {
 				Bsp* map = app->pickInfo.getMap();
-
-				set<int> newSelect = map->selectConnectedTexture(app->pickInfo.getModelIndex(), app->pickInfo.getFaceIndex());
+				
+				set<int> newSelect;
+				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+					int faceIdx = app->pickInfo.faces[i];
+					int modelIdx = map->get_model_from_face(faceIdx);
+					set<int> selectPart = map->selectConnectedTexture(modelIdx, faceIdx);
+					newSelect.insert(selectPart.begin(), selectPart.end());
+				}
+				
 				g_app->mapRenderer->highlightPickedFaces(false);
 
 				app->pickInfo.deselect();
