@@ -2816,6 +2816,10 @@ float Bsp::calc_allocblock_usage() {
 		if (info.nFlags & TEX_SPECIAL)
 			continue; // does not use lightmaps
 
+		BSPMIPTEX* tex = get_texture(info.iMiptex);
+		if (tex && tex->szName[0] == '!')
+			continue; // water doesn't use lightmaps
+
 		int size[2];
 		GetFaceLightmapSize(this, i, size);
 
@@ -3785,6 +3789,43 @@ void Bsp::remove_unused_wads(vector<Wad*>& wads) {
 	}
 }
 
+// returns data for all embedded textures, ready to be wrtten to a WAD
+vector<WADTEX> Bsp::get_embedded_textures() {
+	vector<WADTEX> wadTextures;
+
+	for (int i = 0; i < textureCount; i++) {
+		int32_t offset = ((int32_t*)textures)[i + 1];
+		BSPMIPTEX* tex = (BSPMIPTEX*)(textures + offset);
+
+		if (tex->nOffsets[0] == 0) {
+			continue; // not embedded
+		}
+
+		WADTEX copy;
+		memcpy(&copy, tex, sizeof(BSPMIPTEX)); // copy name, offset, dimenions
+		int dataSz = copy.getDataSize();
+		copy.data = new byte[dataSz];
+		memcpy(copy.data, (byte*)tex + tex->nOffsets[0], dataSz);
+
+		wadTextures.push_back(copy);
+	}
+
+	return wadTextures;
+}
+
+int Bsp::get_texture_id(string name) {
+	for (int i = 0; i < textureCount; i++) {
+		int32_t offset = ((int32_t*)textures)[i + 1];
+		BSPMIPTEX* tex = (BSPMIPTEX*)(textures + offset);
+
+		if (!strcasecmp(tex->szName, name.c_str())) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 int Bsp::zero_entity_origins(string classname) {
 	int moveCount = 0;
 
@@ -3902,7 +3943,7 @@ bool Bsp::embed_texture(int textureId, vector<Wad*>& wads) {
 	return embedded;
 }
 
-int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
+int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force, bool quiet) {
 	int32_t texOffset = ((int32_t*)textures)[textureId + 1];
 
 	BSPMIPTEX* tex = get_texture(textureId);
@@ -3965,7 +4006,8 @@ int Bsp::unembed_texture(int textureId, vector<Wad*>& wads, bool force) {
 	memcpy(newTexData, lumps[LUMP_TEXTURES], endOffset);
 	memcpy(newTexData + endOffset, lumps[LUMP_TEXTURES] + endOffset + texDataSz, newTexBufferSz - endOffset);
 
-	logf("Unembedded texture %s\n", tex->szName);
+	if (!quiet)
+		logf("Unembedded texture %s\n", tex->szName);
 	delete[] lumps[LUMP_TEXTURES];
 	lumps[LUMP_TEXTURES] = newTexData;
 	header.lump[LUMP_TEXTURES].nLength -= texDataSz;
@@ -4713,6 +4755,7 @@ void Bsp::write(string path) {
 	// write the lumps
 	for (int i = 0; i < HEADER_LUMPS; i++) {
 		file.write((char*)lumps[i], header.lump[i].nLength);
+		//logf("LUMP %10s = %.2f MB\n", g_lump_names[i], (float)header.lump[i].nLength / (1024.0f*1024.0f));
 	}
 }
 
@@ -5254,6 +5297,7 @@ bool Bsp::validate() {
 		mark_model_structures(i, &usage, false);
 		usage.compute_sum();
 		if (usage.sum.faces != models[i].nFaces) {
+			//logf("Bad face count in model %d: %d / %d (fixed)\n", i, usage.sum.faces, models[i].nFaces);
 			logf("Bad face count in model %d: %d / %d\n", i, usage.sum.faces, models[i].nFaces);
 		}
 	}

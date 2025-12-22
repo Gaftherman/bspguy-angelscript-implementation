@@ -180,4 +180,5 @@ private:
 	void loadFonts();
 	void checkFaceErrors();
 	string getUserLayoutPath(); // path to user's saved widget layout
+	void createSeriesWad();
 };

@@ -284,7 +284,7 @@ public:
 	bool embed_texture(int textureId, vector<Wad*>& wads);
 
 	// return 1 on success, 0 on failure, 2 on success and resize
-	int unembed_texture(int textureId, vector<Wad*>& wads, bool force=false);
+	int unembed_texture(int textureId, vector<Wad*>& wads, bool force=false, bool quiet=false);
 
 	// adds a texture reference to the BSP (does not embed it)
 	// returns an iMipTex for use in texture infos
@@ -301,6 +301,12 @@ public:
 	string get_texture_source(string texname, vector<Wad*>& wads);
 
 	void remove_unused_wads(vector<Wad*>& wads);
+
+	// returns data for all embedded textures, ready to be wrtten to a WAD
+	vector<WADTEX> get_embedded_textures();
+
+	// gets the ID for a texture, or -1 if not found
+	int get_texture_id(string name);
 
 	// updates texture coordinates after a texture has been resized
 	void adjust_resized_texture_coordinates(BSPFACE& face, BSPTEXTUREINFO& info, int newWidth, int newHeight, int oldWidth, int oldHeight);

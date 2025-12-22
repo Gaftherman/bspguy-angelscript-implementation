@@ -1114,23 +1114,7 @@ void Gui::drawStandardMenuBar() {
 					1, wadFilterPatterns, "Half-Life Package (*.wad)");
 
 				if (fname) {
-					vector<WADTEX> wadTextures;
-					for (int i = 0; i < map->textureCount; i++) {
-						int32_t offset = ((int32_t*)map->textures)[i + 1];
-						BSPMIPTEX* tex = (BSPMIPTEX*)(map->textures + offset);
-
-						if (tex->nOffsets[0] == 0) {
-							continue; // not embedded
-						}
-
-						WADTEX copy;
-						memcpy(&copy, tex, sizeof(BSPMIPTEX)); // copy name, offset, dimenions
-						int dataSz = copy.getDataSize();
-						copy.data = new byte[dataSz];
-						memcpy(copy.data, (byte*)tex + tex->nOffsets[0], dataSz);
-
-						wadTextures.push_back(copy);
-					}
+					vector<WADTEX> wadTextures = map->get_embedded_textures();
 
 					Wad outWad = Wad();
 					outWad.write(fname, &wadTextures[0], wadTextures.size());
@@ -1839,9 +1823,18 @@ void Gui::drawStandardMenuBar() {
 		}
 		tooltip(g, "Scales up textures on invisible model faces to reduce AllocBlock size. "
 			"Manually increase texture scales or downscale large textures to reduce "
-			"AllocBlocks further.\n");
+			"AllocBlocks further.");
 
 		if (ImGui::BeginMenu("Textures")) {
+			if (ImGui::MenuItem("Create Series WAD", "")) {
+				createSeriesWad();
+			}
+			tooltip(g, "Creates a WAD file containing the embedded textures from all maps in a series. "
+				"Textures with the same name but different appearance will not be exported.\n\n"
+				"Textures that are exported will also be unembedded from their BSPs, and included "
+				"via the newly created WAD file instead. The point of this tool is to reduce disk "
+				"space used by campaigns that duplicate textures across many maps.");
+
 			if (ImGui::MenuItem("Embed All", 0, false, !app->isLoading)) {
 				LumpReplaceCommand* command = new LumpReplaceCommand("Embed Textures");
 
@@ -1897,12 +1890,7 @@ void Gui::drawStandardMenuBar() {
 				"in the worldspawn entity.\n\nIf an embedded texture cannot be found in a WAD, it will become "
 				"a missing texture. You may want to export embedded textures first to avoid losing data.");
 
-			if (ImGui::MenuItem("Remove Unused WADs", 0, false, !app->isLoading)) {
-				LumpReplaceCommand* command = new LumpReplaceCommand("Remove Unused WADs", true);
-				map->remove_unused_wads(wads);
-				command->pushUndoState();
-			}
-			tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue and strips folder paths.");
+			ImGui::Separator();
 
 			if (ImGui::MenuItem("Downscale Invalid", 0, false, !app->isLoading)) {
 				LumpReplaceCommand* command = new LumpReplaceCommand("Downscale Textures");
@@ -1916,6 +1904,13 @@ void Gui::drawStandardMenuBar() {
 			tooltip(g, "Downscales textures that exceed the max texture size for the selected engine "
 				"and adjusts texture coordinates accordingly.\n\nIf a texture is stored in a WAD, "
 				"it is first embedded into the BSP before being downscaled.\n");
+
+			if (ImGui::MenuItem("Remove Unused WADs", 0, false, !app->isLoading)) {
+				LumpReplaceCommand* command = new LumpReplaceCommand("Remove Unused WADs", true);
+				map->remove_unused_wads(wads);
+				command->pushUndoState();
+			}
+			tooltip(g, "Removes unused WADs from the worldspawn 'wad' keyvalue and strips folder paths.");
 
 			ImGui::EndMenu();
 		}
@@ -7990,4 +7985,128 @@ void Gui::windowResized(int width, int height) {
 
 string Gui::getUserLayoutPath() {
 	return getFolderPath(ImGui::GetIO().IniFilename) + "imgui_user.ini";
+}
+
+void Gui::createSeriesWad() {
+	char* fnamestr = tinyfd_openFileDialog("Select Series Maps", "",
+		1, bspFilterPatterns, "GoldSrc Map Files (*.bsp)", 1);
+
+	vector<string> fnames;
+
+	if (fnamestr)
+		fnames = splitString(fnamestr, "|");
+
+	string defaultPath = getFolderPath(getFolderPath(fnames[0]));
+
+	char* sharedWadName = tinyfd_saveFileDialog("Series WAD Name", defaultPath.c_str(),
+		1, wadFilterPatterns, "Half-Life Package (*.wad)");
+
+	if (!fnames.size() || !sharedWadName) {
+		return;
+	}
+
+
+	vector<WADTEX> sharedTex;
+	vector<Wad*> emptyWadList;
+
+	for (int i = 0; i < fnames.size(); i++) {
+		Bsp* temp = new Bsp(fnames[i]);
+		if (!temp->valid) {
+			delete temp;
+			continue;
+		}
+
+		vector<WADTEX> embedded = temp->get_embedded_textures();
+
+		if (embedded.empty()) {
+			logf("No embedded textures found in %s\n", temp->name);
+			delete temp;
+			continue;
+		}
+
+		int numExport = 0;
+		bool anyUnembed = false;
+
+		for (int j = 0; j < embedded.size(); j++) {
+			WADTEX& bsptex = embedded[j];
+
+			bool isConflicted = false;
+			bool isAlreadyWritten = false;
+			for (int k = 0; k < sharedTex.size(); k++) {
+				WADTEX& wadtex = sharedTex[k];
+
+				if (strcasecmp(wadtex.szName, bsptex.szName)) {
+					continue;
+				}
+
+				// names match, but do the contents?
+				if (wadtex.nHeight != bsptex.nHeight || wadtex.nWidth != bsptex.nWidth) {
+					logf("Texture %s in %s has different dimensions than in the WAD\n",
+						bsptex.szName, temp->name);
+					isConflicted = true;
+					break;
+				}
+
+				if (memcmp(wadtex.data, bsptex.data, bsptex.getDataSize())) {
+					logf("Texture %s in %s has different data than in the WAD\n",
+						bsptex.szName, temp->name);
+					isConflicted = true;
+					break;
+				}
+
+				isAlreadyWritten = true;
+				break;
+			}
+
+			if (!isConflicted) {
+				int id = temp->get_texture_id(bsptex.szName);
+				temp->unembed_texture(id, emptyWadList, true, true);
+				anyUnembed = true;
+
+				if (!isAlreadyWritten) {
+					sharedTex.push_back(bsptex);
+					numExport++;
+				}
+				else {
+					delete[] bsptex.data;
+				}
+			}
+			else
+				delete[] bsptex.data;
+		}
+
+		if (anyUnembed) {
+			bool didUpdate = false;
+			for (Entity* ent : temp->ents) {
+				if (ent->getClassname() == "worldspawn") {
+					string wadlist = ent->getKeyvalue("wad");
+					if (wadlist.size() && wadlist[wadlist.size() - 1] != ';') {
+						wadlist += ";";
+					}
+					wadlist += basename(sharedWadName);
+					ent->setOrAddKeyvalue("wad", wadlist);
+					didUpdate = true;
+					break;
+				}
+			}
+			if (!didUpdate) {
+				logf("ERROR: %s does not have a worldspawn entity to update.\n", temp->name);
+			}
+			temp->update_ent_lump();
+		}
+
+		logf("Added %d / %d embedded textures from %s\n",
+			numExport, embedded.size(), temp->name.c_str());
+
+		temp->write(fnames[i]);
+		delete temp;
+	}
+
+	Wad outWad = Wad();
+	outWad.write(sharedWadName, &sharedTex[0], sharedTex.size());
+	logf("Exported %d embedded textures to %s\n", sharedTex.size(), sharedWadName);
+
+	for (WADTEX& tex : sharedTex) {
+		delete[] tex.data;
+	}
 }
