@@ -134,6 +134,21 @@ public:
 	// return PVS of the given leaf (leaf indexes which are potentially visible)
 	vector<int> get_pvs(int ileaf);
 
+	// returns the node path to the given leaf
+	int get_node_branch(int iNode, vector<int>& branch, int ileaf);
+
+	// merges leafb into leafa, preserving face visibility. Doesn't work. Code here for educational purpose.
+	void merge_leaves_broken(int leafa, int leafb);
+
+	// Merges leaves into one, preserving the PVS but losing all contained face
+	void merge_leaves(int leafa, int leafb);
+
+	// returns all faces marked by the given leaf
+	vector<int> get_leaf_faces(int ileaf);
+
+	// replaces all instances of srcLeaf with dstLeaf in the bsp tree
+	void replace_leaf(int iNode, int srcLeaf, int dstLeaf);
+
 	bool is_face_visible(int faceIdx, vec3 pos, vec3 angles);
 
 	int count_visible_polys(vec3 pos, vec3 angles);
@@ -399,6 +414,14 @@ public:
 	int create_plane();
 	int create_model();
 	int create_texinfo();
+	int create_node();
+
+	// create a new model using existing faces. Collision will be completely solid.
+	int create_model_from_faces(vector<int>& faceIndexes);
+
+	// converts world leaves to a BSP model. This does not affect collision or PVS, but world faces
+	// will be invisible. The BSP model is used for rendering instead.
+	int convert_leaves_to_model(vector<int>& leafIndexes);
 
 	int duplicate_model(int modelIdx);
 

@@ -2320,6 +2320,11 @@ void Renderer::shortcutControls() {
 			gui->pasteTexture();
 		}
 	}
+	else if (pickMode == PICK_LEAF) {
+		if (pressed[GLFW_KEY_H] && !oldPressed[GLFW_KEY_H]) {
+			hideSelectedLeaves();
+		}
+	}
 }
 
 void Renderer::globalShortcutControls() {
@@ -2484,7 +2489,7 @@ void Renderer::pickObject() {
 			}
 		}
 
-		//pickInfo.selectLeafFaces();
+		pickInfo.selectLeafFaces();
 		mapRenderer->highlightPickedFaces(true);
 		mapRenderer->highlightPickedLeaves(true);
 
@@ -4360,6 +4365,23 @@ vec3 Renderer::snapToGrid(vec3 pos) {
 	int z = round((pos.z) / snapSize) * snapSize;
 
 	return vec3(x, y, z);
+}
+
+void Renderer::hideSelectedLeaves() {
+	for (int idx : pickInfo.leaves) {
+		hiddenLeaves.insert(idx);
+	}
+
+	mapRenderer->highlightPickedFaces(false);
+	pickInfo.deselect();
+	updateTextureAxes();
+
+	mapRenderer->hideLeaves(true);
+}
+
+void Renderer::unhideLeaves() {
+	hiddenLeaves.clear();
+	mapRenderer->hideLeaves(false);
 }
 
 void Renderer::grabEnts() {

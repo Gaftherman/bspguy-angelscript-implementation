@@ -1232,14 +1232,24 @@ void BspRenderer::generateLeafBuffer() {
 	vector<cVert> wireframeVerts;
 	vector<FaceMath> faceMaths;
 
-	memset(renderLeafDat->leafRanges, 0, sizeof(renderLeafDat->leafRanges));
+	for (int i = 0; i < 65536; i++) {
+		renderLeafDat->leafRanges[i].clear();
+		renderLeafDat->leafWireRanges[i].clear();
+	}
 
 	for (int k = 0; k < leafNodes.size(); k++) {
 		clipnodeLeafCount++;
 		int leafIdx = leafNodes[k].leafIdx;
-		renderLeafDat->leafRanges[leafIdx].start = allVerts.size();
+		int start = allVerts.size();
+		int wstart = wireframeVerts.size();
 		generateNodeMesh(&leafNodes[k], color, allVerts, wireframeVerts, faceMaths, leafNodes[k].leafIdx);
-		renderLeafDat->leafRanges[leafIdx].end = allVerts.size();
+		
+		for (int i = start; i < allVerts.size(); i++) {
+			renderLeafDat->leafRanges[leafIdx].push_back(i);
+		}
+		for (int i = wstart; i < wireframeVerts.size(); i++) {
+			renderLeafDat->leafWireRanges[leafIdx].push_back(i);
+		}
 	}
 
 	cVert* output = new cVert[allVerts.size()];
@@ -1685,6 +1695,7 @@ void BspRenderer::highlightPickedLeaves(bool highlight) {
 		return;
 
 	cVert* verts = (cVert*)renderLeafDat->leafBuffer->data;
+	cVert* wireVerts = (cVert*)renderLeafDat->wireframeLeafBuffer->data;
 
 	if (!highlight) {
 		for (int i = 0; i < renderLeafDat->leafBuffer->numVerts; i++) {
@@ -1692,31 +1703,67 @@ void BspRenderer::highlightPickedLeaves(bool highlight) {
 			verts[i].c.g = 255;
 			verts[i].c.b = 255;
 		}
+		for (int i = 0; i < renderLeafDat->wireframeLeafBuffer->numVerts; i++) {
+			wireVerts[i].c.r = 0;
+			wireVerts[i].c.g = 0;
+			wireVerts[i].c.b = 0;
+		}
+		hideLeaves(true);
 	}
 	else {
 		for (int i = 0; i < g_app->pickInfo.leaves.size(); i++) {
 			uint16_t leafIdx = g_app->pickInfo.leaves[i];
-			RenderRange& range = renderLeafDat->leafRanges[leafIdx];
 
-			uint8_t r, g, b;
-			r = g = b = 255;
-
-			if (highlight) {
-				r = 220;
-				g = 0;
-				b = 0;
+			for (int idx : renderLeafDat->leafRanges[leafIdx]) {
+				verts[idx].c.r = 255;
+				verts[idx].c.g = 0;
+				verts[idx].c.b = 0;
 			}
 
-			for (int k = range.start; k < range.end; k++) {
-				verts[k].c.r = r;
-				verts[k].c.g = g;
-				verts[k].c.b = b;
+			for (int idx : renderLeafDat->leafWireRanges[leafIdx]) {
+				wireVerts[idx].c.r = 255;
+				wireVerts[idx].c.g = 255;
+				wireVerts[idx].c.b = 0;
 			}
 		}
 	}
 
 	renderLeafDat->leafBuffer->deleteBuffer();
 	renderLeafDat->leafBuffer->upload();
+	renderLeafDat->wireframeLeafBuffer->deleteBuffer();
+	renderLeafDat->wireframeLeafBuffer->upload();
+}
+
+void BspRenderer::hideLeaves(bool hideNotUnhide) {
+	if (!clipnodesLoaded || !renderLeafDat->leafBuffer)
+		return;
+
+	cVert* verts = (cVert*)renderLeafDat->leafBuffer->data;
+	cVert* wireVerts = (cVert*)renderLeafDat->wireframeLeafBuffer->data;
+
+	if (!hideNotUnhide) {
+		for (int i = 0; i < renderLeafDat->leafBuffer->numVerts; i++) {
+			verts[i].c.a = 128;
+		}
+		for (int i = 0; i < renderLeafDat->wireframeLeafBuffer->numVerts; i++) {
+			wireVerts[i].c.a = 255;
+		}
+	}
+	else {
+		for (auto leafIdx : g_app->hiddenLeaves) {
+			for (int idx : renderLeafDat->leafRanges[leafIdx]) {
+				verts[idx].c.a = 0;
+			}
+			for (int idx : renderLeafDat->leafWireRanges[leafIdx]) {
+				wireVerts[idx].c.a = 0;
+			}
+		}
+	}
+
+	renderLeafDat->leafBuffer->deleteBuffer();
+	renderLeafDat->leafBuffer->upload();
+	renderLeafDat->wireframeLeafBuffer->deleteBuffer();
+	renderLeafDat->wireframeLeafBuffer->upload();
 }
 
 void BspRenderer::updateFaceUVs(int faceIdx) {
@@ -2451,6 +2498,9 @@ bool BspRenderer::pickLeaf(vec3 start, vec3 dir, int& leafIdx, float& bestDist) 
 		for (int i = 0; i < renderLeafDat->faceMaths.size(); i++) {
 			FaceMath faceMath = renderLeafDat->faceMaths[i];
 
+			if (g_app->hiddenLeaves.count(faceMath.index))
+				continue;
+
 			float t = bestDist;
 			if (pickFaceMath(start, dir, faceMath, t)) {
 				foundBetterPick = true;
@@ -2537,6 +2587,11 @@ void PickInfo::selectFace(int faceIdx) {
 }
 
 void PickInfo::selectLeaf(int leafIdx) {
+	for (int i = 0; i < leaves.size(); i++) {
+		if (leaves[i] == leafIdx) {
+			return;
+		}
+	}
 	leaves.push_back(leafIdx);
 }
 

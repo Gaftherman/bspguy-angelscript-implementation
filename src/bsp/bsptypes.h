@@ -162,8 +162,8 @@ struct BSPLEAF
 {
 	int32_t nContents;                         // Contents enumeration
 	int32_t nVisOffset;                        // Offset into the visibility lump
-	int16_t nMins[3], nMaxs[3];                // Defines bounding box
-	uint16_t iFirstMarkSurface, nMarkSurfaces; // Index and count into marksurfaces array
+	int16_t nMins[3], nMaxs[3];                // Defines bounding box. Used for view culling.
+	uint16_t iFirstMarkSurface, nMarkSurfaces; // Index and count into marksurfaces array. Used to mark visible faces to render in parent nodes.
 	uint8_t nAmbientLevels[4];                 // Ambient sound levels
 
 	bool isEmpty();
@@ -183,15 +183,15 @@ struct BSPMODEL
 	vec3 vOrigin;                  // Coordinates to move the // coordinate system
 	int32_t iHeadnodes[MAX_MAP_HULLS]; // Index into nodes array
 	int32_t nVisLeafs;                 // ???
-	int32_t iFirstFace, nFaces;        // Index and count into faces
+	int32_t iFirstFace, nFaces;        // Index and count into faces.
 };
 
 struct BSPNODE
 {
 	uint32_t iPlane;            // Index into Planes lump
 	int16_t iChildren[2];       // If > 0, then indices into Nodes // otherwise bitwise inverse indices into Leafs
-	int16_t nMins[3], nMaxs[3]; // Defines bounding box
-	uint16_t firstFace, nFaces; // Index and count into Faces
+	int16_t nMins[3], nMaxs[3]; // Defines bounding box. Used for view culling.
+	uint16_t firstFace, nFaces; // Index and count into Faces. These faces are conditionally rendered depending on child leaf visibility.
 };
 
 struct BSPCLIPNODE

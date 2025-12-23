@@ -5,6 +5,7 @@
 #include "bsptypes.h"
 #include "BspMerger.h"
 #include <unordered_map>
+#include <unordered_set>
 
 class Gui;
 class Fgd;
@@ -266,6 +267,7 @@ private:
 	vec3 cullMaxs;
 
 	bool anyHiddenEnts = false;
+	unordered_set<int> hiddenLeaves;
 
 	bool createWindow();
 	void compileShaders();
@@ -349,6 +351,8 @@ private:
 	void hideSelectedEnts();
 	void unhideSelectedEnts();
 	void unhideEnts();
+	void hideSelectedLeaves();
+	void unhideLeaves();
 
 	bool canPushEntityUndoState();
 	void pushEntityUndoState(string actionDesc);

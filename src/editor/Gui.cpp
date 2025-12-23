@@ -209,8 +209,7 @@ void Gui::draw() {
 		if (contextMenuEnt != -1 || emptyContextMenu) {
 			emptyContextMenu = 0;
 			contextMenuEnt = -1;
-			if (app->pickInfo.leaves.size())
-				ImGui::OpenPopup("leaf_context");
+			ImGui::OpenPopup("leaf_context");
 		}
 	}
 
@@ -597,22 +596,61 @@ void Gui::draw3dContextMenus() {
 
 		if (ImGui::BeginPopup("leaf_context"))
 		{
-			if (ImGui::MenuItem("Select PVS", "", false, app->pickInfo.leaves.size() >= 1)) {
-				vector<int> pickLeaves = app->pickInfo.leaves;
-
-				for (int i = 0; i < pickLeaves.size(); i++) {
-					vector<int> pvs = map->get_pvs(pickLeaves[i]);
-					for (int k = 0; k < pvs.size(); k++) {
-						app->pickInfo.selectLeaf(pvs[k]);
-					}
+			if (app->pickInfo.leaves.empty()) {
+				if (ImGui::MenuItem("Unhide All", 0, false, app->hiddenLeaves.size())) {
+					app->unhideLeaves();
 				}
-
-				g_app->mapRenderer->highlightPickedLeaves(true);
+				tooltip(g, "Unhides leaves you previously marked as hidden.");
 			}
-			tooltip(g, "Select all leaves in the potentially visible set (PVS) of the selected leaf(s).");
+			else {
+				if (ImGui::MenuItem("Select PVS", "", false, app->pickInfo.leaves.size() >= 1)) {
+					vector<int> pickLeaves = app->pickInfo.leaves;
+
+					for (int i = 0; i < pickLeaves.size(); i++) {
+						vector<int> pvs = map->get_pvs(pickLeaves[i]);
+						for (int k = 0; k < pvs.size(); k++) {
+							app->pickInfo.selectLeaf(pvs[k]);
+						}
+					}
+
+					g_app->mapRenderer->highlightPickedLeaves(true);
+				}
+				tooltip(g, "Select all leaves in the potentially visible set (PVS) of the selected leaf(s).");
+
+				if (ImGui::MenuItem("Convert to Model", "", false, app->pickInfo.leaves.size() > 1)) {
+					LumpReplaceCommand* command = new LumpReplaceCommand("Convert to Model");
+
+					int modelIdx = map->convert_leaves_to_model(app->pickInfo.leaves);
+
+					Entity* newEnt = new Entity();
+					newEnt->setOrAddKeyvalue("origin", "0 0 0");
+					newEnt->setOrAddKeyvalue("classname", "func_illusionary");
+					newEnt->setOrAddKeyvalue("model", "*" + to_string(modelIdx));
+					map->ents.push_back(newEnt);
+
+					map->remove_unused_model_structures(false).print_delete_stats(1);
+
+					command->pushUndoState();
+
+					g_app->mapRenderer->highlightPickedLeaves(true);
+				}
+				tooltip(g, "Converts selected world leaves to a BSP model to reduce world leaf count. "
+					"Collision and visibility is preserved, but decals won't work. Faces will also "
+					"be visible from a wider area due to increased leaf size. Too big and it will "
+					"be visible everywhere in the map, reducing performance."
+					"\n\nBest used in unreachable areas, or nooks and crannies where players are "
+					"unlikely to shoot.");
+
+				if (ImGui::MenuItem("Hide", "H", false, app->pickInfo.leaves.size() > 0)) {
+					app->hideSelectedLeaves();
+				}
+				tooltip(g, "Hide selected leaves from view. This can be used to disconnect clusters of "
+					"leaves for controllable flood selection.");
+			}
 
 			ImGui::EndPopup();
 		}
+	
 	}
 }
 
@@ -1048,8 +1086,9 @@ void Gui::drawEditOptions(bool isMainMenu) {
 		}
 	}
 	if (isMainMenu) {
-		if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts)) {
+		if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts || app->hiddenLeaves.size())) {
 			app->unhideEnts();
+			app->unhideLeaves();
 		}
 	}
 	if (ImGui::MenuItem("Transform", "Ctrl+M")) {
@@ -3149,6 +3188,7 @@ void Gui::drawToolbar() {
 		if (ImGui::ImageButton("objpickicon", (ImTextureID)objectIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
 			app->deselectFaces();
 			app->deselectObject();
+			app->hiddenLeaves.clear();
 			app->pickMode = PICK_OBJECT;
 			showTextureWidget = false;
 		}
@@ -3168,6 +3208,7 @@ void Gui::drawToolbar() {
 			BspRenderer* mapRenderer = app->mapRenderer;
 			app->deselectFaces();
 			app->deselectObject();
+			app->hiddenLeaves.clear();
 
 			// don't select all worldspawn faces because it lags the program
 			if (modelIndexes.size() > 0 && modelIndexes[0] != 0) {
@@ -3199,6 +3240,7 @@ void Gui::drawToolbar() {
 		if (ImGui::ImageButton("leafpickicon", (ImTextureID)leafIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
 			app->deselectFaces();
 			app->deselectObject();
+			app->hiddenLeaves.clear();
 			g_app->mapRenderer->highlightPickedLeaves(false);
 			app->pickMode = PICK_LEAF;
 			showTextureWidget = false;

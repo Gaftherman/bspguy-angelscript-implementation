@@ -105,15 +105,12 @@ struct RenderClipnodes {
 	vector<FaceMath> faceMaths[MAX_MAP_HULLS];
 };
 
-struct RenderRange {
-	int start, end;
-};
-
 struct RenderLeaves {
 	VertexBuffer* leafBuffer;
 	VertexBuffer* wireframeLeafBuffer;
 	vector<FaceMath> faceMaths;
-	RenderRange leafRanges[65535]; // maps a leaf index to it's start/end vertex in leafBuffer
+	vector<int> leafRanges[65535]; // maps a leaf index to vertex indexes in the leafBuffer
+	vector<int> leafWireRanges[65535]; // maps a leaf index to wireframe vertex indexes in the leafBuffer
 };
 
 struct OrderedEnt {
@@ -224,6 +221,7 @@ public:
 
 	void highlightPickedFaces(bool highlight);
 	void highlightPickedLeaves(bool highlight);
+	void hideLeaves(bool hideNotUnhide);
 	void updateFaceUVs(int faceIdx);
 	uint getFaceTextureId(int faceIdx);
 	int addTextureToMap(string textureName); // adds a texture reference if found in a loaded WAD
