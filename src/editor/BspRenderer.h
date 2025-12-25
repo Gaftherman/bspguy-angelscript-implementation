@@ -226,6 +226,7 @@ public:
 	void highlightPickedFaces(bool highlight);
 	void highlightPickedLeaves(bool highlight);
 	void hideLeaves(bool hideNotUnhide);
+	void hideFaces(bool hideNotUnhide); // must have hiddenFaces populated in app class
 	void updateFaceUVs(int faceIdx);
 	uint getFaceTextureId(int faceIdx);
 	int addTextureToMap(string textureName); // adds a texture reference if found in a loaded WAD

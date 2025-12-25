@@ -2330,6 +2330,9 @@ void Renderer::shortcutControls() {
 		if (anyCtrlPressed && pressed[GLFW_KEY_V] && !oldPressed[GLFW_KEY_V]) {
 			gui->pasteTexture();
 		}
+		if (pressed[GLFW_KEY_H] && !oldPressed[GLFW_KEY_H]) {
+			hideSelectedFaces();
+		}
 	}
 	else if (pickMode == PICK_LEAF) {
 		if (pressed[GLFW_KEY_H] && !oldPressed[GLFW_KEY_H]) {
@@ -4384,6 +4387,27 @@ void Renderer::unhideLeaves() {
 	mapRenderer->highlightPickedFaces(false);
 	mapRenderer->highlightPickedLeaves(false);
 	pickInfo.deselect();
+}
+
+void Renderer::hideSelectedFaces() {
+	for (int idx : pickInfo.faces) {
+		hiddenFaces.insert(idx);
+	}
+
+	mapRenderer->highlightPickedFaces(false);
+	mapRenderer->hideFaces(true);
+	pickInfo.deselect();
+	updateTextureAxes();
+
+	mapRenderer->hideLeaves(true);
+}
+
+void Renderer::unhideFaces() {
+	mapRenderer->hideFaces(false);
+	hiddenFaces.clear();
+	mapRenderer->highlightPickedFaces(false);
+	pickInfo.deselect();
+	updateTextureAxes();
 }
 
 void Renderer::grabEnts() {

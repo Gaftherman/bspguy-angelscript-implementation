@@ -555,10 +555,10 @@ void push_unique_vec2(vector<vec2>& verts, vec2 a) {
 	verts.push_back(a);
 }
 
-void push_unique_vec3(vector<vec3>& verts, vec3 a) {
+void push_unique_vec3(vector<vec3>& verts, vec3 a, float epsilon) {
 	for (int k = 0; k < verts.size(); k++) {
 		vec3& b = verts[k];
-		if (fabs(a.x - b.x) < 0.125f && fabs(a.y - b.y) < 0.125f && fabs(a.z - b.z) < 0.125f) {
+		if (fabs(a.x - b.x) < epsilon && fabs(a.y - b.y) < epsilon && fabs(a.z - b.z) < epsilon) {
 			return;
 		}
 	}

@@ -26,6 +26,8 @@ void main()
 	else {
 		texel.a = 1.0;
 	}
+	if (fColor.a == 0.0)
+		discard;
 
 	vec3 lightmap = texture2D(sLightmapTex0, fLightmapTex0.xy).rgb * fLightmapTex0.z;
 	lightmap += texture2D(sLightmapTex1, fLightmapTex1.xy).rgb * fLightmapTex1.z;

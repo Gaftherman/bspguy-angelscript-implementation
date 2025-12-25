@@ -19,7 +19,7 @@ LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map, bool graphOnly, int conten
 	this->navHull = navHull;
 
 	float createLeavesStart = glfwGetTime();
-	vector<LeafNode> leaves = getHullLeaves(map, 0, contents);
+	vector<LeafNode> leaves = getHullLeaves(map, 0, contents, graphOnly);
 	debugf("Created %d leaf nodes in %.2fs\n", leaves.size(), glfwGetTime() - createLeavesStart);
 	
 	LeafOctree* octree = createLeafOctree(map, leaves, octreeDepth);
@@ -66,13 +66,13 @@ LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map, bool graphOnly, int conten
 		}
 	}
 
-	debugf("Generated %d node mesh in %.2fs (%d KB)\n", mesh->nodes.size(),
+	logf("Generated %d node mesh in %.2fs (%d KB)\n", mesh->nodes.size(),
 		glfwGetTime() - NavMeshGeneratorGenStart, totalSz / 1024);
 
 	return mesh;
 }
 
-vector<LeafNode> LeafNavMeshGenerator::getHullLeaves(Bsp* map, int modelIdx, int contents) {
+vector<LeafNode> LeafNavMeshGenerator::getHullLeaves(Bsp* map, int modelIdx, int contents, bool allowDegenerateMeshes) {
 	vector<LeafNode> leaves;
 
 	if (modelIdx < 0 || modelIdx >= map->modelCount) {
@@ -83,22 +83,43 @@ vector<LeafNode> LeafNavMeshGenerator::getHullLeaves(Bsp* map, int modelIdx, int
 
 	vector<NodeVolumeCuts> nodes = map->get_model_leaf_volume_cuts(modelIdx, navHull, contents);
 
+	int fails = 0;
+
 	for (int m = 0; m < nodes.size(); m++) {
 		CMesh mesh = clipper.clip(nodes[m].cuts);
 		LeafNode hull;
-		getHullForClipperMesh(mesh, hull);
+		getHullForClipperMesh(mesh, hull, allowDegenerateMeshes);
 
 		if (hull.leafFaces.size()) {
 			hull.id = leaves.size();
 			hull.leafIdx = nodes[m].leafIdx;
 			leaves.push_back(hull);
 		}
+		else {
+			fails++;
+
+			BSPLEAF& leaf = map->leaves[nodes[m].leafIdx];
+			debugf("Failed to mesh leaf %d @ %d %d %d (%d contents, %d faces, %d %d %d size)\n",
+				nodes[m].leafIdx,
+				(int)(leaf.nMins[0] + (leaf.nMaxs[0] - leaf.nMins[0]) * 0.5f),
+				(int)(leaf.nMins[1] + (leaf.nMaxs[1] - leaf.nMins[1]) * 0.5f),
+				(int)(leaf.nMins[2] + (leaf.nMaxs[2] - leaf.nMins[2]) * 0.5f),
+				leaf.nContents, leaf.nMarkSurfaces,
+				(int)(leaf.nMaxs[0] - leaf.nMins[0]),
+				(int)(leaf.nMaxs[1] - leaf.nMins[1]),
+				(int)(leaf.nMaxs[2] - leaf.nMins[2]));
+			//getHullForClipperMesh(mesh, hull, allowDegenerateMeshes);
+		}
+	}
+
+	if (fails) {
+		logf("Failed to generate meshes for %d leaves\n", fails);
 	}
 
 	return leaves;
 }
 
-bool LeafNavMeshGenerator::getHullForClipperMesh(CMesh& mesh, LeafNode& leaf) {
+bool LeafNavMeshGenerator::getHullForClipperMesh(CMesh& mesh, LeafNode& leaf, bool allowDegenerateMeshes) {
 	leaf = LeafNode();
 	leaf.mins = vec3(FLT_MAX, FLT_MAX, FLT_MAX);
 	leaf.maxs = vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
@@ -123,7 +144,7 @@ bool LeafNavMeshGenerator::getHullForClipperMesh(CMesh& mesh, LeafNode& leaf) {
 					continue;
 				}
 
-				push_unique_vec3(faceVerts, mesh.verts[vertIdx].pos);
+				push_unique_vec3(faceVerts, mesh.verts[vertIdx].pos, 0.01f);
 			}
 		}
 
@@ -132,8 +153,11 @@ bool LeafNavMeshGenerator::getHullForClipperMesh(CMesh& mesh, LeafNode& leaf) {
 		vector<vec3> triangularVerts = getTriangularVerts(faceVerts);
 
 		if (faceVerts.size() < 3 || triangularVerts.empty()) {
-			leaf.leafFaces.clear();
-			break;
+			if (!allowDegenerateMeshes) {
+				leaf.leafFaces.clear();
+				break;
+			}
+			continue;
 		}
 
 		Axes axes;
@@ -151,7 +175,7 @@ bool LeafNavMeshGenerator::getHullForClipperMesh(CMesh& mesh, LeafNode& leaf) {
 		leaf.leafFaces.emplace_back(faceVerts, axes, true);
 	}
 
-	if (leaf.leafFaces.size() > 2) {
+	if (leaf.leafFaces.size() > 2 || (leaf.leafFaces.size() && allowDegenerateMeshes)) {
 		leaf.center = vec3();
 		for (int i = 0; i < leaf.leafFaces.size(); i++) {
 			Polygon3D& face = leaf.leafFaces[i];
@@ -351,8 +375,8 @@ void LeafNavMeshGenerator::splitLeafByEnts(Bsp* map, LeafNavMesh* mesh, int node
 					float originalSize = (splitNodes[k].maxs - splitNodes[k].mins).length() + sizeEpsilon;
 
 					splitNodes.insert(splitNodes.begin() + k + 1, LeafNode());
-					getHullForClipperMesh(cmeshFront, splitNodes[k]);
-					getHullForClipperMesh(cmeshBack, splitNodes[k+1]);
+					getHullForClipperMesh(cmeshFront, splitNodes[k], false);
+					getHullForClipperMesh(cmeshBack, splitNodes[k+1], false);
 					
 					LeafNode& frontNode = splitNodes[k];
 					LeafNode& backNode = splitNodes[k+1];
@@ -501,10 +525,8 @@ void LeafNavMeshGenerator::linkNavLeaves(Bsp* map, LeafNavMesh* mesh, int offset
 
 		if (leaf.parentIdx == NAV_INVALID_IDX) {
 			// only link parent leaves to world leaves
-			int leafIdx = map->get_leaf(leaf.center, navHull);
-
-			if (leafIdx >= 0 && leafIdx < MAX_MAP_CLIPNODE_LEAVES) {
-				mesh->leafMap[leafIdx] = i;
+			if (leaf.leafIdx >= 0 && leaf.leafIdx < MAX_MAP_CLIPNODE_LEAVES) {
+				mesh->leafMap[leaf.leafIdx] = i;
 			}
 		}
 
@@ -705,7 +727,7 @@ void LeafNavMeshGenerator::linkEntityLeaves(Bsp* map, LeafNavMesh* mesh, LeafNod
 
 void LeafNavMeshGenerator::getSolidEntityNode(Bsp* map, LeafNavMesh* mesh, int bspmodelIdx, vec3 origin, LeafNode& node) {
 	if (mesh->bspModelLeaves[bspmodelIdx].empty()) {
-		mesh->bspModelLeaves[bspmodelIdx] = getHullLeaves(map, bspmodelIdx, CONTENTS_SOLID);
+		mesh->bspModelLeaves[bspmodelIdx] = getHullLeaves(map, bspmodelIdx, CONTENTS_SOLID, false);
 	}
 
 	vector<LeafNode>& leaves = mesh->bspModelLeaves[bspmodelIdx];

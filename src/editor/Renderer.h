@@ -271,6 +271,7 @@ private:
 
 	bool anyHiddenEnts = false;
 	unordered_set<int> hiddenLeaves;
+	unordered_set<int> hiddenFaces;
 
 	bool createWindow();
 	void compileShaders();
@@ -356,6 +357,8 @@ private:
 	void unhideEnts();
 	void hideSelectedLeaves();
 	void unhideLeaves();
+	void hideSelectedFaces();
+	void unhideFaces();
 
 	bool canPushEntityUndoState();
 	void pushEntityUndoState(string actionDesc);

@@ -44,9 +44,10 @@ private:
 	int navHull = 3;
 
 	// get leaves of the bsp tree with the given contents
-	vector<LeafNode> getHullLeaves(Bsp* map, int modelIdx, int contents);
+	vector<LeafNode> getHullLeaves(Bsp* map, int modelIdx, int contents, bool allowDegenerateMeshes);
 
-	bool getHullForClipperMesh(CMesh& mesh, LeafNode& node);
+	// allowDegenerateMeshes = allow meshes with holes to be generated, usually for leaves with no faces that got created by a <1 unit brush misalignment
+	bool getHullForClipperMesh(CMesh& mesh, LeafNode& node, bool allowDegenerateMeshes);
 
 	// get smallest octree box that can contain the entire map
 	void getOctreeBox(Bsp* map, vec3& min, vec3& max);

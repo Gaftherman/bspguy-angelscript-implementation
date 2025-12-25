@@ -369,8 +369,10 @@ public:
 	// if dryRun, only update the lumps needed for calculating surface extents
 	bool subdivide_face(int faceIdx, bool dryRunForExtents=false);
 
-	// select faces connected to the given one, which lie on the same plane and use the same texture
-	set<int> selectConnectedTexture(int modelId, int faceId);
+	// select faces connected to the given one
+	// ignoreFaces will not be connected thru
+	// planarTextureOnly = only select on the same plane with the same texture
+	unordered_set<int> selectConnected(int modelId, int faceId, unordered_set<int>& ignoreFaces, bool planarTextureOnly);
 
 	// returns true if the map has eny entities that make use of hull 2
 	bool has_hull2_ents();

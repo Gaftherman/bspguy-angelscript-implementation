@@ -55,8 +55,9 @@ enum lump_copy_targets {
 #define CONTENTS_CURRENT_UP   -13
 #define CONTENTS_CURRENT_DOWN -14
 #define CONTENTS_TRANSLUCENT  -15
-#define CONTENTS_ANY		0xfffe // special value used only in this program
-#define CONTENTS_NOT_SOLID	0xffff // special value used only in this program
+#define CONTENTS_NOT_LEAF_0	((int16_t)0x0ffd) // select any leaf that is not the shared solid leaf
+#define CONTENTS_ANY		((int16_t)0x0ffe) // select any leaf
+#define CONTENTS_NOT_SOLID	((int16_t)0x0fff) // select any non-solid leaf
 
 #define PLANE_X 0     // Plane is perpendicular to given axis
 #define PLANE_Y 1

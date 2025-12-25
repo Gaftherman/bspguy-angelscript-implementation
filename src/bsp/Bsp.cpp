@@ -468,6 +468,7 @@ void Bsp::get_node_leaf_cuts(int iNode, vector<BSPPLANE>& clipOrder, vector<Node
 			get_node_leaf_cuts(node.iChildren[i], clipOrder, output, contents);
 		}
 		else if (leaves[leafIdx].nContents == contents || contents == CONTENTS_ANY
+			|| (contents == CONTENTS_NOT_LEAF_0 && leafIdx != 0)
 			|| (contents == CONTENTS_NOT_SOLID && leaves[leafIdx].nContents != CONTENTS_SOLID)) {
 			NodeVolumeCuts nodeVolumeCuts;
 			nodeVolumeCuts.nodeIdx = iNode;
@@ -4290,8 +4291,8 @@ bool Bsp::rename_texture(const char* oldName, const char* newName) {
 	return false;
 }
 
-set<int> Bsp::selectConnectedTexture(int modelId, int faceId) {
-	set<int> selected;
+unordered_set<int> Bsp::selectConnected(int modelId, int faceId, unordered_set<int>& ignoreFaces, bool planarTextureOnly) {
+	unordered_set<int> selected;
 	const float epsilon = 1.0f;
 
 	BSPMODEL& model = models[modelId];
@@ -4318,7 +4319,11 @@ set<int> Bsp::selectConnectedTexture(int modelId, int faceId) {
 			BSPTEXTUREINFO& infoA = texinfos[faceA.iTextureInfo];
 			BSPPLANE& planeA = planes[faceA.iPlane];
 
-			if (planeA.vNormal != plane.vNormal || info.iMiptex != infoA.iMiptex || selected.count(testFaceIdx)) {
+			if (selected.count(testFaceIdx) || ignoreFaces.count(fa)) {
+				continue;
+			}
+
+			if (planarTextureOnly && (planeA.vNormal != plane.vNormal || info.iMiptex != infoA.iMiptex)) {
 				continue;
 			}
 
@@ -4354,7 +4359,7 @@ set<int> Bsp::selectConnectedTexture(int modelId, int faceId) {
 			}
 		}
 	}
-	
+
 	return selected;
 }
 
@@ -5959,13 +5964,13 @@ vector<int> Bsp::get_connected_leaves(LeafNavMesh* mesh, const vector<int>& ilea
 
 	while (searchNodes.size()) {
 		int idx = searchNodes.front();
+		searchNodes.pop();
 
 		if (idx == NAV_INVALID_IDX) {
 			logf("Invalid node in selection\n");
 			continue; // should never happen
 		}
 
-		searchNodes.pop();
 		LeafNode& node = mesh->nodes[idx];
 
 		for (LeafLink& link : node.links) {

@@ -127,7 +127,7 @@ void sleepms(uint32_t ms);
 
 void push_unique_vec2(vector<vec2>& verts, vec2 vert);
 
-void push_unique_vec3(vector<vec3>& verts, vec3 vert);
+void push_unique_vec3(vector<vec3>& verts, vec3 vert, float epsilon=0.125f);
 
 vector<string> getAssetPaths(string assetPath);
 

@@ -201,8 +201,7 @@ void Gui::draw() {
 		if (contextMenuEnt != -1 || emptyContextMenu) {
 			emptyContextMenu = 0;
 			contextMenuEnt = -1;
-			if (app->pickInfo.faces.size())
-				ImGui::OpenPopup("face_context");
+			ImGui::OpenPopup("face_context");
 		}
 	}
 	else if (app->pickMode == PICK_LEAF) {
@@ -418,176 +417,215 @@ void Gui::draw3dContextMenus() {
 
 		if (ImGui::BeginPopup("face_context"))
 		{
-			if (ImGui::MenuItem("Copy texture", "Ctrl+C", false, app->pickInfo.faces.size() == 1)) {
-				copyTexture();
-			}
-			if (ImGui::MenuItem("Paste texture", "Ctrl+V", false, copiedMiptex >= 0 && copiedMiptex < map->textureCount)) {
-				pasteTexture();
-			}
-
-			ImGui::Separator();
-
-			if (ImGui::MenuItem("Select all of this texture", "", false, app->pickInfo.faces.size() == 1)) {
-				Bsp* map = app->pickInfo.getMap();
-				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
-				uint32_t selectedMiptex = texinfo.iMiptex;
-
-				g_app->mapRenderer->highlightPickedFaces(false);
-
-				app->pickInfo.deselect();
-				for (int i = 0; i < map->faceCount; i++) {
-					BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
-					if (info.iMiptex == selectedMiptex) {
-						app->pickInfo.selectFace(i);
-					}
+			if (app->pickInfo.faces.empty()) {
+				if (ImGui::MenuItem("Unhide All", 0, false, app->hiddenFaces.size())) {
+					app->unhideFaces();
 				}
-				g_app->mapRenderer->highlightPickedFaces(true);
-				g_app->updateTextureAxes();
-
-				logf("Selected %d faces\n", app->pickInfo.faces.size());
-				g_app->pickCount++;
+				tooltip(g, "Unhides faces you previously marked as hidden.");
 			}
-			tooltip(g, "Select every face in the map which has this texture.");
-
-			if (ImGui::MenuItem("Select connected planar faces of this texture", "", false)) {
-				Bsp* map = app->pickInfo.getMap();
-				
-				set<int> newSelect;
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					int faceIdx = app->pickInfo.faces[i];
-					int modelIdx = map->get_model_from_face(faceIdx);
-					set<int> selectPart = map->selectConnectedTexture(modelIdx, faceIdx);
-					newSelect.insert(selectPart.begin(), selectPart.end());
+			else {
+				if (ImGui::MenuItem("Copy texture", "Ctrl+C", false, app->pickInfo.faces.size() == 1)) {
+					copyTexture();
 				}
-				
-				g_app->mapRenderer->highlightPickedFaces(false);
-
-				app->pickInfo.deselect();
-				for (int i : newSelect) {
-					app->pickInfo.selectFace(i);
+				if (ImGui::MenuItem("Paste texture", "Ctrl+V", false, copiedMiptex >= 0 && copiedMiptex < map->textureCount)) {
+					pasteTexture();
 				}
-				g_app->mapRenderer->highlightPickedFaces(true);
-				g_app->updateTextureAxes();
 
-				logf("Selected %d faces\n", app->pickInfo.faces.size());
-				g_app->pickCount++;
-			}
-			tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
+				ImGui::Separator();
 
-			if (ImGui::MenuItem("Select bad extents of this texture", "", false, app->pickInfo.faces.size() == 1)) {
-				Bsp* map = app->pickInfo.getMap();
-				BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
-				uint32_t selectedMiptex = texinfo.iMiptex;
+				if (ImGui::MenuItem("Select all of this texture", "", false, app->pickInfo.faces.size() == 1)) {
+					Bsp* map = app->pickInfo.getMap();
+					BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
+					uint32_t selectedMiptex = texinfo.iMiptex;
 
-				g_app->mapRenderer->highlightPickedFaces(false);
+					g_app->mapRenderer->highlightPickedFaces(false);
 
-				app->pickInfo.deselect();
-				for (int i = 0; i < map->faceCount; i++) {
-					BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
-					if (info.iMiptex == selectedMiptex) {
-
-						int size[2];
-						if (GetFaceLightmapSize(map, i, size)) {
-							continue;
+					app->pickInfo.deselect();
+					for (int i = 0; i < map->faceCount; i++) {
+						BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
+						if (info.iMiptex == selectedMiptex) {
+							app->pickInfo.selectFace(i);
 						}
+					}
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
 
+					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					g_app->pickCount++;
+				}
+				tooltip(g, "Select every face in the map which has this texture.");
+
+				if (ImGui::MenuItem("Select connected faces", "", false)) {
+					Bsp* map = app->pickInfo.getMap();
+
+					unordered_set<int> newSelect;
+					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+						int faceIdx = app->pickInfo.faces[i];
+						int modelIdx = map->get_model_from_face(faceIdx);
+						unordered_set<int> selectPart = map->selectConnected(modelIdx, faceIdx, app->hiddenFaces, false);
+						newSelect.insert(selectPart.begin(), selectPart.end());
+					}
+
+					g_app->mapRenderer->highlightPickedFaces(false);
+
+					app->pickInfo.deselect();
+					for (int i : newSelect) {
 						app->pickInfo.selectFace(i);
 					}
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+
+					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					g_app->pickCount++;
 				}
-				g_app->mapRenderer->highlightPickedFaces(true);
-				g_app->updateTextureAxes();
+				tooltip(g, "Recursively select faces connected by edges.");
 
-				logf("Selected %d faces\n", app->pickInfo.faces.size());
-				g_app->pickCount++;
-			}
-			tooltip(g, "Select faces with bad surface extents that use this texture.");
+				if (ImGui::MenuItem("Select connected planar faces of this texture", "", false)) {
+					Bsp* map = app->pickInfo.getMap();
 
-			Bsp* map = app->pickInfo.getMap();
-			bool isEmbedded = false;
-			if (map && app->pickInfo.getFace()) {
-				BSPFACE& face = *app->pickInfo.getFace();
-				BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-				BSPMIPTEX* tex = map->get_texture(info.iMiptex);
-				if (tex) {
-					isEmbedded = tex->nOffsets[0] != 0;
+					unordered_set<int> newSelect;
+					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+						int faceIdx = app->pickInfo.faces[i];
+						int modelIdx = map->get_model_from_face(faceIdx);
+						unordered_set<int> selectPart = map->selectConnected(modelIdx, faceIdx, app->hiddenFaces, true);
+						newSelect.insert(selectPart.begin(), selectPart.end());
+					}
+
+					g_app->mapRenderer->highlightPickedFaces(false);
+
+					app->pickInfo.deselect();
+					for (int i : newSelect) {
+						app->pickInfo.selectFace(i);
+					}
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+
+					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					g_app->pickCount++;
 				}
-			}
+				tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
 
-			ImGui::Separator();
+				if (ImGui::MenuItem("Select bad extents of this texture", "", false, app->pickInfo.faces.size() == 1)) {
+					Bsp* map = app->pickInfo.getMap();
+					BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
+					uint32_t selectedMiptex = texinfo.iMiptex;
 
-			if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
-				bool plural = app->pickInfo.faces.size() > 1;
-				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
-				
+					g_app->mapRenderer->highlightPickedFaces(false);
+
+					app->pickInfo.deselect();
+					for (int i = 0; i < map->faceCount; i++) {
+						BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
+						if (info.iMiptex == selectedMiptex) {
+
+							int size[2];
+							if (GetFaceLightmapSize(map, i, size)) {
+								continue;
+							}
+
+							app->pickInfo.selectFace(i);
+						}
+					}
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+
+					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					g_app->pickCount++;
+				}
+				tooltip(g, "Select faces with bad surface extents that use this texture.");
+
 				Bsp* map = app->pickInfo.getMap();
-
-				// subdividing changes faces indexes so must be done in the right order
-				sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
-					return a > b;
-				});
-
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					map->subdivide_face(app->pickInfo.faces[i]);
+				bool isEmbedded = false;
+				if (map && app->pickInfo.getFace()) {
+					BSPFACE& face = *app->pickInfo.getFace();
+					BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
+					BSPMIPTEX* tex = map->get_texture(info.iMiptex);
+					if (tex) {
+						isEmbedded = tex->nOffsets[0] != 0;
+					}
 				}
 
-				command->pushUndoState();
-			}
-			tooltip(g, "Split selected faces across the axis with the most texture pixels.");
+				ImGui::Separator();
 
-			if (ImGui::MenuItem("Subdivide until valid", 0, false, !app->isLoading)) {
-				bool plural = app->pickInfo.faces.size() > 1;
-				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
+				if (ImGui::MenuItem("Subdivide", 0, false, !app->isLoading)) {
+					bool plural = app->pickInfo.faces.size() > 1;
+					LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
 
-				Bsp* map = app->pickInfo.getMap();
+					Bsp* map = app->pickInfo.getMap();
 
-				// subdividing changes faces indexes so must be done in the right order
-				sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
-					return a > b;
-				});
+					// subdividing changes faces indexes so must be done in the right order
+					sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
+						return a > b;
+						});
 
-				int totalSub = 0;
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					totalSub += map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
-				}
-				if (totalSub == 0) {
-					logf("No faces were subdivided (failed or extents are already valid)\n");
-					delete command;
-				}
-				else {
+					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+						map->subdivide_face(app->pickInfo.faces[i]);
+					}
+
 					command->pushUndoState();
 				}
-			} 
-			tooltip(g, "Subdivide selected faces until they have valid surface extents.");
+				tooltip(g, "Split selected faces across the axis with the most texture pixels.");
 
-			if (ImGui::MenuItem("Scale until valid", 0, false, !app->isLoading)) {
-				bool plural = app->pickInfo.faces.size() > 1;
-				LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Scale Faces" : "Scale Face");
+				if (ImGui::MenuItem("Subdivide until valid", 0, false, !app->isLoading)) {
+					bool plural = app->pickInfo.faces.size() > 1;
+					LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Subdivide Faces" : "Subdivide Face");
 
-				Bsp* map = app->pickInfo.getMap();
+					Bsp* map = app->pickInfo.getMap();
 
-				int totalScale = 0;
-				for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-					totalScale += map->fix_bad_surface_extents_with_scale(app->pickInfo.faces[i]);
+					// subdividing changes faces indexes so must be done in the right order
+					sort(app->pickInfo.faces.begin(), app->pickInfo.faces.end(), [](const int& a, const int& b) {
+						return a > b;
+						});
+
+					int totalSub = 0;
+					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+						totalSub += map->fix_bad_surface_extents_with_subdivide(app->pickInfo.faces[i]);
+					}
+					if (totalSub == 0) {
+						logf("No faces were subdivided (failed or extents are already valid)\n");
+						delete command;
+					}
+					else {
+						command->pushUndoState();
+					}
 				}
-				if (totalScale == 0) {
-					logf("No faces were scaled (failed or extents are already valid)\n");
-					delete command;
+				tooltip(g, "Subdivide selected faces until they have valid surface extents.");
+
+				if (ImGui::MenuItem("Scale until valid", 0, false, !app->isLoading)) {
+					bool plural = app->pickInfo.faces.size() > 1;
+					LumpReplaceCommand* command = new LumpReplaceCommand(plural ? "Scale Faces" : "Scale Face");
+
+					Bsp* map = app->pickInfo.getMap();
+
+					int totalScale = 0;
+					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
+						totalScale += map->fix_bad_surface_extents_with_scale(app->pickInfo.faces[i]);
+					}
+					if (totalScale == 0) {
+						logf("No faces were scaled (failed or extents are already valid)\n");
+						delete command;
+					}
+					else {
+						command->pushUndoState();
+					}
 				}
-				else {
-					command->pushUndoState();
+				tooltip(g, "Scale selected faces until they have valid surface extents.");
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Copy lightmap", "(WIP)", false, app->pickInfo.faces.size() == 1)) {
+					copyLightmap();
 				}
-			}
-			tooltip(g, "Scale selected faces until they have valid surface extents.");
+				tooltip(g, "Only works for faces with matching sizes/extents,\nand the lightmap might get shifted.");
 
-			ImGui::Separator();
+				if (ImGui::MenuItem("Paste lightmap", "", false, copiedLightmapFace >= 0 && copiedLightmapFace < map->faceCount)) {
+					pasteLightmap();
+				}
 
-			if (ImGui::MenuItem("Copy lightmap", "(WIP)", false, app->pickInfo.faces.size() == 1)) {
-				copyLightmap();
-			}
-			tooltip(g, "Only works for faces with matching sizes/extents,\nand the lightmap might get shifted.");
+				ImGui::Separator();
 
-			if (ImGui::MenuItem("Paste lightmap", "", false, copiedLightmapFace >= 0 && copiedLightmapFace < map->faceCount)) {
-				pasteLightmap();
+				if (ImGui::MenuItem("Hide", "H", false, !app->isLoading)) {
+					app->hideSelectedFaces();
+				}
 			}
 
 			ImGui::EndPopup();
@@ -599,6 +637,74 @@ void Gui::draw3dContextMenus() {
 		if (ImGui::BeginPopup("leaf_context"))
 		{
 			if (app->pickInfo.leaves.empty()) {
+				/*
+				if (ImGui::MenuItem("Select Degenerates", "", false, !app->isLoading)) {
+					app->pickInfo.deselect();
+
+					for (int i = 0; i < map->models[0].nVisLeafs; i++) {
+						BSPLEAF& leaf = map->leaves[i];
+
+						if (leaf.nContents == CONTENTS_SOLID)
+							continue;
+
+						if (app->mapRenderer->leafNavMesh->leafMap[i] == NAV_INVALID_IDX) {
+							logf("Select leaf %d @ %d %d %d (%d contents, %d faces, %d %d %d size)\n",
+								i,
+								(int)(leaf.nMins[0] + (leaf.nMaxs[0] - leaf.nMins[0])*0.5f),
+								(int)(leaf.nMins[1] + (leaf.nMaxs[1] - leaf.nMins[1])*0.5f),
+								(int)(leaf.nMins[2] + (leaf.nMaxs[2] - leaf.nMins[2])*0.5f),
+								leaf.nContents, leaf.nMarkSurfaces,
+								(int)(leaf.nMaxs[0] - leaf.nMins[0]),
+								(int)(leaf.nMaxs[1] - leaf.nMins[1]),
+								(int)(leaf.nMaxs[2] - leaf.nMins[2]));
+							app->pickInfo.selectLeaf(i);
+						}
+					}
+
+					app->pickInfo.selectLeafFaces();
+					app->mapRenderer->highlightPickedFaces(true);
+					app->mapRenderer->highlightPickedLeaves(true);
+					app->updateTextureAxes();
+				}
+				tooltip(g, "Select all leaves that the program failed to generate a mesh for.");
+
+				if (ImGui::MenuItem("Select Sky", "", false, !app->isLoading)) {
+					app->pickInfo.deselect();
+
+					for (int i = 0; i < map->models[0].nVisLeafs; i++) {
+						BSPLEAF& leaf = map->leaves[i];
+
+						if (leaf.nContents == CONTENTS_SKY)
+							app->pickInfo.selectLeaf(i);
+					}
+
+					app->pickInfo.selectLeafFaces();
+					app->mapRenderer->highlightPickedFaces(true);
+					app->mapRenderer->highlightPickedLeaves(true);
+					app->updateTextureAxes();
+				}
+				tooltip(g, "Select all leaves with SKY contents.");
+
+				if (ImGui::MenuItem("Merge Unreachable", "", false, !app->isLoading)) {
+					
+					int noface = 0;
+					for (int i = 1; i < map->models[0].nVisLeafs; i++) {
+						BSPLEAF& leaf = map->leaves[i];
+
+						if (leaf.nMarkSurfaces == 0) {
+							noface++;
+						}
+					}
+					logf("%d leaves with no faces\n", noface);
+
+					app->pickInfo.selectLeafFaces();
+					app->mapRenderer->highlightPickedFaces(true);
+					app->mapRenderer->highlightPickedLeaves(true);
+					app->updateTextureAxes();
+				}
+				tooltip(g, "Merge leaves that are unreachable by the player and contain no faces.");
+				*/
+
 				if (ImGui::MenuItem("Unhide All", 0, false, app->hiddenLeaves.size())) {
 					app->unhideLeaves();
 				}
@@ -1105,9 +1211,10 @@ void Gui::drawEditOptions(bool isMainMenu) {
 		}
 	}
 	if (isMainMenu) {
-		if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts || app->hiddenLeaves.size())) {
+		if (ImGui::MenuItem("Unhide All", 0, false, app->anyHiddenEnts || app->hiddenLeaves.size() || app->hiddenFaces.size())) {
 			app->unhideEnts();
 			app->unhideLeaves();
+			app->unhideFaces();
 		}
 	}
 	if (ImGui::MenuItem("Transform", "Ctrl+M")) {
@@ -3225,21 +3332,28 @@ void Gui::drawToolbar() {
 			vector<int> modelIndexes = app->pickInfo.getModelIndexes();
 			Bsp* map = app->pickInfo.getMap();
 			BspRenderer* mapRenderer = app->mapRenderer;
-			app->deselectFaces();
-			app->deselectObject();
-			app->hiddenLeaves.clear();
 
-			// don't select all worldspawn faces because it lags the program
-			if (modelIndexes.size() > 0 && modelIndexes[0] != 0) {
-				for (int idx : modelIndexes) {
-					BSPMODEL& model = map->models[idx];
+			if (app->pickMode == PICK_OBJECT) {
+				app->deselectFaces();
+				app->deselectObject();
 
-					for (int i = 0; i < model.nFaces; i++) {
-						int faceIdx = model.iFirstFace + i;
-						app->pickInfo.selectFace(faceIdx);
+				// don't select all worldspawn faces because it lags the program
+				if (modelIndexes.size() > 0 && modelIndexes[0] != 0) {
+					for (int idx : modelIndexes) {
+						BSPMODEL& model = map->models[idx];
+
+						for (int i = 0; i < model.nFaces; i++) {
+							int faceIdx = model.iFirstFace + i;
+							app->pickInfo.selectFace(faceIdx);
+						}
 					}
 				}
 			}
+			else {
+				app->pickInfo.leaves.clear();
+			}
+
+			app->hiddenLeaves.clear();
 			g_app->mapRenderer->highlightPickedFaces(true);
 			g_app->updateTextureAxes();
 			
@@ -3257,10 +3371,32 @@ void Gui::drawToolbar() {
 		ImGui::SameLine();
 		ImGui::PushStyleColor(ImGuiCol_Button, app->pickMode == PICK_LEAF ? selectColor : dimColor);
 		if (ImGui::ImageButton("leafpickicon", (ImTextureID)leafIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
+			vector<int> faces = app->pickInfo.faces;
+			Bsp* map = app->mapRenderer->map;
+			
 			app->deselectFaces();
 			app->deselectObject();
 			app->hiddenLeaves.clear();
 			g_app->mapRenderer->highlightPickedLeaves(false);
+
+			for (int idx : faces) {
+				for (int i = 0; i < map->models[0].nVisLeafs; i++) {
+					BSPLEAF& leaf = map->leaves[i];
+
+					for (int k = 0; k < leaf.nMarkSurfaces; k++) {
+						if (map->marksurfs[leaf.iFirstMarkSurface + k] == idx) {
+							app->pickInfo.selectLeaf(i);
+							break;
+						}
+					}
+				}
+			}
+
+			app->pickInfo.selectLeafFaces();
+			g_app->mapRenderer->highlightPickedLeaves(true);
+			g_app->mapRenderer->highlightPickedFaces(true);
+			g_app->updateTextureAxes();
+
 			app->pickMode = PICK_LEAF;
 			showTextureWidget = false;
 			app->mapRenderer->delayLoadLeaves();
@@ -3482,7 +3618,30 @@ void Gui::drawDebugWidget() {
 					ImGui::SliderInt("Node", &app->debugNode, 0, app->debugNodeMax);
 				}
 
-				if (app->pickInfo.getFaceIndex() != -1) {
+				if (app->pickInfo.leaves.size()) {
+					if (app->pickInfo.getLeafIndex() != -1) {
+						BSPLEAF& leaf = map->leaves[app->pickInfo.getLeafIndex()];
+						ImGui::Text("Leaf ID: %d", app->pickInfo.getLeafIndex());
+						ImGui::Text("Leaf contents: %s (%d)", map->getLeafContentsName(leaf.nContents), leaf.nContents);
+						ImGui::Text("Leaf faces: %d", leaf.nMarkSurfaces);
+						ImGui::Text("Leaf first surf: %d", leaf.iFirstMarkSurface);
+						ImGui::Text("Leaf VIS offset: %d", leaf.nVisOffset);
+						ImGui::Text("Leaf ambient levels: %d %d %d %d", leaf.nAmbientLevels[0], leaf.nAmbientLevels[1], leaf.nAmbientLevels[2], leaf.nAmbientLevels[3]);
+						ImGui::Text("Leaf mins: %.2f %.2f %.2f", leaf.nMins[0], leaf.nMins[1], leaf.nMins[2]);
+						ImGui::Text("Leaf maxs: %.2f %.2f %.2f", leaf.nMaxs[0], leaf.nMaxs[1], leaf.nMaxs[2]);
+					}
+					else {
+						unordered_set<int> uniqueFaces;
+						for (int idx : app->pickInfo.leaves) {
+							BSPLEAF& leaf = map->leaves[idx];
+							for (int i = 0; i < leaf.nMarkSurfaces; i++) {
+								uniqueFaces.insert(map->marksurfs[leaf.iFirstMarkSurface + i]);
+							}
+						}
+						ImGui::Text("Leaf faces: %d", uniqueFaces.size());
+					}
+				}
+				else if (app->pickInfo.getFaceIndex() != -1) {
 					BSPMODEL& model = map->models[modelIndex];
 					BSPFACE& face = *app->pickInfo.getFace();
 					BSPPLANE& plane = map->planes[face.iPlane];
