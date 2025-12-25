@@ -110,8 +110,8 @@ struct RenderLeaves {
 	VertexBuffer* leafBuffer;
 	VertexBuffer* wireframeLeafBuffer;
 	vector<FaceMath> faceMaths;
-	vector<int> leafRanges[65535]; // maps a leaf index to vertex indexes in the leafBuffer
-	vector<int> leafWireRanges[65535]; // maps a leaf index to wireframe vertex indexes in the leafBuffer
+	vector<int> leafRanges[65536]; // maps a leaf index to vertex indexes in the leafBuffer
+	vector<int> leafWireRanges[65536]; // maps a leaf index to wireframe vertex indexes in the leafBuffer
 };
 
 struct OrderedEnt {
@@ -207,6 +207,8 @@ public:
 	void reloadTextures(bool reloadNow=false);
 	void reloadLightmaps();
 	void reloadClipnodes();
+	void reloadLeaves();
+	void delayLoadLeaves(); // load leaf data if not already loaded
 	void addClipnodeModel(int modelIdx);
 	void updateModelShaders();
 
@@ -283,8 +285,13 @@ private:
 	int clipnodeLeafCount = 0;
 	future<void> clipnodesFuture;
 
+	bool leavesThreadFinished = false; // true if the loading thread is not running
+	bool leavesLoaded = false; // true if leaf data is ready to use
+	future<void> leavesFuture;
+
 	void loadLightmaps();
 	void loadClipnodes();
+	void loadLeaves();
 	void generateClipnodeBuffer(int modelIdx);
 	void generateLeafBuffer();
 	void generateNodeMesh(NodeVolumeCuts* volume, COLOR4 color, vector<cVert>& allVerts,
@@ -293,6 +300,7 @@ private:
 	void deleteRenderModel(RenderModel* renderModel);
 	void deleteRenderModelClipnodes(RenderClipnodes* renderModel);
 	void deleteRenderClipnodes();
+	void deleteRenderLeaves();
 	void deleteRenderFaces();
 	void deleteTextures();
 	void deleteLightmapTextures();

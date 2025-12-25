@@ -77,6 +77,14 @@ BspRenderer::BspRenderer(Bsp* map, PointEntRenderer* pointEntRenderer) {
 	texturesFuture = async(launch::async, &BspRenderer::loadTextures, this);
 	clipnodesFuture = async(launch::async, &BspRenderer::loadClipnodes, this);
 
+	if (g_app->pickMode == PICK_LEAF) {
+		leavesFuture = async(launch::async, &BspRenderer::loadLeaves, this);
+	}
+	else {
+		// leaves take a while to load, and aren't needed in most use cases
+		leavesThreadFinished = true;
+	}	
+
 	// cache ent targets so first selection doesn't lag
 	for (int i = 0; i < map->ents.size(); i++) {
 		map->ents[i]->getTargets();
@@ -254,6 +262,13 @@ void BspRenderer::reload() {
 	reloadTextures();
 	reloadLightmaps();
 	reloadClipnodes();
+
+	if (g_app->pickMode == PICK_LEAF) {
+		reloadLeaves();
+	}
+	else {
+		deleteRenderLeaves();
+	}
 }
 
 void BspRenderer::reloadTextures(bool reloadNow) {
@@ -296,6 +311,20 @@ void BspRenderer::reloadClipnodes() {
 	deleteRenderClipnodes();
 
 	clipnodesFuture = async(launch::async, &BspRenderer::loadClipnodes, this);
+}
+
+void BspRenderer::reloadLeaves() {
+	leavesLoaded = false;
+	leavesThreadFinished = false;
+
+	deleteRenderLeaves();
+
+	leavesFuture = async(launch::async, &BspRenderer::loadLeaves, this);
+}
+
+void BspRenderer::delayLoadLeaves() {
+	if (!leavesLoaded && leavesThreadFinished)
+		reloadLeaves();
 }
 
 void BspRenderer::addClipnodeModel(int modelIdx) {
@@ -527,11 +556,23 @@ void BspRenderer::deleteRenderClipnodes() {
 		delete[] renderClipnodes;
 	}
 
-	if (renderLeafDat != NULL && renderLeafDat->leafBuffer) {
-		delete renderLeafDat->leafBuffer;
-		delete renderLeafDat->wireframeLeafBuffer;
-		renderLeafDat->leafBuffer = NULL;
-		renderLeafDat->wireframeLeafBuffer = NULL;
+	renderClipnodes = NULL;
+}
+
+void BspRenderer::deleteRenderLeaves() {
+	if (renderLeafDat) {
+		if (renderLeafDat->leafBuffer) {
+			delete renderLeafDat->leafBuffer;
+			renderLeafDat->leafBuffer = NULL;
+		}
+
+		if (renderLeafDat->wireframeLeafBuffer) {
+			delete renderLeafDat->wireframeLeafBuffer;
+			renderLeafDat->wireframeLeafBuffer = NULL;
+		}
+
+		delete renderLeafDat;
+		renderLeafDat = NULL;
 	}
 
 	if (leafNavMesh) {
@@ -539,7 +580,7 @@ void BspRenderer::deleteRenderClipnodes() {
 		leafNavMesh = NULL;
 	}
 
-	renderClipnodes = NULL;
+	leavesLoaded = false;
 }
 
 void BspRenderer::deleteRenderModelClipnodes(RenderClipnodes* renderClip) {
@@ -933,12 +974,16 @@ bool BspRenderer::refreshModelClipnodes(int modelIdx) {
 void BspRenderer::loadClipnodes() {
 	numRenderClipnodes = map->modelCount;
 	renderClipnodes = new RenderClipnodes[numRenderClipnodes];
-	renderLeafDat = new RenderLeaves();
 	memset(renderClipnodes, 0, numRenderClipnodes * sizeof(RenderClipnodes));
 
 	for (int i = 0; i < numRenderClipnodes; i++) {
 		generateClipnodeBuffer(i);
 	}
+}
+
+void BspRenderer::loadLeaves() {
+	renderLeafDat = new RenderLeaves();
+	generateLeafBuffer();
 }
 
 void BspRenderer::generateNavMeshBuffer() {
@@ -1219,7 +1264,6 @@ void BspRenderer::generateClipnodeBuffer(int modelIdx) {
 	}
 
 	if (modelIdx == 0) {
-		generateLeafBuffer();
 		//generateNavMeshBuffer();
 	}
 }
@@ -1577,7 +1621,8 @@ void BspRenderer::refreshFace(int faceIdx) {
 BspRenderer::~BspRenderer() {
 	if (lightmapFuture.wait_for(chrono::milliseconds(0)) != future_status::ready ||
 		texturesFuture.wait_for(chrono::milliseconds(0)) != future_status::ready ||
-		clipnodesFuture.wait_for(chrono::milliseconds(0)) != future_status::ready) {
+		clipnodesFuture.wait_for(chrono::milliseconds(0)) != future_status::ready ||
+		(leavesFuture.valid() && leavesFuture.wait_for(chrono::milliseconds(0)) != future_status::ready)) {
 		logf("ERROR: Deleted bsp renderer while it was loading\n");
 	}
 
@@ -1595,6 +1640,7 @@ BspRenderer::~BspRenderer() {
 	deleteLightmapTextures();
 	deleteRenderFaces();
 	deleteRenderClipnodes();
+	deleteRenderLeaves();
 	deleteFaceMaths();
 
 	// TODO: share these with all renderers
@@ -1659,10 +1705,21 @@ void BspRenderer::delayLoadData() {
 		clipnodesLoaded = true;
 		debugf("Loaded %d clipnode leaves\n", clipnodeLeafCount);
 	}
+
+	if (!leavesThreadFinished && leavesFuture.wait_for(chrono::milliseconds(0)) == future_status::ready) {
+		if (renderLeafDat) {
+			renderLeafDat->leafBuffer->upload();
+			renderLeafDat->wireframeLeafBuffer->upload();
+		}
+
+		leavesLoaded = renderLeafDat != NULL;
+		leavesThreadFinished = true;
+		debugf("Loaded leaves\n");
+	}
 }
 
 bool BspRenderer::isFinishedLoading() {
-	return lightmapsUploaded && texturesLoaded && textureFacesLoaded && clipnodesLoaded ||
+	return lightmapsUploaded && texturesLoaded && textureFacesLoaded && clipnodesLoaded && leavesThreadFinished ||
 		map->ents.empty();
 }
 
@@ -1702,7 +1759,7 @@ void BspRenderer::highlightPickedFaces(bool highlight) {
 }
 
 void BspRenderer::highlightPickedLeaves(bool highlight) {
-	if (!clipnodesLoaded || !renderLeafDat->leafBuffer)
+	if (!leavesLoaded || !renderLeafDat->leafBuffer)
 		return;
 
 	cVert* verts = (cVert*)renderLeafDat->leafBuffer->data;
@@ -1746,7 +1803,7 @@ void BspRenderer::highlightPickedLeaves(bool highlight) {
 }
 
 void BspRenderer::hideLeaves(bool hideNotUnhide) {
-	if (!clipnodesLoaded || !renderLeafDat->leafBuffer)
+	if (!leavesLoaded || !renderLeafDat->leafBuffer)
 		return;
 
 	cVert* verts = (cVert*)renderLeafDat->leafBuffer->data;
@@ -2031,7 +2088,7 @@ void BspRenderer::renderLeaves() {
 	glDepthFunc(GL_LEQUAL);
 
 	// draw clipnodes in a separate pass to prevent interleaving shader binds
-	if (clipnodesLoaded) {
+	if (leavesLoaded) {
 		g_app->colorShader->bind();
 		g_app->colorShader->modelMat->loadIdentity();
 		g_app->colorShader->modelMat->translate(renderOffset.x, renderOffset.y, renderOffset.z);
@@ -2461,7 +2518,7 @@ bool BspRenderer::pickModelPoly(vec3 start, vec3 dir, vec3 offset, vec3 rot, int
 		hullIdx = getBestClipnodeHull(modelIdx);
 	}
 
-	if (clipnodesLoaded && (selectWorldClips || selectEntClips) && hullIdx != -1) {
+	if (leavesLoaded && (selectWorldClips || selectEntClips) && hullIdx != -1) {
 		for (int i = 0; i < renderClipnodes[modelIdx].faceMaths[hullIdx].size(); i++) {
 			FaceMath faceMath = renderClipnodes[modelIdx].faceMaths[hullIdx][i];
 
@@ -2505,7 +2562,7 @@ bool BspRenderer::pickLeaf(vec3 start, vec3 dir, int& leafIdx, float& bestDist) 
 
 	bool foundBetterPick = false;
 
-	if (clipnodesLoaded) {
+	if (leavesLoaded) {
 		for (int i = 0; i < renderLeafDat->faceMaths.size(); i++) {
 			FaceMath faceMath = renderLeafDat->faceMaths[i];
 

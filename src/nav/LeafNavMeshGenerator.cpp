@@ -20,7 +20,7 @@ LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map, bool graphOnly, int conten
 
 	float createLeavesStart = glfwGetTime();
 	vector<LeafNode> leaves = getHullLeaves(map, 0, contents);
-	logf("Created %d leaf nodes in %.2fs\n", leaves.size(), glfwGetTime() - createLeavesStart);
+	debugf("Created %d leaf nodes in %.2fs\n", leaves.size(), glfwGetTime() - createLeavesStart);
 	
 	LeafOctree* octree = createLeafOctree(map, leaves, octreeDepth);
 	LeafNavMesh* mesh = new LeafNavMesh(leaves, octree);
@@ -66,7 +66,7 @@ LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map, bool graphOnly, int conten
 		}
 	}
 
-	logf("Generated %d node nav mesh in %.2fs (%d KB)\n", mesh->nodes.size(),
+	debugf("Generated %d node mesh in %.2fs (%d KB)\n", mesh->nodes.size(),
 		glfwGetTime() - NavMeshGeneratorGenStart, totalSz / 1024);
 
 	return mesh;
@@ -198,7 +198,7 @@ LeafOctree* LeafNavMeshGenerator::createLeafOctree(Bsp* map, vector<LeafNode>& n
 		octree->insertLeaf(&nodes[i]);
 	}
 
-	logf("Create octree depth %d, size %f -> %f in %.2fs\n", treeDepth,
+	debugf("Create octree depth %d, size %f -> %f in %.2fs\n", treeDepth,
 		treeMax.x, treeMax.x / pow(2, treeDepth), (float)glfwGetTime() - treeStart);
 
 	return octree;
@@ -523,7 +523,7 @@ void LeafNavMeshGenerator::linkNavLeaves(Bsp* map, LeafNavMesh* mesh, int offset
 		}
 	}
 
-	logf("Added %d nav leaf links in %.2fs\n", numLinks, (float)glfwGetTime() - linkStart);
+	debugf("Added %d nav leaf links in %.2fs\n", numLinks, (float)glfwGetTime() - linkStart);
 }
 
 void LeafNavMeshGenerator::linkNavChildLeaves(Bsp* map, LeafNavMesh* mesh, int nodeIdx) {

@@ -651,6 +651,7 @@ void Gui::draw3dContextMenus() {
 					map->remove_unused_model_structures(false).print_delete_stats(1);
 
 					command->pushUndoState();
+					app->mapRenderer->reloadLeaves();
 				}
 				tooltip(g, "Converts selected world leaves to a BSP model to reduce world leaf count. "
 					"Collision and visibility is preserved, but decals won't work. Faces will also "
@@ -3262,7 +3263,9 @@ void Gui::drawToolbar() {
 			g_app->mapRenderer->highlightPickedLeaves(false);
 			app->pickMode = PICK_LEAF;
 			showTextureWidget = false;
+			app->mapRenderer->delayLoadLeaves();
 		}
+		
 		ImGui::PopStyleColor();
 		if (ImGui::IsItemHovered() && g.HoveredIdTimer > g_tooltip_delay) {
 			ImGui::BeginTooltip();
