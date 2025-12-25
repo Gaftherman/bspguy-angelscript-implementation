@@ -534,6 +534,11 @@ void BspRenderer::deleteRenderClipnodes() {
 		renderLeafDat->wireframeLeafBuffer = NULL;
 	}
 
+	if (leafNavMesh) {
+		delete leafNavMesh;
+		leafNavMesh = NULL;
+	}
+
 	renderClipnodes = NULL;
 }
 
@@ -905,6 +910,11 @@ bool BspRenderer::refreshModelClipnodes(int modelIdx) {
 		renderLeafDat->wireframeLeafBuffer = NULL;
 	}
 
+	if (leafNavMesh) {
+		delete leafNavMesh;
+		leafNavMesh = NULL;
+	}
+
 	deleteRenderModelClipnodes(&renderClipnodes[modelIdx]);
 	generateClipnodeBuffer(modelIdx);
 
@@ -1222,6 +1232,7 @@ void BspRenderer::generateLeafBuffer() {
 
 	renderLeafDat->leafBuffer = NULL;
 	renderLeafDat->wireframeLeafBuffer = NULL;
+	leafNavMesh = NULL;
 
 	Clipper clipper;
 
@@ -1263,8 +1274,6 @@ void BspRenderer::generateLeafBuffer() {
 	}
 
 	if (allVerts.size() == 0 || wireframeVerts.size() == 0) {
-		renderLeafDat->leafBuffer = NULL;
-		renderLeafDat->wireframeLeafBuffer = NULL;
 		return;
 	}
 
@@ -1275,6 +1284,8 @@ void BspRenderer::generateLeafBuffer() {
 	renderLeafDat->wireframeLeafBuffer->ownData = true;
 
 	renderLeafDat->faceMaths = faceMaths;
+
+	leafNavMesh = LeafNavMeshGenerator().generate(map, true, CONTENTS_NOT_SOLID, 0);
 }
 
 void BspRenderer::generateNodeMesh(NodeVolumeCuts* volume, COLOR4 color, vector<cVert>& allVerts,

@@ -8,6 +8,7 @@
 #include "primitives.h"
 
 class NavMesh;
+class LeafNavMesh;
 class PointEntRenderer;
 struct EntCube;
 class VertexBuffer;
@@ -171,6 +172,7 @@ class BspRenderer {
 public:
 	Bsp* map;
 	PointEntRenderer* pointEntRenderer;
+	LeafNavMesh* leafNavMesh = NULL; // for leaf selection mode
 	vec3 mapOffset, renderOffset;
 	int showLightFlag = -1;
 	vector<Wad*> wads;

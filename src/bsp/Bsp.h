@@ -9,12 +9,14 @@
 #include <set>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include "colors.h"
 #include "Wad.h"
 
 class Entity;
 class Wad;
 struct WADTEX;
+class LeafNavMesh;
 
 #define OOB_CLIP_X 1
 #define OOB_CLIP_X_NEG 2
@@ -133,6 +135,10 @@ public:
 
 	// return PVS of the given leaf (leaf indexes which are potentially visible)
 	vector<int> get_pvs(int ileaf);
+
+	// select all leaves connected to the given leaves
+	// ignoreLeaves will not be connected thru
+	vector<int> get_connected_leaves(LeafNavMesh* mesh, const vector<int>& ileaves, const unordered_set<int>& ignoreLeaves);
 
 	// returns the node path to the given leaf
 	int get_node_branch(int iNode, vector<int>& branch, int ileaf);

@@ -11,7 +11,6 @@
 #define NAV_CROUCHJUMP_HEIGHT 63	// 208 gravity 50%
 #define NAV_CROUCHJUMP_STACK_HEIGHT 135
 #define NAV_AUTOCLIMB_HEIGHT 117
-#define NAV_HULL 3
 
 #define NAV_BOTTOM_EPSILON 1.0f // move waypoints this far from the bottom of the node
 
@@ -42,6 +41,7 @@ struct EntState {
 struct LeafNode {
 	vector<LeafLink> links;
 	uint16_t id;
+	uint16_t leafIdx; // leaf index in the BSP data
 	vec3 origin; // the best position for pathing (not necessarily the center)
 	int16_t entidx; // 0 for world leaves, else an entity leaf which may be relocated, enabled, or disabled
 	uint16_t parentIdx; // parent leaf idx if this node is the child of another leaf, else 65535
@@ -60,7 +60,8 @@ struct LeafNode {
 
 	LeafNode();
 
-	bool addLink(int node, Polygon3D linkArea);
+	// linkAtFloor = move link position to the floor for human pathing
+	bool addLink(int node, Polygon3D linkArea, bool linkAtFloor);
 
 	bool addLink(int node, vec3 linkPos);
 
@@ -78,6 +79,8 @@ public:
 	uint16_t leafMap[MAX_MAP_CLIPNODE_LEAVES]; // maps a BSP leaf index to nav mesh node index
 	vector<vector<LeafNode>> bspModelLeaves; // cached entity model leaves
 	vector<LeafNode> bspModelNodes; // cached entity model nodes
+	int hull; // which hull this mesh represents
+	bool forHumans; // nav mesh is for human navigation, not just a linked graph of leaves
 
 	LeafNavMesh();
 

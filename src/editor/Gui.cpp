@@ -220,6 +220,8 @@ void Gui::draw() {
 
 	drawPopups();
 
+	drawDebugText();
+
 	// Rendering
 	glUseProgram(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -603,6 +605,21 @@ void Gui::draw3dContextMenus() {
 				tooltip(g, "Unhides leaves you previously marked as hidden.");
 			}
 			else {
+				if (ImGui::MenuItem("Select Connected", "", false, app->pickInfo.leaves.size() >= 1 && !app->isLoading)) {
+					vector<int> pickLeaves = app->pickInfo.leaves;
+					vector<int> connected = map->get_connected_leaves(app->mapRenderer->leafNavMesh, pickLeaves, app->hiddenLeaves);
+
+					for (int idx : connected) {
+						app->pickInfo.selectLeaf(idx);
+					}
+
+					app->pickInfo.selectLeafFaces();
+					app->mapRenderer->highlightPickedFaces(true);
+					app->mapRenderer->highlightPickedLeaves(true);
+					app->updateTextureAxes();
+				}
+				tooltip(g, "Select all leaves in the potentially visible set (PVS) of the selected leaf(s).");
+
 				if (ImGui::MenuItem("Select PVS", "", false, app->pickInfo.leaves.size() >= 1)) {
 					vector<int> pickLeaves = app->pickInfo.leaves;
 
@@ -613,7 +630,10 @@ void Gui::draw3dContextMenus() {
 						}
 					}
 
-					g_app->mapRenderer->highlightPickedLeaves(true);
+					app->pickInfo.selectLeafFaces();
+					app->mapRenderer->highlightPickedFaces(true);
+					app->mapRenderer->highlightPickedLeaves(true);
+					app->updateTextureAxes();
 				}
 				tooltip(g, "Select all leaves in the potentially visible set (PVS) of the selected leaf(s).");
 
@@ -631,8 +651,6 @@ void Gui::draw3dContextMenus() {
 					map->remove_unused_model_structures(false).print_delete_stats(1);
 
 					command->pushUndoState();
-
-					g_app->mapRenderer->highlightPickedLeaves(true);
 				}
 				tooltip(g, "Converts selected world leaves to a BSP model to reduce world leaf count. "
 					"Collision and visibility is preserved, but decals won't work. Faces will also "
@@ -3572,7 +3590,7 @@ void Gui::drawDebugWidget() {
 							if (i == 0) {
 								ImGui::Text("Leaf: %d", leafIdx);
 							}
-							else if (i == NAV_HULL && g_app->debugLeafNavMesh) {
+							else if (g_app->debugLeafNavMesh && i == g_app->debugLeafNavMesh->hull) {
 								int leafNavIdx = app->debugLeafNavMesh->getNodeIdx(map, localCamera);
 
 								ImGui::Text("Nav ID: %d", leafNavIdx);
@@ -6703,6 +6721,30 @@ void Gui::drawEntityReport() {
 	ImGui::End();
 }
 
+void Gui::drawDebugText() {
+	ImDrawList* imdl = ImGui::GetForegroundDrawList();
+
+	for (Text2D& text : texts) {
+		ImU32 color = IM_COL32(text.color.r, text.color.g, text.color.b, text.color.a);
+		ImVec2 pos = ImVec2(text.x, text.y);
+
+		if (text.align != TEXT2D_ALIGN_LEFT) {
+			ImVec2 textSz = ImGui::CalcTextSize(text.text.c_str());
+			
+			if (text.align == TEXT2D_ALIGN_CENTER) {
+				pos = ImVec2(text.x - textSz.x * 0.5f, text.y);
+			}
+			else if (text.align == TEXT2D_ALIGN_RIGHT) {
+				pos = ImVec2(text.x - textSz.x, text.y);
+			}
+		}
+
+		imdl->AddText(pos, color, text.text.c_str());
+	}
+
+	texts.clear();
+}
+
 
 static bool ColorPicker(float* col, bool alphabar)
 {
@@ -8219,4 +8261,8 @@ void Gui::createSeriesWad() {
 	for (WADTEX& tex : sharedTex) {
 		delete[] tex.data;
 	}
+}
+
+void Gui::addText(Text2D text) {
+	texts.push_back(text);
 }

@@ -48,6 +48,25 @@ struct StatInfo {
 	ImVec4 color;
 };
 
+enum Text2dAlignment {
+	TEXT2D_ALIGN_LEFT,
+	TEXT2D_ALIGN_CENTER,
+	TEXT2D_ALIGN_RIGHT,
+};
+
+struct Text2D {
+	int x, y;
+	int align;
+	string text;
+	COLOR4 color;
+
+	Text2D(int x, int y, string text, int align=TEXT2D_ALIGN_LEFT, COLOR4 color = COLOR4(255, 255, 255, 255))
+		: text(text), x(x), y(y), align(align), color(color) { }
+
+	Text2D(vec2 pos, string text, int align = TEXT2D_ALIGN_LEFT, COLOR4 color = COLOR4(255, 255, 255, 255))
+		: text(text), x(pos.x), y(pos.y), align(align), color(color) {}
+};
+
 class Renderer;
 
 class Gui {
@@ -142,6 +161,7 @@ private:
 
 	int confirmMerge = 0;
 	int deduplicateOpen = 0;
+	vector<Text2D> texts;
 
 	void draw3dContextMenus();
 	void drawEditOptions(bool isMainMenu);
@@ -171,6 +191,7 @@ private:
 	void drawAllocBlockLimitTab(Bsp* map);
 	void drawFaceExtentsLimitTab();
 	void drawEntityReport();
+	void drawDebugText();
 	StatInfo calcStat(string name, uint val, uint max, bool isMem);
 	ModelInfo calcModelStat(Bsp* map, STRUCTUSAGE* modelInfo, uint val, uint max, bool isMem);
 	void checkValidHulls();
@@ -182,4 +203,5 @@ private:
 	void checkFaceErrors();
 	string getUserLayoutPath(); // path to user's saved widget layout
 	void createSeriesWad();
+	void addText(Text2D text);
 };

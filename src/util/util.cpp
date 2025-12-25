@@ -1309,3 +1309,15 @@ std::vector<uint8_t> base64decode(const std::string& input) {
 
 	return decoded;
 }
+
+char* cstrf(const char* format, ...)
+{
+	va_list		argptr;
+	static char		string[1024];
+
+	va_start(argptr, format);
+	vsnprintf(string, 1024, format, argptr);
+	va_end(argptr);
+
+	return string;
+}

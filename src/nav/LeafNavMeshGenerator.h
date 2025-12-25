@@ -18,7 +18,10 @@ public:
 
 	// generate a nav mesh from the bsp
 	// returns polygons used to construct the mesh
-	LeafNavMesh* generate(Bsp* map);
+	// set graphOnly to true to create the leaf connection graph only, without path costs and ent links
+	// contents = leaf contents to use for generation
+	// navHull = which collision hull to create leaf nodes from (0-3)
+	LeafNavMesh* generate(Bsp* map, bool graphOnly, int contents, int navHull);
 
 	// splits leaves by solid entity faces
 	void splitEntityLeaves(Bsp* map, LeafNavMesh* mesh);
@@ -38,6 +41,7 @@ public:
 
 private:
 	int octreeDepth = 6;
+	int navHull = 3;
 
 	// get leaves of the bsp tree with the given contents
 	vector<LeafNode> getHullLeaves(Bsp* map, int modelIdx, int contents);

@@ -101,6 +101,8 @@ public:
 	Line2D debugCut;
 	Polygon3D debugPoly;
 	Polygon3D debugPoly2;
+	Polygon3D debugPoly3;
+	vector<vec2> debugVerts2d;
 	NavMesh* debugNavMesh = NULL;
 	LeafNavMesh* debugLeafNavMesh = NULL;
 	int debugNavPoly = -1;
@@ -131,6 +133,7 @@ public:
 	void addMap(Bsp* map);
 
 	void renderLoop();
+	void renderNavMesh();
 	void renderArrangeMaps();
 	void postLoadFgdsAndTextures();
 	void postLoadFgds();
@@ -302,7 +305,7 @@ private:
 	void drawBoxOutline(vec3 center, float width, COLOR4 color);
 	void drawBox(vec3 mins, vec3 maxs, COLOR4 color);
 	void drawPolygon3D(Polygon3D& poly, COLOR4 color);
-	float drawPolygon2D(Polygon3D poly, vec2 pos, vec2 maxSz, COLOR4 color); // returns render scale
+	void drawPolygon2D(vector<vec2>& poly, vec2 pos, float scale, COLOR4 color); // returns render scale
 	void drawBox2D(vec2 center, float width, COLOR4 color);
 	void drawPlane(BSPPLANE& plane, COLOR4 color, float sz=32768);
 	void drawClipnodes(Bsp* map, int iNode, int& currentPlane, int activePlane);

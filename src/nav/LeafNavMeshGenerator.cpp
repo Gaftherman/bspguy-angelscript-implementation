@@ -13,40 +13,45 @@
 #include <float.h>
 #include "Entity.h"
 
-LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map) {
+LeafNavMesh* LeafNavMeshGenerator::generate(Bsp* map, bool graphOnly, int contents, int navHull) {
 	float NavMeshGeneratorGenStart = glfwGetTime();
 	BSPMODEL& model = map->models[0];
+	this->navHull = navHull;
 
 	float createLeavesStart = glfwGetTime();
-	vector<LeafNode> leaves = getHullLeaves(map, 0, CONTENTS_EMPTY);
+	vector<LeafNode> leaves = getHullLeaves(map, 0, contents);
 	logf("Created %d leaf nodes in %.2fs\n", leaves.size(), glfwGetTime() - createLeavesStart);
 	
 	LeafOctree* octree = createLeafOctree(map, leaves, octreeDepth);
 	LeafNavMesh* mesh = new LeafNavMesh(leaves, octree);
+	mesh->hull = navHull;
+	mesh->forHumans = !graphOnly;
 
 	linkNavLeaves(map, mesh, 0);
 
-	for (int i = 0; i < mesh->nodes.size(); i++) {
-		setLeafOrigin(map, mesh, i);
-	}
-
-	for (int i = 0; i < mesh->nodes.size(); i++) {
-		LeafNode& node = mesh->nodes[i];
-
-		for (int k = 0; k < node.links.size(); k++) {
-			LeafLink& link = node.links[k];
-			calcPathCost(map, mesh, node, link);
+	if (!graphOnly) {
+		for (int i = 0; i < mesh->nodes.size(); i++) {
+			setLeafOrigin(map, mesh, i);
 		}
-	}
 
-	mesh->bspModelLeaves.clear();
-	mesh->bspModelNodes.clear();
-	mesh->bspModelLeaves.resize(map->modelCount);
-	mesh->bspModelNodes.resize(map->modelCount);
+		for (int i = 0; i < mesh->nodes.size(); i++) {
+			LeafNode& node = mesh->nodes[i];
 
-	for (int i = 1; i < map->modelCount; i++) {
-		LeafNode temp;
-		getSolidEntityNode(map, mesh, i, vec3(), temp);
+			for (int k = 0; k < node.links.size(); k++) {
+				LeafLink& link = node.links[k];
+				calcPathCost(map, mesh, node, link);
+			}
+		}
+
+		mesh->bspModelLeaves.clear();
+		mesh->bspModelNodes.clear();
+		mesh->bspModelLeaves.resize(map->modelCount);
+		mesh->bspModelNodes.resize(map->modelCount);
+
+		for (int i = 1; i < map->modelCount; i++) {
+			LeafNode temp;
+			getSolidEntityNode(map, mesh, i, vec3(), temp);
+		}
 	}
 
 	int totalSz = 0;
@@ -76,7 +81,7 @@ vector<LeafNode> LeafNavMeshGenerator::getHullLeaves(Bsp* map, int modelIdx, int
 
 	Clipper clipper;
 
-	vector<NodeVolumeCuts> nodes = map->get_model_leaf_volume_cuts(modelIdx, NAV_HULL, contents);
+	vector<NodeVolumeCuts> nodes = map->get_model_leaf_volume_cuts(modelIdx, navHull, contents);
 
 	for (int m = 0; m < nodes.size(); m++) {
 		CMesh mesh = clipper.clip(nodes[m].cuts);
@@ -85,6 +90,7 @@ vector<LeafNode> LeafNavMeshGenerator::getHullLeaves(Bsp* map, int modelIdx, int
 
 		if (hull.leafFaces.size()) {
 			hull.id = leaves.size();
+			hull.leafIdx = nodes[m].leafIdx;
 			leaves.push_back(hull);
 		}
 	}
@@ -378,10 +384,10 @@ void LeafNavMeshGenerator::splitLeafByEnts(Bsp* map, LeafNavMesh* mesh, int node
 				for (int k = 0; k < entNodes.size(); k++) {
 					EntState& state = entNodes[k].entState;
 					int modelIdx = state.model;
-					int headnode = map->models[modelIdx].iHeadnodes[NAV_HULL];
+					int headnode = map->models[modelIdx].iHeadnodes[navHull];
 					vec3 testPos = splitNodes[i].center - state.origin;
 
-					if (map->pointContents(headnode, testPos, NAV_HULL) == CONTENTS_SOLID) {
+					if (map->pointContents(headnode, testPos, navHull) == CONTENTS_SOLID) {
 						isSolid = true;
 						break;
 					}
@@ -436,7 +442,7 @@ void LeafNavMeshGenerator::setLeafOrigin(Bsp* map, LeafNavMesh* mesh, int nodeId
 
 vec3 LeafNavMeshGenerator::getBestPolyOrigin(Bsp* map, Polygon3D& poly, vec3 bias) {
 	TraceResult tr;
-	map->traceHull(bias, bias + vec3(0, 0, -4096), NAV_HULL, &tr);
+	map->traceHull(bias, bias + vec3(0, 0, -4096), navHull, &tr);
 	float height = bias.z - tr.vecEndPos.z;
 
 	if (height < NAV_STEP_HEIGHT) {
@@ -455,7 +461,7 @@ vec3 LeafNavMeshGenerator::getBestPolyOrigin(Bsp* map, Polygon3D& poly, vec3 bia
 			vec3 testPos = poly.unproject(vec2(x, y));
 			testPos.z += NAV_BOTTOM_EPSILON;
 
-			map->traceHull(testPos, testPos + vec3(0, 0, -4096), NAV_HULL, &tr);
+			map->traceHull(testPos, testPos + vec3(0, 0, -4096), navHull, &tr);
 			float height = testPos.z - tr.vecEndPos.z;
 			float heightDelta = height - bestHeight;
 			float centerDist = (testPos - bias).lengthSquared();
@@ -495,7 +501,7 @@ void LeafNavMeshGenerator::linkNavLeaves(Bsp* map, LeafNavMesh* mesh, int offset
 
 		if (leaf.parentIdx == NAV_INVALID_IDX) {
 			// only link parent leaves to world leaves
-			int leafIdx = map->get_leaf(leaf.center, NAV_HULL);
+			int leafIdx = map->get_leaf(leaf.center, navHull);
 
 			if (leafIdx >= 0 && leafIdx < MAX_MAP_CLIPNODE_LEAVES) {
 				mesh->leafMap[leafIdx] = i;
@@ -793,7 +799,7 @@ void LeafNavMeshGenerator::calcPathCost(Bsp* bsp, LeafNavMesh* mesh, LeafNode& n
 	bool isDrop = end.z + EPSILON < start.z;
 
 	TraceResult tr;
-	bsp->traceHull(node.origin, link.pos, NAV_HULL, &tr);
+	bsp->traceHull(node.origin, link.pos, navHull, &tr);
 
 	addPathCost(link, bsp, start, mid, isDrop);
 	addPathCost(link, bsp, mid, end, isDrop);
@@ -817,7 +823,7 @@ void LeafNavMeshGenerator::addPathCost(LeafLink& link, Bsp* bsp, vec3 start, vec
 		vec3 top = start + delta * t;
 		vec3 bottom = top + vec3(0, 0, -4096);
 
-		bsp->traceHull(top, bottom, NAV_HULL, &tr);
+		bsp->traceHull(top, bottom, navHull, &tr);
 		float height = (tr.vecEndPos - top).length();
 
 		if (tr.vecPlaneNormal.z < 0.7f) {

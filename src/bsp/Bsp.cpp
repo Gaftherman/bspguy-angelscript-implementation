@@ -8,6 +8,7 @@
 #include <sstream>
 #include <set>
 #include <map>
+#include <queue>
 #include <fstream>
 #include <algorithm>
 #include "Clipper.h"
@@ -19,6 +20,7 @@
 #include "mstream.h"
 #include "Fgd.h"
 #include "Texture.h"
+#include "LeafNavMeshGenerator.h"
 
 typedef map< string, vec3 > mapStringToVector;
 
@@ -5930,7 +5932,7 @@ vector<int> Bsp::get_pvs(int ileaf) {
 		{
 			for (byte bit = 1; bit != 0; bit *= 2, lf++)
 			{
-				if ((pvs[p] & bit) && lf < leafCount) // leaf is flagged as visible
+				if ((pvs[p] & bit) && lf < leafCount && lf < models[0].nVisLeafs) // leaf is flagged as visible
 				{
 					pvsLeaves.push_back(lf);
 				}
@@ -5939,6 +5941,45 @@ vector<int> Bsp::get_pvs(int ileaf) {
 	}
 
 	return pvsLeaves;
+}
+
+vector<int> Bsp::get_connected_leaves(LeafNavMesh* mesh, const vector<int>& ileaves, const unordered_set<int>& ignoreLeaves) {
+	unordered_set<int> visited;
+	queue<int> searchNodes;
+	vector<int> connected;
+
+	for (int ileaf : ileaves) {
+		searchNodes.push(mesh->leafMap[ileaf]);
+		visited.insert(mesh->leafMap[ileaf]);
+	}
+
+	for (int ileaf : ignoreLeaves) {
+		visited.insert(mesh->leafMap[ileaf]);
+	}
+
+	while (searchNodes.size()) {
+		int idx = searchNodes.front();
+
+		if (idx == NAV_INVALID_IDX) {
+			logf("Invalid node in selection\n");
+			continue; // should never happen
+		}
+
+		searchNodes.pop();
+		LeafNode& node = mesh->nodes[idx];
+
+		for (LeafLink& link : node.links) {
+			if (visited.count(link.node)) {
+				continue;
+			}
+
+			searchNodes.push(link.node);
+			visited.insert(link.node);
+			connected.push_back(mesh->nodes[link.node].leafIdx);
+		}
+	}
+
+	return connected;
 }
 
 int Bsp::get_node_branch(int iNode, vector<int>& branch, int ileaf) {

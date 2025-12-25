@@ -162,3 +162,6 @@ float signedAngle(const vec3& u, const vec3& v, const vec3& n);
 string base64encode(const uint8_t* data, size_t len);
 
 vector<uint8_t> base64decode(const string& input);
+
+// return a c string created with printf formatting (not thread safe + uses static buffer)
+char* cstrf(const char* format, ...);

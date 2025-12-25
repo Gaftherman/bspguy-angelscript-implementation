@@ -705,7 +705,11 @@ void Renderer::renderLoop() {
 		}
 
 		if (g_app->debugPoly.isValid)
-			drawPolygon3D(g_app->debugPoly, COLOR4(0, 255, 255, 150));
+			drawPolygon3D(g_app->debugPoly, COLOR4(0, 255, 0, 150));
+		if (g_app->debugPoly2.isValid)
+			drawPolygon3D(g_app->debugPoly2, COLOR4(255, 0, 0, 150));
+		if (g_app->debugPoly3.isValid)
+			drawPolygon3D(g_app->debugPoly3, COLOR4(255, 255, 255, 150));
 		if (g_app->debugLine0 != g_app->debugLine1) {
 			drawLine(debugLine0, debugLine1, { 128, 0, 255, 255 });
 			drawLine(debugLine2, debugLine3, { 0, 255, 0, 255 });
@@ -714,361 +718,7 @@ void Renderer::renderLoop() {
 
 		glCheckError("Rendering debug polys");
 
-		const bool navmeshwipcode = false;
-		if (navmeshwipcode) {
-			colorShader->bind();
-			model.loadIdentity();
-			colorShader->updateMatrixes();
-			glDisable(GL_CULL_FACE);
-
-			glLineWidth(128.0f);
-			drawLine(debugLine0, debugLine1, { 255, 0, 0, 255 });
-			
-			drawLine(debugTraceStart, debugTrace.vecEndPos, COLOR4(255, 0, 0, 255));
-			
-			Bsp* map = mapRenderer->map;
-
-			if (debugNavMesh && debugNavPoly != -1) {
-				glLineWidth(1);
-				NavNode& node = debugNavMesh->nodes[debugNavPoly];
-				Polygon3D& poly = debugNavMesh->polys[debugNavPoly];
-
-				for (int i = 0; i < MAX_NAV_LINKS; i++) {
-					NavLink& link = node.links[i];
-					if (link.node == -1) {
-						break;
-					}
-					Polygon3D& linkPoly = debugNavMesh->polys[link.node];
-
-					vec3 srcMid, dstMid;
-					debugNavMesh->getLinkMidPoints(debugNavPoly, i, srcMid, dstMid);
-
-					glDisable(GL_DEPTH_TEST);
-					drawLine(poly.center, srcMid, COLOR4(0, 255, 255, 255));
-					drawLine(srcMid, dstMid, COLOR4(0, 255, 255, 255));
-					drawLine(dstMid, linkPoly.center, COLOR4(0, 255, 255, 255));
-
-					if (fabs(link.zDist) > NAV_STEP_HEIGHT) {
-						Bsp* map = mapRenderer->map;
-						int i = link.srcEdge;
-						int k = link.dstEdge;
-						int inext = (i + 1) % poly.verts.size();
-						int knext = (k + 1) % linkPoly.verts.size();
-
-						Line2D thisEdge(poly.topdownVerts[i], poly.topdownVerts[inext]);
-						Line2D otherEdge(linkPoly.topdownVerts[k], linkPoly.topdownVerts[knext]);
-
-						float t0, t1, t2, t3;
-						float overlapDist = thisEdge.getOverlapRanges(otherEdge, t0, t1, t2, t3);
-						
-						vec3 delta1 = poly.verts[inext] - poly.verts[i];
-						vec3 delta2 = linkPoly.verts[knext] - linkPoly.verts[k];
-						vec3 e1 = poly.verts[i] + delta1 * t0;
-						vec3 e2 = poly.verts[i] + delta1 * t1;
-						vec3 e3 = linkPoly.verts[k] + delta2 * t2;
-						vec3 e4 = linkPoly.verts[k] + delta2 * t3;
-
-						bool isBelow = link.zDist > 0;
-						delta1 = e2 - e1;
-						delta2 = e4 - e3;
-						vec3 mid1 = e1 + delta1 * 0.5f;
-						vec3 mid2 = e3 + delta2 * 0.5f;
-						vec3 inwardDir = crossProduct(poly.plane_z, delta1.normalize());
-						vec3 testOffset = (isBelow ? inwardDir : inwardDir * -1) + vec3(0, 0, 1.0f);
-
-						float flatLen = (e2.xy() - e1.xy()).length();
-						float stepUnits = 1.0f;
-						float step = stepUnits / flatLen;
-						TraceResult tr;
-						bool isBlocked = true;
-						for (float f = 0; f < 0.5f; f += step) {
-							vec3 test1 = mid1 + (delta1 * f) + testOffset;
-							vec3 test2 = mid2 + (delta2 * f) + testOffset;
-							vec3 test3 = mid1 + (delta1 * -f) + testOffset;
-							vec3 test4 = mid2 + (delta2 * -f) + testOffset;
-
-							map->traceHull(test1, test2, 3, &tr);
-							if (!tr.fAllSolid && !tr.fStartSolid && tr.flFraction > 0.99f) {
-								drawLine(test1, test2, COLOR4(255, 255, 0, 255));
-							}
-							else {
-								drawLine(test1, test2, COLOR4(255, 0, 0, 255));
-							}
-
-							map->traceHull(test3, test4, 3, &tr);
-							if (!tr.fAllSolid && !tr.fStartSolid && tr.flFraction > 0.99f) {
-								drawLine(test3, test4, COLOR4(255, 255, 0, 255));
-							}
-							else {
-								drawLine(test3, test4, COLOR4(255, 0, 0, 255));
-							}
-						}
-
-						//if (isBlocked) {
-						//	continue;
-						//}
-					}
-
-					glEnable(GL_DEPTH_TEST);
-					drawBox(linkPoly.center, 4, COLOR4(0, 255, 255, 255));
-				}
-			}
-
-			if (!debugLeafNavMesh && !isLoading) {
-				LeafNavMesh* navMesh = LeafNavMeshGenerator().generate(map);
-				debugLeafNavMesh = navMesh;
-			}
-
-			if (debugLeafNavMesh && !isLoading) {
-				glLineWidth(1);
-
-				debugLeafNavMesh->refreshNodes(map);
-
-				glEnable(GL_DEPTH_TEST);
-				glEnable(GL_CULL_FACE);
-				
-				int leafNavIdx = debugLeafNavMesh->getNodeIdx(map, cameraOrigin);
-
-				// draw split leaves
-				for (int i = 0; i < debugLeafNavMesh->nodes.size(); i++) {
-					LeafNode& node = debugLeafNavMesh->nodes[i];
-
-					if (node.childIdx != NAV_INVALID_IDX) {
-						continue;
-					}
-
-					if (!node.face_buffer) {
-						mapRenderer->generateSingleLeafNavMeshBuffer(&node);
-
-						if (!node.face_buffer) {
-							continue;
-						}
-					}
-						
-					node.face_buffer->draw(GL_TRIANGLES);
-					node.wireframe_buffer->draw(GL_LINES);
-				}
-
-				glDisable(GL_CULL_FACE);
-				glDisable(GL_DEPTH_TEST);
-
-				if (leafNavIdx >= 0 && leafNavIdx < debugLeafNavMesh->nodes.size()) {
-
-					if (pickInfo.getEnt() && pickInfo.getEntIndex() != 0) {
-						glDisable(GL_DEPTH_TEST);
-						
-						int endNode = debugLeafNavMesh->getNodeIdx(map, pickInfo.getEnt());
-						//vector<int> route = debugLeafNavMesh->AStarRoute(leafNavIdx, endNode);
-						vector<int> route = debugLeafNavMesh->dijkstraRoute(leafNavIdx, endNode);
-
-						if (route.size()) {
-							LeafNode* lastNode = &debugLeafNavMesh->nodes[route[0]];
-
-							vec3 lastPos = lastNode->origin;
-							drawBox(lastNode->origin, 2, COLOR4(0, 255, 255, 255));
-
-							for (int i = 1; i < route.size(); i++) {
-								LeafNode& node = debugLeafNavMesh->nodes[route[i]];
-
-								vec3 nodeCenter = node.origin;
-
-								for (int k = 0; k < lastNode->links.size(); k++) {
-									LeafLink& link = lastNode->links[k];
-
-									if (link.node == route[i]) {
-										vec3 linkPoint = link.pos;
-
-										if (link.baseCost > 16000) {
-											drawLine(lastPos, linkPoint, COLOR4(255, 0, 0, 255));
-											drawLine(linkPoint, node.origin, COLOR4(255, 0, 0, 255));
-										}
-										else if (link.baseCost > 0) {
-											drawLine(lastPos, linkPoint, COLOR4(255, 64, 0, 255));
-											drawLine(linkPoint, node.origin, COLOR4(255, 64, 0, 255));
-										}
-										else if (link.costMultiplier > 99.0f) {
-											drawLine(lastPos, linkPoint, COLOR4(255, 255, 0, 255));
-											drawLine(linkPoint, node.origin, COLOR4(255, 255, 0, 255));
-										}
-										else if (link.costMultiplier > 9.0f) {
-											drawLine(lastPos, linkPoint, COLOR4(255, 0, 255, 255));
-											drawLine(linkPoint, node.origin, COLOR4(255, 0, 255, 255));
-										}
-										else if (link.costMultiplier > 1.9f) {
-											drawLine(lastPos, linkPoint, COLOR4(64, 255, 0, 255));
-											drawLine(linkPoint, node.origin, COLOR4(64, 255, 0, 255));
-										}
-										else {
-											drawLine(lastPos, linkPoint, COLOR4(0, 255, 255, 255));
-											drawLine(linkPoint, node.origin, COLOR4(0, 255, 255, 255));
-										}
-										drawBox(nodeCenter, 2, COLOR4(0, 255, 255, 255));
-										lastPos = nodeCenter;
-										break;
-									}
-								}
-
-								lastNode = &node;
-							}
-
-							drawLine(lastPos, pickInfo.getEnt()->getHullOrigin(map), COLOR4(0, 255, 255, 255));
-						}
-					}
-					else {
-						LeafNode& node = debugLeafNavMesh->nodes[leafNavIdx];
-
-						drawBox(node.origin, 2, COLOR4(0, 255, 0, 255));
-
-						std::string linkStr;
-
-						for (int i = 0; i < node.links.size(); i++) {
-							LeafLink& link = node.links[i];
-							if (link.node == -1) {
-								break;
-							}
-							LeafNode& linkLeaf = debugLeafNavMesh->nodes[link.node];
-							if (linkLeaf.childIdx != NAV_INVALID_IDX) {
-								continue;
-							}
-
-							Polygon3D& linkArea = link.linkArea;
-
-							if (link.baseCost > 16000) {
-								drawLine(node.origin, link.pos, COLOR4(255, 0, 0, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(255, 0, 0, 255));
-							}
-							else if (link.baseCost > 0) {
-								drawLine(node.origin, link.pos, COLOR4(255, 128, 0, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(255, 128, 0, 255));
-							}
-							else if (link.costMultiplier > 99.0f) {
-								drawLine(node.origin, link.pos, COLOR4(255, 255, 0, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(255, 255, 0, 255));
-							}
-							else if (link.costMultiplier > 9.0f) {
-								drawLine(node.origin, link.pos, COLOR4(255, 0, 255, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(255, 0, 255, 255));
-							}
-							else if (link.costMultiplier > 1.9f) {
-								drawLine(node.origin, link.pos, COLOR4(64, 255, 0, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(64, 255, 0, 255));
-							}
-							else {
-								drawLine(node.origin, link.pos, COLOR4(0, 255, 255, 255));
-								drawLine(link.pos, linkLeaf.origin, COLOR4(0, 255, 255, 255));
-							}
-
-							for (int k = 0; k < linkArea.verts.size(); k++) {
-								//drawBox(linkArea.verts[k], 1, COLOR4(255, 255, 0, 255));
-							}
-							drawBox(link.pos, 1, COLOR4(0, 255, 0, 255));
-							drawBox(linkLeaf.origin, 2, COLOR4(0, 255, 255, 255));
-							linkStr += to_string(link.node) + " (" + to_string(linkArea.verts.size()) + "v), ";
-						
-							/*
-							for (int k = 0; k < node.links.size(); k++) {
-								if (i == k)
-									continue;
-								drawLine(link.pos, node.links[k].pos, COLOR4(64, 0, 255, 255));
-							}
-							*/
-						}
-
-						//logf("Leaf node idx: %d, links: %s\n", leafNavIdx, linkStr.c_str());
-					}
-
-				}
-				if (false) {
-					// special case: touching on a single edge point
-					//Polygon3D poly1({ vec3(213.996979, 202.000000, 362.000000), vec3(213.996979, 202.000000, 198.000824), vec3(213.996979, 105.996414, 198.000824), vec3(213.996979, 105.996414, 362.000000), });
-					//Polygon3D poly2({ vec3(80.000969, -496.000000, 266.002014), vec3(310.000000, -496.000000, 266.002014), vec3(310.000000, 106.003876, 266.002014), vec3(80.000999, 106.003876, 266.002014), });
-
-					Polygon3D poly1({ vec3(310.000000, 330.000000, 294.000000), vec3(213.996979, 330.000000, 294.000000), vec3(213.996979, 330.000000, 362.001282), vec3(310.000000, 330.000000, 362.001282), });
-					Polygon3D poly2({ vec3(496.000000, -496.000000, 294.000000), vec3(496.000000, 431.998474, 294.000000), vec3(80.002045, 431.998474, 294.000000), vec3(80.002045, -496.000000, 294.000000), });
-
-					vec3 start, end;
-					poly1.planeIntersectionLine(poly2, start, end);
-
-					vec3 ipos;
-					COLOR4 c1 = poly1.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
-					COLOR4 c2 = poly2.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
-					COLOR4 c3 = poly1.intersects(poly2) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
-
-					//drawPolygon3D(Polygon3D(poly1), c3);
-					//drawPolygon3D(Polygon3D(poly2), c3);
-					//drawLine(start, end, COLOR4(100, 0, 255, 255));
-
-					//drawPolygon3D(g_app->debugPoly, COLOR4(255, 255, 255, 150));
-				}
-
-				{
-					Polygon3D poly1({ vec3(0,0,-50), vec3(0,100,-50), vec3(0,100,100), vec3(0,0,100) });
-					Polygon3D poly2({ vec3(-100,0,0), vec3(-100,100,0), vec3(100,100,0), vec3(100,0,0) });
-
-					static float test = 0;
-
-					float a = cos(test) * 100;
-					float b = sin(test) * 200;
-
-					poly1.verts[0] += vec3(b, 0, a);
-					poly1.verts[1] += vec3(b, 0, a);
-
-					test += 0.01f;
-					poly1 = Polygon3D(poly1.verts);
-
-					vec3 start, end;
-					poly1.planeIntersectionLine(poly2, start, end);
-
-					vec3 ipos;
-					COLOR4 c1 = poly1.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
-					COLOR4 c2 = poly2.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
-
-					//drawPolygon3D(Polygon3D(poly1), c1);
-					//drawPolygon3D(Polygon3D(poly2), c2);
-					//drawLine(start, end, COLOR4(100, 0, 255, 255));
-				}
-				//g_app->debugPoly.print();
-				
-				/*
-				colorShader->pushMatrix(MAT_PROJECTION);
-				colorShader->pushMatrix(MAT_VIEW);
-				projection.ortho(0, windowWidth, windowHeight, 0, -1.0f, 1.0f);
-				view.loadIdentity();
-				colorShader->updateMatrixes();
-
-				drawPolygon2D(debugPoly, vec2(800, 100), vec2(500, 500), COLOR4(255, 0, 0, 255));
-
-				colorShader->popMatrix(MAT_PROJECTION);
-				colorShader->popMatrix(MAT_VIEW);
-				*/
-			}
-
-			if (pickInfo.getFace()) {
-				BSPFACE& face = *pickInfo.getFace();
-				BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
-
-				vector<vec3> faceVerts;
-				for (int e = 0; e < face.nEdges; e++) {
-					int32_t edgeIdx = map->surfedges[face.iFirstEdge + e];
-					BSPEDGE& edge = map->edges[abs(edgeIdx)];
-					int vertIdx = edgeIdx >= 0 ? edge.iVertex[0] : edge.iVertex[1];
-
-					faceVerts.push_back(map->verts[vertIdx]);
-				}
-
-				Polygon3D poly(faceVerts);
-				//vec3 center = poly.center + pickInfo.ent->getOrigin();
-				vec3 center = poly.center - poly.plane_z;
-
-				drawLine(center, center + info.vS * -10, { 128, 0, 255, 255 });
-				drawLine(center, center + info.vT * -10, { 0, 255, 0, 255 });
-				drawLine(center, center + poly.plane_z * -10, { 255, 255, 255, 255 });
-			}
-
-			glLineWidth(1);
-		}
-
-		glCheckError("Rendering nav mesh");
+		renderNavMesh();
 
 		vec3 forward, right, up;
 		makeVectors(cameraAngles, forward, right, up);
@@ -1105,6 +755,367 @@ void Renderer::renderLoop() {
 	}
 
 	glfwTerminate();
+}
+
+void Renderer::renderNavMesh() {
+	const bool navmeshwipcode = false;
+	if (!navmeshwipcode)
+		return;
+
+	colorShader->bind();
+	model.loadIdentity();
+	colorShader->updateMatrixes();
+	glDisable(GL_CULL_FACE);
+
+	glLineWidth(128.0f);
+	drawLine(debugLine0, debugLine1, { 255, 0, 0, 255 });
+
+	drawLine(debugTraceStart, debugTrace.vecEndPos, COLOR4(255, 0, 0, 255));
+
+	Bsp* map = mapRenderer->map;
+
+	if (debugNavMesh && debugNavPoly != -1) {
+		glLineWidth(1);
+		NavNode& node = debugNavMesh->nodes[debugNavPoly];
+		Polygon3D& poly = debugNavMesh->polys[debugNavPoly];
+
+		for (int i = 0; i < MAX_NAV_LINKS; i++) {
+			NavLink& link = node.links[i];
+			if (link.node == -1) {
+				break;
+			}
+			Polygon3D& linkPoly = debugNavMesh->polys[link.node];
+
+			vec3 srcMid, dstMid;
+			debugNavMesh->getLinkMidPoints(debugNavPoly, i, srcMid, dstMid);
+
+			glDisable(GL_DEPTH_TEST);
+			drawLine(poly.center, srcMid, COLOR4(0, 255, 255, 255));
+			drawLine(srcMid, dstMid, COLOR4(0, 255, 255, 255));
+			drawLine(dstMid, linkPoly.center, COLOR4(0, 255, 255, 255));
+
+			if (fabs(link.zDist) > NAV_STEP_HEIGHT) {
+				Bsp* map = mapRenderer->map;
+				int i = link.srcEdge;
+				int k = link.dstEdge;
+				int inext = (i + 1) % poly.verts.size();
+				int knext = (k + 1) % linkPoly.verts.size();
+
+				Line2D thisEdge(poly.topdownVerts[i], poly.topdownVerts[inext]);
+				Line2D otherEdge(linkPoly.topdownVerts[k], linkPoly.topdownVerts[knext]);
+
+				float t0, t1, t2, t3;
+				float overlapDist = thisEdge.getOverlapRanges(otherEdge, t0, t1, t2, t3);
+
+				vec3 delta1 = poly.verts[inext] - poly.verts[i];
+				vec3 delta2 = linkPoly.verts[knext] - linkPoly.verts[k];
+				vec3 e1 = poly.verts[i] + delta1 * t0;
+				vec3 e2 = poly.verts[i] + delta1 * t1;
+				vec3 e3 = linkPoly.verts[k] + delta2 * t2;
+				vec3 e4 = linkPoly.verts[k] + delta2 * t3;
+
+				bool isBelow = link.zDist > 0;
+				delta1 = e2 - e1;
+				delta2 = e4 - e3;
+				vec3 mid1 = e1 + delta1 * 0.5f;
+				vec3 mid2 = e3 + delta2 * 0.5f;
+				vec3 inwardDir = crossProduct(poly.plane_z, delta1.normalize());
+				vec3 testOffset = (isBelow ? inwardDir : inwardDir * -1) + vec3(0, 0, 1.0f);
+
+				float flatLen = (e2.xy() - e1.xy()).length();
+				float stepUnits = 1.0f;
+				float step = stepUnits / flatLen;
+				TraceResult tr;
+				bool isBlocked = true;
+				for (float f = 0; f < 0.5f; f += step) {
+					vec3 test1 = mid1 + (delta1 * f) + testOffset;
+					vec3 test2 = mid2 + (delta2 * f) + testOffset;
+					vec3 test3 = mid1 + (delta1 * -f) + testOffset;
+					vec3 test4 = mid2 + (delta2 * -f) + testOffset;
+
+					map->traceHull(test1, test2, 3, &tr);
+					if (!tr.fAllSolid && !tr.fStartSolid && tr.flFraction > 0.99f) {
+						drawLine(test1, test2, COLOR4(255, 255, 0, 255));
+					}
+					else {
+						drawLine(test1, test2, COLOR4(255, 0, 0, 255));
+					}
+
+					map->traceHull(test3, test4, 3, &tr);
+					if (!tr.fAllSolid && !tr.fStartSolid && tr.flFraction > 0.99f) {
+						drawLine(test3, test4, COLOR4(255, 255, 0, 255));
+					}
+					else {
+						drawLine(test3, test4, COLOR4(255, 0, 0, 255));
+					}
+				}
+
+				//if (isBlocked) {
+				//	continue;
+				//}
+			}
+
+			glEnable(GL_DEPTH_TEST);
+			drawBox(linkPoly.center, 4, COLOR4(0, 255, 255, 255));
+		}
+	}
+
+	if (!debugLeafNavMesh && !isLoading) {
+		//LeafNavMesh* navMesh = LeafNavMeshGenerator().generate(map, false, CONTENTS_EMPTY, 3);
+		LeafNavMesh* navMesh = LeafNavMeshGenerator().generate(map, true, CONTENTS_NOT_SOLID, 0);
+		debugLeafNavMesh = navMesh;
+	}
+
+	if (debugLeafNavMesh && !isLoading) {
+		glLineWidth(1);
+
+		// split leaves dynamically by solid entities
+		//debugLeafNavMesh->refreshNodes(map);
+
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+
+		int leafNavIdx = debugLeafNavMesh->getNodeIdx(map, cameraOrigin);
+
+		// draw split leaves
+		for (int i = 0; i < debugLeafNavMesh->nodes.size(); i++) {
+			LeafNode& node = debugLeafNavMesh->nodes[i];
+
+			if (node.childIdx != NAV_INVALID_IDX) {
+				continue;
+			}
+
+			if (!node.face_buffer) {
+				mapRenderer->generateSingleLeafNavMeshBuffer(&node);
+
+				if (!node.face_buffer) {
+					continue;
+				}
+			}
+
+			node.face_buffer->draw(GL_TRIANGLES);
+			node.wireframe_buffer->draw(GL_LINES);
+		}
+
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DEPTH_TEST);
+
+		if (leafNavIdx >= 0 && leafNavIdx < debugLeafNavMesh->nodes.size()) {
+
+			if (pickInfo.getEnt() && pickInfo.getEntIndex() != 0) {
+				glDisable(GL_DEPTH_TEST);
+
+				int endNode = debugLeafNavMesh->getNodeIdx(map, pickInfo.getEnt());
+				//vector<int> route = debugLeafNavMesh->AStarRoute(leafNavIdx, endNode);
+				vector<int> route = debugLeafNavMesh->dijkstraRoute(leafNavIdx, endNode);
+
+				if (route.size()) {
+					LeafNode* lastNode = &debugLeafNavMesh->nodes[route[0]];
+
+					vec3 lastPos = lastNode->origin;
+					drawBox(lastNode->origin, 2, COLOR4(0, 255, 255, 255));
+
+					for (int i = 1; i < route.size(); i++) {
+						LeafNode& node = debugLeafNavMesh->nodes[route[i]];
+
+						vec3 nodeCenter = node.origin;
+
+						for (int k = 0; k < lastNode->links.size(); k++) {
+							LeafLink& link = lastNode->links[k];
+
+							if (link.node == route[i]) {
+								vec3 linkPoint = link.pos;
+
+								if (link.baseCost > 16000) {
+									drawLine(lastPos, linkPoint, COLOR4(255, 0, 0, 255));
+									drawLine(linkPoint, node.origin, COLOR4(255, 0, 0, 255));
+								}
+								else if (link.baseCost > 0) {
+									drawLine(lastPos, linkPoint, COLOR4(255, 64, 0, 255));
+									drawLine(linkPoint, node.origin, COLOR4(255, 64, 0, 255));
+								}
+								else if (link.costMultiplier > 99.0f) {
+									drawLine(lastPos, linkPoint, COLOR4(255, 255, 0, 255));
+									drawLine(linkPoint, node.origin, COLOR4(255, 255, 0, 255));
+								}
+								else if (link.costMultiplier > 9.0f) {
+									drawLine(lastPos, linkPoint, COLOR4(255, 0, 255, 255));
+									drawLine(linkPoint, node.origin, COLOR4(255, 0, 255, 255));
+								}
+								else if (link.costMultiplier > 1.9f) {
+									drawLine(lastPos, linkPoint, COLOR4(64, 255, 0, 255));
+									drawLine(linkPoint, node.origin, COLOR4(64, 255, 0, 255));
+								}
+								else {
+									drawLine(lastPos, linkPoint, COLOR4(0, 255, 255, 255));
+									drawLine(linkPoint, node.origin, COLOR4(0, 255, 255, 255));
+								}
+								drawBox(nodeCenter, 2, COLOR4(0, 255, 255, 255));
+								lastPos = nodeCenter;
+								break;
+							}
+						}
+
+						lastNode = &node;
+					}
+
+					drawLine(lastPos, pickInfo.getEnt()->getHullOrigin(map), COLOR4(0, 255, 255, 255));
+				}
+			}
+			else {
+				LeafNode& node = debugLeafNavMesh->nodes[leafNavIdx];
+
+				drawBox(node.origin, 2, COLOR4(0, 255, 0, 255));
+
+				std::string linkStr;
+
+				for (int i = 0; i < node.links.size(); i++) {
+					LeafLink& link = node.links[i];
+					if (link.node == -1) {
+						break;
+					}
+					LeafNode& linkLeaf = debugLeafNavMesh->nodes[link.node];
+					if (linkLeaf.childIdx != NAV_INVALID_IDX) {
+						continue;
+					}
+
+					Polygon3D& linkArea = link.linkArea;
+
+					if (link.baseCost > 16000) {
+						drawLine(node.origin, link.pos, COLOR4(255, 0, 0, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(255, 0, 0, 255));
+					}
+					else if (link.baseCost > 0) {
+						drawLine(node.origin, link.pos, COLOR4(255, 128, 0, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(255, 128, 0, 255));
+					}
+					else if (link.costMultiplier > 99.0f) {
+						drawLine(node.origin, link.pos, COLOR4(255, 255, 0, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(255, 255, 0, 255));
+					}
+					else if (link.costMultiplier > 9.0f) {
+						drawLine(node.origin, link.pos, COLOR4(255, 0, 255, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(255, 0, 255, 255));
+					}
+					else if (link.costMultiplier > 1.9f) {
+						drawLine(node.origin, link.pos, COLOR4(64, 255, 0, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(64, 255, 0, 255));
+					}
+					else {
+						drawLine(node.origin, link.pos, COLOR4(0, 255, 255, 255));
+						drawLine(link.pos, linkLeaf.origin, COLOR4(0, 255, 255, 255));
+					}
+
+					if (node.leafIdx == 208 && linkLeaf.leafIdx == 76) {
+						for (int k = 0; k < linkArea.verts.size(); k++) {
+							drawBox(linkArea.verts[k], 1, COLOR4(255, 255, 0, 255));
+						}
+					}
+					drawBox(link.pos, 1, COLOR4(0, 255, 0, 255));
+					drawBox(linkLeaf.origin, 2, COLOR4(0, 255, 255, 255));
+					linkStr += to_string(link.node) + " (" + to_string(linkArea.verts.size()) + "v), ";
+
+					/*
+					for (int k = 0; k < node.links.size(); k++) {
+						if (i == k)
+							continue;
+						drawLine(link.pos, node.links[k].pos, COLOR4(64, 0, 255, 255));
+					}
+					*/
+				}
+
+				//logf("Leaf node idx: %d, links: %s\n", leafNavIdx, linkStr.c_str());
+			}
+
+		}
+		if (false) {
+			// special case: touching on a single edge point
+			//Polygon3D poly1({ vec3(213.996979, 202.000000, 362.000000), vec3(213.996979, 202.000000, 198.000824), vec3(213.996979, 105.996414, 198.000824), vec3(213.996979, 105.996414, 362.000000), });
+			//Polygon3D poly2({ vec3(80.000969, -496.000000, 266.002014), vec3(310.000000, -496.000000, 266.002014), vec3(310.000000, 106.003876, 266.002014), vec3(80.000999, 106.003876, 266.002014), });
+
+			Polygon3D poly1({ vec3(310.000000, 330.000000, 294.000000), vec3(213.996979, 330.000000, 294.000000), vec3(213.996979, 330.000000, 362.001282), vec3(310.000000, 330.000000, 362.001282), });
+			Polygon3D poly2({ vec3(496.000000, -496.000000, 294.000000), vec3(496.000000, 431.998474, 294.000000), vec3(80.002045, 431.998474, 294.000000), vec3(80.002045, -496.000000, 294.000000), });
+
+			vec3 start, end;
+			poly1.planeIntersectionLine(poly2, start, end);
+
+			vec3 ipos;
+			COLOR4 c1 = poly1.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
+			COLOR4 c2 = poly2.intersect2D(start, end, ipos) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
+			COLOR4 c3 = poly1.intersects(poly2) ? COLOR4(255, 0, 0, 100) : COLOR4(0, 255, 255, 100);
+
+			//drawPolygon3D(Polygon3D(poly1), c3);
+			//drawPolygon3D(Polygon3D(poly2), c3);
+			//drawLine(start, end, COLOR4(100, 0, 255, 255));
+
+			//drawPolygon3D(g_app->debugPoly, COLOR4(255, 255, 255, 150));
+		}
+
+		if (debugPoly.isValid && debugPoly2.isValid) {
+			colorShader->bind();
+			colorShader->pushMatrix(MAT_PROJECTION);
+			colorShader->pushMatrix(MAT_VIEW);
+			projection.ortho(0, windowWidth, windowHeight, 0, -1.0f, 1.0f);
+			view.loadIdentity();
+			colorShader->updateMatrixes();
+
+			vec2 maxSz = vec2(500, 500);
+			vec2 sz = debugPoly.localMaxs - debugPoly.localMins;
+			float scale = min(maxSz.y / sz.y, maxSz.x / sz.x);
+			vec2 offset = debugPoly.localMins * -scale;
+			vec2 pos = offset + vec2(700, 100);
+
+			vector<vec2> projectedVerts;
+			for (vec3& v : debugPoly2.verts) {
+				projectedVerts.push_back(debugPoly.project(v));
+			}
+
+			drawPolygon2D(debugPoly.localVerts, pos, scale, COLOR4(255, 0, 0, 255));
+			drawPolygon2D(projectedVerts, pos, scale, COLOR4(255, 0, 0, 255));
+
+			debugPoly.coplanerIntersectArea(debugPoly2);
+
+			for (int i = 0; i < debugVerts2d.size(); i++) {
+				vec2 v = debugVerts2d[i];
+				vec2 vpos = pos + v*scale;
+				gui->addText(Text2D(vpos, cstrf("Vert %d: %d %d", i, (int)v.x, (int)v.y)));
+				drawBox2D(vpos, 8, COLOR4(255, 255, 0, 255));
+			}
+
+			// draw camera origin in the same coordinate space
+			vec2 cam = debugPoly.project(cameraOrigin);
+			drawBox2D(pos + cam * scale, 16, debugPoly.isInside(cam) ? COLOR4(0, 255, 0, 255) : COLOR4(255, 32, 0, 255));
+
+			colorShader->popMatrix(MAT_PROJECTION);
+			colorShader->popMatrix(MAT_VIEW);
+		}
+	}
+
+	if (pickInfo.getFace()) {
+		BSPFACE& face = *pickInfo.getFace();
+		BSPTEXTUREINFO& info = map->texinfos[face.iTextureInfo];
+
+		vector<vec3> faceVerts;
+		for (int e = 0; e < face.nEdges; e++) {
+			int32_t edgeIdx = map->surfedges[face.iFirstEdge + e];
+			BSPEDGE& edge = map->edges[abs(edgeIdx)];
+			int vertIdx = edgeIdx >= 0 ? edge.iVertex[0] : edge.iVertex[1];
+
+			faceVerts.push_back(map->verts[vertIdx]);
+		}
+
+		Polygon3D poly(faceVerts);
+		//vec3 center = poly.center + pickInfo.ent->getOrigin();
+		vec3 center = poly.center - poly.plane_z;
+
+		drawLine(center, center + info.vS * -10, { 128, 0, 255, 255 });
+		drawLine(center, center + info.vT * -10, { 0, 255, 0, 255 });
+		drawLine(center, center + poly.plane_z * -10, { 255, 255, 255, 255 });
+	}
+
+	glLineWidth(1);
+
+	glCheckError("Rendering nav mesh");
 }
 
 void Renderer::renderArrangeMaps() {
@@ -2791,6 +2802,7 @@ void Renderer::drawLine2D(vec2 start, vec2 end, COLOR4 color) {
 	verts[1].c = color;
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &verts[0], 2);
+	buffer.upload();
 	buffer.draw(GL_LINES);
 }
 
@@ -2875,29 +2887,15 @@ void Renderer::drawPolygon3D(Polygon3D& poly, COLOR4 color) {
 	buffer.draw(GL_TRIANGLE_FAN);
 }
 
-float Renderer::drawPolygon2D(Polygon3D poly, vec2 pos, vec2 maxSz, COLOR4 color) {
-	vec2 sz = poly.localMaxs - poly.localMins;
-	float scale = min(maxSz.y / sz.y, maxSz.x / sz.x);
-
-	vec2 offset = poly.localMins * -scale + pos;
-
-	for (int i = 0; i < poly.verts.size(); i++) {
-		vec2 v1 = poly.localVerts[i];
-		vec2 v2 = poly.localVerts[(i + 1) % poly.verts.size()];
-		drawLine2D(offset + v1*scale, offset + v2 * scale, color);
+void Renderer::drawPolygon2D(vector<vec2>& poly, vec2 pos, float scale, COLOR4 color) {
+	for (int i = 0; i < poly.size(); i++) {
+		vec2 v1 = poly[i];
+		vec2 v2 = poly[(i + 1) % poly.size()];
+		drawLine2D(pos + v1*scale, pos + v2 * scale, color);
 		if (i == 0) {
-			drawLine2D(offset + v1 * scale, offset + (v1 + (v2-v1)*0.5f) * scale, COLOR4(0,255,0,255));
+			drawLine2D(pos + v1 * scale, pos + (v1 + (v2-v1)*0.5f) * scale, COLOR4(0,255,0,255));
 		}
 	}
-
-	// draw camera origin in the same coordinate space
-	{
-		vec2 cam = poly.project(cameraOrigin);
-		drawBox2D(offset + cam * scale, 16, poly.isInside(cam) ? COLOR4(0, 255, 0, 255) : COLOR4(255, 32, 0, 255));
-	}
-
-
-	return scale;
 }
 
 void Renderer::drawBox2D(vec2 center, float width, COLOR4 color) {
@@ -2905,6 +2903,7 @@ void Renderer::drawBox2D(vec2 center, float width, COLOR4 color) {
 	cQuad cube(pos.x, pos.y, width, width, color);
 
 	VertexBuffer buffer(colorShader, COLOR_4B | POS_3F, &cube, 6);
+	buffer.upload();
 	buffer.draw(GL_TRIANGLES);
 }
 
@@ -4382,6 +4381,9 @@ void Renderer::hideSelectedLeaves() {
 void Renderer::unhideLeaves() {
 	hiddenLeaves.clear();
 	mapRenderer->hideLeaves(false);
+	mapRenderer->highlightPickedFaces(false);
+	mapRenderer->highlightPickedLeaves(false);
+	pickInfo.deselect();
 }
 
 void Renderer::grabEnts() {

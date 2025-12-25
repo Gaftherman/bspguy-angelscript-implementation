@@ -176,7 +176,11 @@ bool Polygon3D::isInside(vec2 p, bool includeEdge) {
 		float dist = edge.distanceAxis(p);
 
 		if (fabs(dist) < INPOLY_EPSILON) {
-			return includeEdge; // point is too close to an edge
+			if (!includeEdge)
+				return false; // point is too close to an edge
+
+			// include only if it's between the edge points
+			return edge.distance(p) < INPOLY_EPSILON;
 		}
 	}
 
@@ -553,7 +557,6 @@ Polygon3D Polygon3D::coplanerIntersectArea(Polygon3D otherPoly) {
 		Line2D edgeA(va1, va2);
 
 		if (otherPoly.isInside(va1, true)) {
-			otherPoly.isInside(va1, true);
 			push_unique_vec2(localOutVerts, va1);
 		}
 

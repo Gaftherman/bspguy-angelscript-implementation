@@ -18,6 +18,7 @@
 
 LeafNode::LeafNode() {
 	id = -1;
+	leafIdx = -1;
 	entidx = 0;
 	center = origin = mins = maxs = vec3();
 	parentIdx = NAV_INVALID_IDX;
@@ -59,7 +60,7 @@ bool LeafNode::intersects(Polygon3D& poly) {
 	return false;
 }
 
-bool LeafNode::addLink(int node, Polygon3D linkArea) {	
+bool LeafNode::addLink(int node, Polygon3D linkArea, bool linkAtFloor) {	
 	for (int i = 0; i < links.size(); i++) {
 		if (links[i].node == node) {
 			return true;
@@ -73,7 +74,7 @@ bool LeafNode::addLink(int node, Polygon3D linkArea) {
 	link.costMultiplier = 1.0f;
 
 	link.pos = linkArea.center;
-	if (fabs(linkArea.plane_z.z) < 0.7f) {
+	if (linkAtFloor && fabs(linkArea.plane_z.z) < 0.7f) {
 		// wall links should be positioned at the bottom of the intersection to keep paths near the floor
 		linkArea.intersect2D(linkArea.center, linkArea.center - vec3(0, 0, 4096), link.pos);
 		link.pos.z += NAV_BOTTOM_EPSILON;
@@ -128,7 +129,7 @@ bool LeafNavMesh::addLink(int from, int to, Polygon3D linkArea) {
 		return false;
 	}
 
-	if (!nodes[from].addLink(to, linkArea)) {
+	if (!nodes[from].addLink(to, linkArea, forHumans)) {
 		vec3& pos = nodes[from].center;
 		logf("Failed to add link at %d %d %d\n", (int)pos.x, (int)pos.y, (int)pos.z);
 		return false;
@@ -226,7 +227,7 @@ int LeafNavMesh::getNodeIdx(Bsp* map, Entity* ent) {
 }
 
 uint16_t LeafNavMesh::getNodeIdx(Bsp* map, vec3 pos) {
-	int bspLeaf = map->get_leaf(pos, NAV_HULL);
+	int bspLeaf = map->get_leaf(pos, hull);
 
 	if (bspLeaf < 0 || bspLeaf >= MAX_MAP_CLIPNODE_LEAVES) {
 		return NAV_INVALID_IDX;
