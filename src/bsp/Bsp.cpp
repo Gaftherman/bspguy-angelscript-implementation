@@ -4293,7 +4293,7 @@ bool Bsp::rename_texture(const char* oldName, const char* newName) {
 	return false;
 }
 
-unordered_set<int> Bsp::selectConnected(vector<int>& srcFaces, unordered_set<int>& ignoreFaces, bool planarTextureOnly) {
+unordered_set<int> Bsp::selectConnected(vector<int>& srcFaces, unordered_set<int>& ignoreFaces, bool planarOnly, bool textureOnly) {
 	unordered_set<int> selected;
 	vector<Polygon3D*> selectedFaces;
 	queue<Polygon3D*> testPolys;
@@ -4360,12 +4360,11 @@ unordered_set<int> Bsp::selectConnected(vector<int>& srcFaces, unordered_set<int
 			if (selected.count(idx) || ignoreFaces.count(idx))
 				continue;
 
-			if (planarTextureOnly) {
-				BSPTEXTUREINFO& info = texinfos[faceA.iTextureInfo];
-				BSPPLANE& plane = planes[faceA.iPlane];
+			if (textureOnly && !validMiptex.count(texinfos[faceA.iTextureInfo].iMiptex))
+				continue;
 
-				if (!validMiptex.count(info.iMiptex))
-					continue;
+			if (planarOnly) {
+				BSPPLANE& plane = planes[faceA.iPlane];
 
 				bool isPlanar = false;
 				for (const vec3& norm : validNormals) {

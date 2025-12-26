@@ -1328,6 +1328,11 @@ void BspRenderer::generateLeafBuffer() {
 
 	renderLeafDat->faceMaths = faceMaths;
 
+	renderLeafDat->originalColors.resize(allVerts.size());
+	for (int i = 0; i < allVerts.size(); i++) {
+		renderLeafDat->originalColors[i] = allVerts[i].c;
+	}
+
 	leafNavMesh = LeafNavMeshGenerator().generate(map, true, CONTENTS_NOT_LEAF_0, 0);
 }
 
@@ -1715,6 +1720,7 @@ void BspRenderer::delayLoadData() {
 
 			if (g_app->pickMode == PICK_LEAF) {
 				highlightPickedLeaves(true); // switching from face to leaf pick mode for the first time
+				hideLeaves(true);
 			}
 		}
 
@@ -1771,9 +1777,10 @@ void BspRenderer::highlightPickedLeaves(bool highlight) {
 
 	if (!highlight) {
 		for (int i = 0; i < renderLeafDat->leafBuffer->numVerts; i++) {
-			verts[i].c.r = 255;
-			verts[i].c.g = 255;
-			verts[i].c.b = 255;
+			COLOR4& og = renderLeafDat->originalColors[i];
+			verts[i].c.r = og.r;
+			verts[i].c.g = og.g;
+			verts[i].c.b = og.b;
 		}
 		for (int i = 0; i < renderLeafDat->wireframeLeafBuffer->numVerts; i++) {
 			wireVerts[i].c.r = 0;
@@ -1815,7 +1822,7 @@ void BspRenderer::hideLeaves(bool hideNotUnhide) {
 
 	if (!hideNotUnhide) {
 		for (int i = 0; i < renderLeafDat->leafBuffer->numVerts; i++) {
-			verts[i].c.a = 128;
+			verts[i].c.a = renderLeafDat->originalColors[i].a;
 		}
 		for (int i = 0; i < renderLeafDat->wireframeLeafBuffer->numVerts; i++) {
 			wireVerts[i].c.a = 255;

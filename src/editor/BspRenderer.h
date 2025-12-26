@@ -110,6 +110,7 @@ struct RenderLeaves {
 	VertexBuffer* leafBuffer;
 	VertexBuffer* wireframeLeafBuffer;
 	vector<FaceMath> faceMaths;
+	vector<COLOR4> originalColors; // original color values for each vertex
 	vector<int> leafRanges[65536]; // maps a leaf index to vertex indexes in the leafBuffer
 	vector<int> leafWireRanges[65536]; // maps a leaf index to wireframe vertex indexes in the leafBuffer
 };

@@ -204,4 +204,5 @@ private:
 	string getUserLayoutPath(); // path to user's saved widget layout
 	void createSeriesWad();
 	void addText(Text2D text);
+	void switchToLeafSelectMode(bool selectFaceLeaves, bool strictFaceLeafSelection);
 };

@@ -418,6 +418,53 @@ void Gui::draw3dContextMenus() {
 		if (ImGui::BeginPopup("face_context"))
 		{
 			if (app->pickInfo.faces.empty()) {
+				if (ImGui::MenuItem("Select all", 0, false)) {
+
+					for (int i = 0; i < map->faceCount; i++) {
+						app->pickInfo.selectFace(i);
+					}
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+				}
+				tooltip(g, "Select every face in the map.");
+
+				if (ImGui::MenuItem("Select visible", 0, false)) {
+					unordered_set<int> visibleModels;
+
+					if (g_settings.render_flags & RENDER_ENTS) {
+						for (int i = 0; i < map->ents.size(); i++) {
+							if (map->ents[i]->hidden) {
+								continue;
+							}
+							int modelIdx = i == 0 ? 0 : map->ents[i]->getBspModelIdx();
+							if (modelIdx != -1)
+								visibleModels.insert(modelIdx);
+						}
+					}
+					else if (map->ents.size() && !map->ents[0]->hidden) {
+						visibleModels.insert(0);
+					}
+
+					for (int i = 0; i < map->modelCount; i++) {
+						BSPMODEL& model = map->models[i];
+						
+						if (!visibleModels.count(i))
+							continue;
+
+						for (int k = model.iFirstFace; k < model.iFirstFace + model.nFaces; k++) {
+							if (app->hiddenFaces.count(k))
+								continue;
+							app->pickInfo.selectFace(k);
+						}
+					}
+
+					g_app->mapRenderer->highlightPickedFaces(true);
+					g_app->updateTextureAxes();
+				}
+				tooltip(g, "Select every visible face in the map (excludes hidden models).");
+
+				ImGui::Separator();
+
 				if (ImGui::MenuItem("Unhide All", 0, false, app->hiddenFaces.size())) {
 					app->unhideFaces();
 				}
@@ -433,95 +480,134 @@ void Gui::draw3dContextMenus() {
 
 				ImGui::Separator();
 
-				if (ImGui::MenuItem("Select all of this texture", "", false, app->pickInfo.faces.size() == 1)) {
-					Bsp* map = app->pickInfo.getMap();
-					BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
-					uint32_t selectedMiptex = texinfo.iMiptex;
+				if (ImGui::BeginMenu("Select", !app->isLoading)) {
+					if (ImGui::MenuItem("Connected", "", false)) {
+						Bsp* map = app->pickInfo.getMap();
 
-					g_app->mapRenderer->highlightPickedFaces(false);
+						int oldSelectSz = app->pickInfo.faces.size();
+						unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, false, false);
 
-					app->pickInfo.deselect();
-					for (int i = 0; i < map->faceCount; i++) {
-						BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
-						if (info.iMiptex == selectedMiptex) {
+						g_app->mapRenderer->highlightPickedFaces(false);
+
+						app->pickInfo.deselect();
+						for (int i : newSelect) {
 							app->pickInfo.selectFace(i);
 						}
+						g_app->mapRenderer->highlightPickedFaces(true);
+						g_app->updateTextureAxes();
+
+						logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
+						g_app->pickCount++;
 					}
-					g_app->mapRenderer->highlightPickedFaces(true);
-					g_app->updateTextureAxes();
+					tooltip(g, "Recursively select faces connected by vertices.");
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size());
-					g_app->pickCount++;
-				}
-				tooltip(g, "Select every face in the map which has this texture.");
+					if (ImGui::MenuItem("Connected texture", "", false)) {
+						Bsp* map = app->pickInfo.getMap();
 
-				if (ImGui::MenuItem("Select connected faces", "", false)) {
-					Bsp* map = app->pickInfo.getMap();
+						int oldSelectSz = app->pickInfo.faces.size();
+						unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, false, true);
 
-					int oldSelectSz = app->pickInfo.faces.size();
-					unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, false);
+						g_app->mapRenderer->highlightPickedFaces(false);
 
-					g_app->mapRenderer->highlightPickedFaces(false);
+						app->pickInfo.deselect();
+						for (int i : newSelect) {
+							app->pickInfo.selectFace(i);
+						}
+						g_app->mapRenderer->highlightPickedFaces(true);
+						g_app->updateTextureAxes();
 
-					app->pickInfo.deselect();
-					for (int i : newSelect) {
-						app->pickInfo.selectFace(i);
+						logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
+						g_app->pickCount++;
 					}
-					g_app->mapRenderer->highlightPickedFaces(true);
-					g_app->updateTextureAxes();
+					tooltip(g, "Recursively select faces connected by vertices which share the selected textures.");
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
-					g_app->pickCount++;
-				}
-				tooltip(g, "Recursively select faces connected by vertices.");
+					if (ImGui::MenuItem("Connected planar texture", "", false)) {
+						Bsp* map = app->pickInfo.getMap();
 
-				if (ImGui::MenuItem("Select connected planar faces of this texture", "", false)) {
-					Bsp* map = app->pickInfo.getMap();
+						int oldSelectSz = app->pickInfo.faces.size();
+						unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, true, true);
 
-					int oldSelectSz = app->pickInfo.faces.size();
-					unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, true);
+						g_app->mapRenderer->highlightPickedFaces(false);
 
-					g_app->mapRenderer->highlightPickedFaces(false);
+						app->pickInfo.deselect();
+						for (int i : newSelect) {
+							app->pickInfo.selectFace(i);
+						}
+						g_app->mapRenderer->highlightPickedFaces(true);
+						g_app->updateTextureAxes();
 
-					app->pickInfo.deselect();
-					for (int i : newSelect) {
-						app->pickInfo.selectFace(i);
+						logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
+						g_app->pickCount++;
 					}
-					g_app->mapRenderer->highlightPickedFaces(true);
-					g_app->updateTextureAxes();
+					tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
-					g_app->pickCount++;
-				}
-				tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");
+					ImGui::Separator();
 
-				if (ImGui::MenuItem("Select bad extents of this texture", "", false, app->pickInfo.faces.size() == 1)) {
-					Bsp* map = app->pickInfo.getMap();
-					BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
-					uint32_t selectedMiptex = texinfo.iMiptex;
+					if (ImGui::MenuItem("Leaves", "", false, app->pickInfo.faces.size())) {
+						switchToLeafSelectMode(true, false);
+					}
+					tooltip(g, "Select all leaves which mark the selected faces.");
 
-					g_app->mapRenderer->highlightPickedFaces(false);
+					if (ImGui::MenuItem("Leaves (strict)", "", false, app->pickInfo.faces.size())) {
+						switchToLeafSelectMode(true, true);
+					}
+					tooltip(g, "Select leaves which mark only the selected faces, and nothing "
+						"more. Some faces may be deselected to accomplish this.");
 
-					app->pickInfo.deselect();
-					for (int i = 0; i < map->faceCount; i++) {
-						BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
-						if (info.iMiptex == selectedMiptex) {
+					ImGui::Separator();
 
-							int size[2];
-							if (GetFaceLightmapSize(map, i, size)) {
-								continue;
+					if (ImGui::MenuItem("Texture", "", false, app->pickInfo.faces.size() == 1)) {
+						Bsp* map = app->pickInfo.getMap();
+						BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
+						uint32_t selectedMiptex = texinfo.iMiptex;
+
+						g_app->mapRenderer->highlightPickedFaces(false);
+
+						app->pickInfo.deselect();
+						for (int i = 0; i < map->faceCount; i++) {
+							BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
+							if (info.iMiptex == selectedMiptex) {
+								app->pickInfo.selectFace(i);
 							}
-
-							app->pickInfo.selectFace(i);
 						}
-					}
-					g_app->mapRenderer->highlightPickedFaces(true);
-					g_app->updateTextureAxes();
+						g_app->mapRenderer->highlightPickedFaces(true);
+						g_app->updateTextureAxes();
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size());
-					g_app->pickCount++;
+						logf("Selected %d faces\n", app->pickInfo.faces.size());
+						g_app->pickCount++;
+					}
+					tooltip(g, "Select every face in the map which has this texture.");
+
+					if (ImGui::MenuItem("Texture (bad extents)", "", false, app->pickInfo.faces.size() == 1)) {
+						Bsp* map = app->pickInfo.getMap();
+						BSPTEXTUREINFO& texinfo = map->texinfos[app->pickInfo.getFace()->iTextureInfo];
+						uint32_t selectedMiptex = texinfo.iMiptex;
+
+						g_app->mapRenderer->highlightPickedFaces(false);
+
+						app->pickInfo.deselect();
+						for (int i = 0; i < map->faceCount; i++) {
+							BSPTEXTUREINFO& info = map->texinfos[map->faces[i].iTextureInfo];
+							if (info.iMiptex == selectedMiptex) {
+
+								int size[2];
+								if (GetFaceLightmapSize(map, i, size)) {
+									continue;
+								}
+
+								app->pickInfo.selectFace(i);
+							}
+						}
+						g_app->mapRenderer->highlightPickedFaces(true);
+						g_app->updateTextureAxes();
+
+						logf("Selected %d faces\n", app->pickInfo.faces.size());
+						g_app->pickCount++;
+					}
+					tooltip(g, "Select faces with bad surface extents that use this texture.");
+
+					ImGui::EndMenu();
 				}
-				tooltip(g, "Select faces with bad surface extents that use this texture.");
 
 				Bsp* map = app->pickInfo.getMap();
 				bool isEmbedded = false;
@@ -3361,35 +3447,7 @@ void Gui::drawToolbar() {
 		ImGui::SameLine();
 		ImGui::PushStyleColor(ImGuiCol_Button, app->pickMode == PICK_LEAF ? selectColor : dimColor);
 		if (ImGui::ImageButton("leafpickicon", (ImTextureID)leafIconTexture->id, iconSize, ImVec2(0, 0), ImVec2(1, 1))) {
-			vector<int> faces = app->pickInfo.faces;
-			Bsp* map = app->mapRenderer->map;
-			
-			app->deselectFaces();
-			app->deselectObject();
-			app->hiddenLeaves.clear();
-			g_app->mapRenderer->highlightPickedLeaves(false);
-
-			for (int idx : faces) {
-				for (int i = 0; i < map->models[0].nVisLeafs; i++) {
-					BSPLEAF& leaf = map->leaves[i];
-
-					for (int k = 0; k < leaf.nMarkSurfaces; k++) {
-						if (map->marksurfs[leaf.iFirstMarkSurface + k] == idx) {
-							app->pickInfo.selectLeaf(i);
-							break;
-						}
-					}
-				}
-			}
-
-			app->pickInfo.selectLeafFaces();
-			g_app->mapRenderer->highlightPickedLeaves(true);
-			g_app->mapRenderer->highlightPickedFaces(true);
-			g_app->updateTextureAxes();
-
-			app->pickMode = PICK_LEAF;
-			showTextureWidget = false;
-			app->mapRenderer->delayLoadLeaves();
+			switchToLeafSelectMode(false, false);
 		}
 		
 		ImGui::PopStyleColor();
@@ -3617,8 +3675,8 @@ void Gui::drawDebugWidget() {
 						ImGui::Text("Leaf first surf: %d", leaf.iFirstMarkSurface);
 						ImGui::Text("Leaf VIS offset: %d", leaf.nVisOffset);
 						ImGui::Text("Leaf ambient levels: %d %d %d %d", leaf.nAmbientLevels[0], leaf.nAmbientLevels[1], leaf.nAmbientLevels[2], leaf.nAmbientLevels[3]);
-						ImGui::Text("Leaf mins: %.2f %.2f %.2f", leaf.nMins[0], leaf.nMins[1], leaf.nMins[2]);
-						ImGui::Text("Leaf maxs: %.2f %.2f %.2f", leaf.nMaxs[0], leaf.nMaxs[1], leaf.nMaxs[2]);
+						ImGui::Text("Leaf mins: %d %d %d", (int)leaf.nMins[0], (int)leaf.nMins[1], (int)leaf.nMins[2]);
+						ImGui::Text("Leaf maxs: %d %d %d", (int)leaf.nMaxs[0], (int)leaf.nMaxs[1], (int)leaf.nMaxs[2]);
 					}
 					else {
 						unordered_set<int> uniqueFaces;
@@ -8417,4 +8475,60 @@ void Gui::createSeriesWad() {
 
 void Gui::addText(Text2D text) {
 	texts.push_back(text);
+}
+
+void Gui::switchToLeafSelectMode(bool selectFaceLeaves, bool strictFaceLeafSelection) {
+	vector<int> faces = app->pickInfo.faces;
+	Bsp* map = app->mapRenderer->map;
+
+	app->deselectFaces();
+	app->deselectObject();
+	g_app->mapRenderer->hideLeaves(false);
+	g_app->mapRenderer->highlightPickedLeaves(false);
+	g_app->mapRenderer->hideFaces(false);
+	app->hiddenLeaves.clear();
+	app->hiddenFaces.clear();
+
+	if (selectFaceLeaves && faces.size()) {
+		for (int i = 0; i < map->models[0].nVisLeafs; i++)
+			app->hiddenLeaves.insert(i);
+
+		unordered_set<int> selectedFaces;
+		for (int idx : faces) {
+			selectedFaces.insert(idx);
+		}
+
+		for (int i = 1; i < map->models[0].nVisLeafs; i++) {
+			BSPLEAF& leaf = map->leaves[i];
+
+			if (!leaf.nMarkSurfaces)
+				continue;
+
+			bool anySelected = false;
+			bool allSelected = true;
+			for (int k = 0; k < leaf.nMarkSurfaces; k++) {
+				if (selectedFaces.count(map->marksurfs[leaf.iFirstMarkSurface + k])) {
+					anySelected = true;
+				}
+				else {
+					allSelected = false;
+				}
+			}
+
+			if (allSelected || (!strictFaceLeafSelection && anySelected)) {
+				app->pickInfo.selectLeaf(i);
+				app->hiddenLeaves.erase(i);
+			}
+		}
+	}
+
+	app->pickInfo.selectLeafFaces();
+	g_app->mapRenderer->hideLeaves(true);
+	g_app->mapRenderer->highlightPickedLeaves(true);
+	g_app->mapRenderer->highlightPickedFaces(true);
+	g_app->updateTextureAxes();
+
+	app->pickMode = PICK_LEAF;
+	showTextureWidget = false;
+	app->mapRenderer->delayLoadLeaves();
 }

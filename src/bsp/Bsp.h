@@ -372,7 +372,7 @@ public:
 	// select faces connected to the given one
 	// ignoreFaces will not be connected thru
 	// planarTextureOnly = only select on the same plane with the same texture
-	unordered_set<int> selectConnected(vector<int>& srcFaces, unordered_set<int>& ignoreFaces, bool planarTextureOnly);
+	unordered_set<int> selectConnected(vector<int>& srcFaces, unordered_set<int>& ignoreFaces, bool planarOnly, bool textureOnly);
 
 	// returns true if the map has eny entities that make use of hull 2
 	bool has_hull2_ents();
