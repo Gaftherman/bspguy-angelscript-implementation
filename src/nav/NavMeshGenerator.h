@@ -14,6 +14,9 @@ public:
 	// returns polygons used to construct the mesh
 	NavMesh* generate(Bsp* map, int hull);
 
+	// group polys that are close together for fewer collision checks later
+	static PolygonOctree* createPolyOctree(Bsp* map, const vector<Polygon3D*>& faces, int treeDepth);
+
 private:
 	int octreeDepth = 6;
 
@@ -21,10 +24,7 @@ private:
 	vector<Polygon3D*> getHullFaces(Bsp* map, int hull);
 
 	// get smallest octree box that can contain the entire map
-	void getOctreeBox(Bsp* map, vec3& min, vec3& max);
-
-	// group polys that are close together for fewer collision checks later
-	PolygonOctree* createPolyOctree(Bsp* map, const vector<Polygon3D*>& faces, int treeDepth);
+	static void getOctreeBox(Bsp* map, vec3& min, vec3& max);
 
 	// splits faces along their intersections with each other to clip polys that extend out
 	// into the void, then tests each poly to see if it faces into the map or into the void.

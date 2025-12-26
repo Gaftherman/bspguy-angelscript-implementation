@@ -1,6 +1,7 @@
 #pragma once
 #include "Polygon3D.h"
 #include <vector>
+#include <unordered_set>
 
 struct PolyOctant {
     vec3 min;
@@ -32,10 +33,14 @@ public:
 
     void getPolysInRegion(Polygon3D* poly, vector<bool>& regionPolys);
 
+    unordered_set<int> getPolysInRegion(Polygon3D* poly);
+
 private:
     void buildOctree(PolyOctant* node, int currentDepth);
 
     void getPolysInRegion(PolyOctant* node, Polygon3D* poly, int currentDepth, vector<bool>& regionPolys);
+
+    void getPolysInRegion(PolyOctant* node, Polygon3D* poly, int currentDepth, unordered_set<int>& regionPolys);
 
     void insertPolygon(PolyOctant* node, Polygon3D* polygon, int currentDepth);
 };

@@ -116,7 +116,7 @@ PolygonOctree* NavMeshGenerator::createPolyOctree(Bsp* map, const vector<Polygon
 	vec3 treeMin, treeMax;
 	getOctreeBox(map, treeMin, treeMax);
 
-	logf("Create octree depth %d, size %f -> %f\n", treeDepth, treeMax.x, treeMax.x / pow(2, treeDepth));
+	debugf("Create octree depth %d, size %f -> %f\n", treeDepth, treeMax.x, treeMax.x / pow(2, treeDepth));
 	PolygonOctree* octree = new PolygonOctree(treeMin, treeMax, treeDepth);
 
 	for (int i = 0; i < faces.size(); i++) {

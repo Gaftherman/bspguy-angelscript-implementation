@@ -458,13 +458,8 @@ void Gui::draw3dContextMenus() {
 				if (ImGui::MenuItem("Select connected faces", "", false)) {
 					Bsp* map = app->pickInfo.getMap();
 
-					unordered_set<int> newSelect;
-					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-						int faceIdx = app->pickInfo.faces[i];
-						int modelIdx = map->get_model_from_face(faceIdx);
-						unordered_set<int> selectPart = map->selectConnected(modelIdx, faceIdx, app->hiddenFaces, false);
-						newSelect.insert(selectPart.begin(), selectPart.end());
-					}
+					int oldSelectSz = app->pickInfo.faces.size();
+					unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, false);
 
 					g_app->mapRenderer->highlightPickedFaces(false);
 
@@ -475,21 +470,16 @@ void Gui::draw3dContextMenus() {
 					g_app->mapRenderer->highlightPickedFaces(true);
 					g_app->updateTextureAxes();
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
 					g_app->pickCount++;
 				}
-				tooltip(g, "Recursively select faces connected by edges.");
+				tooltip(g, "Recursively select faces connected by vertices.");
 
 				if (ImGui::MenuItem("Select connected planar faces of this texture", "", false)) {
 					Bsp* map = app->pickInfo.getMap();
 
-					unordered_set<int> newSelect;
-					for (int i = 0; i < app->pickInfo.faces.size(); i++) {
-						int faceIdx = app->pickInfo.faces[i];
-						int modelIdx = map->get_model_from_face(faceIdx);
-						unordered_set<int> selectPart = map->selectConnected(modelIdx, faceIdx, app->hiddenFaces, true);
-						newSelect.insert(selectPart.begin(), selectPart.end());
-					}
+					int oldSelectSz = app->pickInfo.faces.size();
+					unordered_set<int> newSelect = map->selectConnected(app->pickInfo.faces, app->hiddenFaces, true);
 
 					g_app->mapRenderer->highlightPickedFaces(false);
 
@@ -500,7 +490,7 @@ void Gui::draw3dContextMenus() {
 					g_app->mapRenderer->highlightPickedFaces(true);
 					g_app->updateTextureAxes();
 
-					logf("Selected %d faces\n", app->pickInfo.faces.size());
+					logf("Selected %d faces\n", app->pickInfo.faces.size() - oldSelectSz);
 					g_app->pickCount++;
 				}
 				tooltip(g, "Selects faces connected to this one which lie on the same plane and use the same texture");

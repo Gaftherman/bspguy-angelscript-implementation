@@ -85,11 +85,32 @@ void PolygonOctree::getPolysInRegion(Polygon3D* poly, vector<bool>& regionPolys)
     getPolysInRegion(root, poly, 0, regionPolys);
 }
 
+unordered_set<int> PolygonOctree::getPolysInRegion(Polygon3D* poly) {
+    unordered_set<int> regionPolys;
+    getPolysInRegion(root, poly, 0, regionPolys);
+    return regionPolys;
+}
+
 void PolygonOctree::getPolysInRegion(PolyOctant* node, Polygon3D* poly, int currentDepth, vector<bool>& regionPolys) {
     if (currentDepth >= maxDepth) {
         for (auto p : node->polygons) {
             if (p->idx != -1)
                 regionPolys[p->idx] = true;
+        }
+        return;
+    }
+    for (int i = 0; i < 8; ++i) {
+        if (isPolygonInOctant(poly, node->children[i])) {
+            getPolysInRegion(node->children[i], poly, currentDepth + 1, regionPolys);
+        }
+    }
+}
+
+void PolygonOctree::getPolysInRegion(PolyOctant* node, Polygon3D* poly, int currentDepth, unordered_set<int>& regionPolys) {
+    if (currentDepth >= maxDepth) {
+        for (auto p : node->polygons) {
+            if (p->idx != -1)
+                regionPolys.insert(p->idx);
         }
         return;
     }

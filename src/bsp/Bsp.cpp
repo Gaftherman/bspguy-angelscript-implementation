@@ -21,6 +21,8 @@
 #include "Fgd.h"
 #include "Texture.h"
 #include "LeafNavMeshGenerator.h"
+#include "NavMeshGenerator.h"
+#include "PolyOctree.h"
 
 typedef map< string, vec3 > mapStringToVector;
 
@@ -4291,53 +4293,102 @@ bool Bsp::rename_texture(const char* oldName, const char* newName) {
 	return false;
 }
 
-unordered_set<int> Bsp::selectConnected(int modelId, int faceId, unordered_set<int>& ignoreFaces, bool planarTextureOnly) {
+unordered_set<int> Bsp::selectConnected(vector<int>& srcFaces, unordered_set<int>& ignoreFaces, bool planarTextureOnly) {
 	unordered_set<int> selected;
-	const float epsilon = 1.0f;
+	vector<Polygon3D*> selectedFaces;
+	queue<Polygon3D*> testPolys;
+	unordered_set<int> validMiptex;
+	vector<vec3> validNormals;
+	vector<Polygon3D*> polys;
+	vector<int> polyModels; // maps a polygon index to a model index
 
-	BSPMODEL& model = models[modelId];
+	for (int idx : srcFaces) {
+		BSPFACE& face = faces[idx];
+		BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
+		BSPPLANE& plane = planes[face.iPlane];
 
-	BSPFACE& face = faces[faceId];
-	BSPTEXTUREINFO& info = texinfos[face.iTextureInfo];
-	BSPPLANE& plane = planes[face.iPlane];
+		vector<vec3> selectedVerts;
+		for (int e = 0; e < face.nEdges; e++) {
+			int32_t edgeIdx = surfedges[face.iFirstEdge + e];
+			BSPEDGE& edge = edges[abs(edgeIdx)];
+			int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
+			selectedVerts.push_back(verts[vertIdx]);
+		}
 
-	vector<vec3> selectedVerts;
-	for (int e = 0; e < face.nEdges; e++) {
-		int32_t edgeIdx = surfedges[face.iFirstEdge + e];
-		BSPEDGE& edge = edges[abs(edgeIdx)];
-		int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
-		selectedVerts.push_back(verts[vertIdx]);
+		Polygon3D* poly = new Polygon3D(selectedVerts, idx, true);
+		selectedFaces.push_back(poly);
+		testPolys.push(poly);
+		validMiptex.insert(info.iMiptex);
+		push_unique_vec3(validNormals, plane.vNormal, 0.0001f);
 	}
 
-	bool anyNewFaces = true;
-	while (anyNewFaces) {
-		anyNewFaces = false;
+	for (int fa = 0; fa < faceCount; fa++) {
+		polyModels.push_back(get_model_from_face(fa));
 
-		for (int fa = 0; fa < model.nFaces; fa++) {
-			int testFaceIdx = model.iFirstFace + fa;
-			BSPFACE& faceA = faces[testFaceIdx];
-			BSPTEXTUREINFO& infoA = texinfos[faceA.iTextureInfo];
-			BSPPLANE& planeA = planes[faceA.iPlane];
+		BSPFACE& face = faces[fa];
 
-			if (selected.count(testFaceIdx) || ignoreFaces.count(fa)) {
+		vector<vec3> faceVerts;
+
+		for (int e = 0; e < face.nEdges; e++) {
+			int32_t edgeIdx = surfedges[face.iFirstEdge + e];
+			BSPEDGE& edge = edges[abs(edgeIdx)];
+			int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
+			faceVerts.push_back(verts[vertIdx]);
+		}
+
+		Polygon3D* poly = new Polygon3D(faceVerts, polys.size(), true);
+
+		polys.push_back(poly);
+	}
+
+	PolygonOctree* octree = NavMeshGenerator::createPolyOctree(this, polys, 6);
+
+	while (testPolys.size()) {
+		Polygon3D* poly = testPolys.front();
+		testPolys.pop();
+
+		int srcModel = polyModels[poly->idx];
+		unordered_set<int> regionPolys = octree->getPolysInRegion(poly);
+
+		for (int ridx : regionPolys) {
+			int idx = polys[ridx]->idx;
+			BSPFACE& faceA = faces[idx];
+
+			if (polyModels[idx] != srcModel)
 				continue;
+
+			if (selected.count(idx) || ignoreFaces.count(idx))
+				continue;
+
+			if (planarTextureOnly) {
+				BSPTEXTUREINFO& info = texinfos[faceA.iTextureInfo];
+				BSPPLANE& plane = planes[faceA.iPlane];
+
+				if (!validMiptex.count(info.iMiptex))
+					continue;
+
+				bool isPlanar = false;
+				for (const vec3& norm : validNormals) {
+					if (plane.vNormal == norm) {
+						isPlanar = true;
+						break;
+					}
+				}
+
+				if (!isPlanar)
+					continue;
 			}
 
-			if (planarTextureOnly && (planeA.vNormal != plane.vNormal || info.iMiptex != infoA.iMiptex)) {
-				continue;
-			}
-
-			vector<vec3> uniqueVerts;
 			bool isConnected = false;
 
 			for (int e = 0; e < faceA.nEdges && !isConnected; e++) {
 				int32_t edgeIdx = surfedges[faceA.iFirstEdge + e];
 				BSPEDGE& edge = edges[abs(edgeIdx)];
 				int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
+				const float epsilon = 1.0f;
 
-				bool isUnique = true;
-				vec3 v2 = verts[vertIdx];
-				for (vec3 v1 : selectedVerts) {
+				vec3& v2 = verts[vertIdx];
+				for (const vec3& v1 : poly->verts) {
 					if ((v1 - v2).length() < epsilon) {
 						isConnected = true;
 						break;
@@ -4351,14 +4402,21 @@ unordered_set<int> Bsp::selectConnected(int modelId, int faceId, unordered_set<i
 					int32_t edgeIdx = surfedges[faceA.iFirstEdge + e];
 					BSPEDGE& edge = edges[abs(edgeIdx)];
 					int vertIdx = edgeIdx >= 0 ? edge.iVertex[1] : edge.iVertex[0];
-					selectedVerts.push_back(verts[vertIdx]);
 				}
 
-				selected.insert(testFaceIdx);
-				anyNewFaces = true;
+				selected.insert(idx);
+				testPolys.push(polys[ridx]);
 			}
 		}
 	}
+
+	for (Polygon3D* poly : polys) {
+		delete poly;
+	}
+	for (Polygon3D* poly : selectedFaces) {
+		delete poly;
+	}
+	delete octree;
 
 	return selected;
 }
