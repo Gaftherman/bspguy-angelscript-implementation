@@ -10,3 +10,6 @@
 [submodule "glew"]
 	path = glew
 	url = https://github.com/wootguy/glew.git
+[submodule "angelscript"]
+	path = angelscript
+	url = https://github.com/anjo76/angelscript.git
