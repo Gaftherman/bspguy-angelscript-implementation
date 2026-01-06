@@ -17,6 +17,39 @@ See the [wiki](https://github.com/wootguy/bspguy/wiki) for merging and porting t
 
 ![image](https://github.com/user-attachments/assets/1db127c9-e52a-4ca6-a011-ccb2ed2a7407)
 
+## AngelScript Integration
+bspguy includes a powerful **AngelScript scripting system** that allows you to automate entity manipulation, batch operations, and custom map editing workflows.
+
+### Key Features
+- **Entity Manipulation**: Create, modify, and delete entities programmatically
+- **Vec3 and RGB Types**: Built-in vector and color types for easy spatial calculations
+- **Camera Access**: Get current camera position and orientation
+- **Selection System**: Work with selected entities in the editor
+- **Batch Operations**: Group multiple entity creations into a single undo operation
+- **Organized Namespaces**: Clean API with `Map`, `Camera`, `Editor`, `Math`, and `Convert` namespaces
+
+### Quick Start
+Scripts are stored in your Documents folder: `Documents/bspguy/scripts/`
+
+A simple script example:
+```angelscript
+void main() {
+    print("Map: " + Map::getName());
+    print("Entity count: " + Convert::toString(Map::getEntityCount()));
+    
+    // Create an entity at camera position
+    Editor::beginBatch();
+    Entity@ light = Map::createEntity("light");
+    light.setOriginVec(Camera::getPos());
+    light.setKeyvalue("_light", "255 255 128 200");
+    Editor::endBatch();
+    
+    Map::refresh();
+}
+```
+
+📖 **For complete documentation, see the [AngelScript Wiki](https://github.com/Gaftherman/bspguy-angelscript-implementation/Getting‐Started)**
+
 ## System Requirements
 - OpenGL 2.1
 - Windows XP or later / Any flavor of Linux (AFAIK)
