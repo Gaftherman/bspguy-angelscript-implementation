@@ -1,9 +1,14 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.10)
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
+
+# AngelScript options
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(AS_NO_EXCEPTIONS OFF CACHE BOOL "" FORCE)
+set(AS_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
 
 project(bspguy)
 
@@ -23,11 +28,57 @@ if (UNIX)
 endif()
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/xz)
 
+# Add AngelScript library
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/angelscript/sdk/angelscript/projects/cmake angelscript)
+
+# AngelScript include directories
+include_directories(${CMAKE_CURRENT_LIST_DIR}/angelscript/sdk/angelscript/include)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/angelscript/sdk/add_on)
+
 if (UNIX)
 	#set_target_properties(liblzma PROPERTIES COMPILE_OPTIONS "-m32" LINK_FLAGS "-m32")
 endif()
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/xz/src/liblzma/api)
+
+# AngelScript add-ons source files
+set(ANGELSCRIPT_ADDON_FILES
+	angelscript/sdk/add_on/contextmgr/contextmgr.cpp
+	angelscript/sdk/add_on/contextmgr/contextmgr.h
+	angelscript/sdk/add_on/datetime/datetime.cpp
+	angelscript/sdk/add_on/datetime/datetime.h
+	angelscript/sdk/add_on/debugger/debugger.cpp
+	angelscript/sdk/add_on/debugger/debugger.h
+	angelscript/sdk/add_on/scriptany/scriptany.cpp
+	angelscript/sdk/add_on/scriptany/scriptany.h
+	angelscript/sdk/add_on/scriptarray/scriptarray.cpp
+	angelscript/sdk/add_on/scriptarray/scriptarray.h
+	angelscript/sdk/add_on/scriptbuilder/scriptbuilder.cpp
+	angelscript/sdk/add_on/scriptbuilder/scriptbuilder.h
+	angelscript/sdk/add_on/scriptdictionary/scriptdictionary.cpp
+	angelscript/sdk/add_on/scriptdictionary/scriptdictionary.h
+	angelscript/sdk/add_on/scriptfile/scriptfile.cpp
+	angelscript/sdk/add_on/scriptfile/scriptfile.h
+	angelscript/sdk/add_on/scriptfile/scriptfilesystem.cpp
+	angelscript/sdk/add_on/scriptfile/scriptfilesystem.h
+	angelscript/sdk/add_on/scriptgrid/scriptgrid.cpp
+	angelscript/sdk/add_on/scriptgrid/scriptgrid.h
+	angelscript/sdk/add_on/scripthandle/scripthandle.cpp
+	angelscript/sdk/add_on/scripthandle/scripthandle.h
+	angelscript/sdk/add_on/scripthelper/scripthelper.cpp
+	angelscript/sdk/add_on/scripthelper/scripthelper.h
+	angelscript/sdk/add_on/scriptmath/scriptmath.cpp
+	angelscript/sdk/add_on/scriptmath/scriptmath.h
+	angelscript/sdk/add_on/scriptmath/scriptmathcomplex.cpp
+	angelscript/sdk/add_on/scriptmath/scriptmathcomplex.h
+	angelscript/sdk/add_on/scriptstdstring/scriptstdstring.cpp
+	angelscript/sdk/add_on/scriptstdstring/scriptstdstring.h
+	angelscript/sdk/add_on/scriptstdstring/scriptstdstring_utils.cpp
+	angelscript/sdk/add_on/serializer/serializer.cpp
+	angelscript/sdk/add_on/serializer/serializer.h
+	angelscript/sdk/add_on/weakref/weakref.cpp
+	angelscript/sdk/add_on/weakref/weakref.h
+)
 
 set(SOURCE_FILES 
 	src/main.cpp
@@ -109,6 +160,9 @@ set(SOURCE_FILES
 	src/util/tinyfiledialogs.h
 	src/util/lzma_util.h src/util/lzma_util.cpp
 	src/util/quant.h src/util/quant.cpp
+	
+	# AngelScript add-ons
+	${ANGELSCRIPT_ADDON_FILES}
 )
 
 set(SHADER_FILES
@@ -166,7 +220,7 @@ add_definitions(-DGLEW_STATIC)
 
 if(MSVC)
 	add_executable(${PROJECT_NAME} ${SOURCE_FILES} src/data/icons/app_icon.rc)
-	target_link_libraries(${PROJECT_NAME} glfw liblzma)
+	target_link_libraries(${PROJECT_NAME} glfw liblzma angelscript)
 
 	add_custom_command(
 		TARGET ${PROJECT_NAME}
@@ -325,10 +379,62 @@ if(MSVC)
 													imgui/backends/imgui_impl_glfw.cpp
 													imgui/backends/imgui_impl_opengl2.cpp
 													src/util/lodepng.cpp)
+	
+	# AngelScript add-ons source groups
+	source_group("Source Files\\angelscript\\contextmgr" FILES
+													angelscript/sdk/add_on/contextmgr/contextmgr.cpp
+													angelscript/sdk/add_on/contextmgr/contextmgr.h)
+	source_group("Source Files\\angelscript\\datetime" FILES
+													angelscript/sdk/add_on/datetime/datetime.cpp
+													angelscript/sdk/add_on/datetime/datetime.h)
+	source_group("Source Files\\angelscript\\debugger" FILES
+													angelscript/sdk/add_on/debugger/debugger.cpp
+													angelscript/sdk/add_on/debugger/debugger.h)
+	source_group("Source Files\\angelscript\\scriptany" FILES
+													angelscript/sdk/add_on/scriptany/scriptany.cpp
+													angelscript/sdk/add_on/scriptany/scriptany.h)
+	source_group("Source Files\\angelscript\\scriptarray" FILES
+													angelscript/sdk/add_on/scriptarray/scriptarray.cpp
+													angelscript/sdk/add_on/scriptarray/scriptarray.h)
+	source_group("Source Files\\angelscript\\scriptbuilder" FILES
+													angelscript/sdk/add_on/scriptbuilder/scriptbuilder.cpp
+													angelscript/sdk/add_on/scriptbuilder/scriptbuilder.h)
+	source_group("Source Files\\angelscript\\scriptdictionary" FILES
+													angelscript/sdk/add_on/scriptdictionary/scriptdictionary.cpp
+													angelscript/sdk/add_on/scriptdictionary/scriptdictionary.h)
+	source_group("Source Files\\angelscript\\scriptfile" FILES
+													angelscript/sdk/add_on/scriptfile/scriptfile.cpp
+													angelscript/sdk/add_on/scriptfile/scriptfile.h
+													angelscript/sdk/add_on/scriptfile/scriptfilesystem.cpp
+													angelscript/sdk/add_on/scriptfile/scriptfilesystem.h)
+	source_group("Source Files\\angelscript\\scriptgrid" FILES
+													angelscript/sdk/add_on/scriptgrid/scriptgrid.cpp
+													angelscript/sdk/add_on/scriptgrid/scriptgrid.h)
+	source_group("Source Files\\angelscript\\scripthandle" FILES
+													angelscript/sdk/add_on/scripthandle/scripthandle.cpp
+													angelscript/sdk/add_on/scripthandle/scripthandle.h)
+	source_group("Source Files\\angelscript\\scripthelper" FILES
+													angelscript/sdk/add_on/scripthelper/scripthelper.cpp
+													angelscript/sdk/add_on/scripthelper/scripthelper.h)
+	source_group("Source Files\\angelscript\\scriptmath" FILES
+													angelscript/sdk/add_on/scriptmath/scriptmath.cpp
+													angelscript/sdk/add_on/scriptmath/scriptmath.h
+													angelscript/sdk/add_on/scriptmath/scriptmathcomplex.cpp
+													angelscript/sdk/add_on/scriptmath/scriptmathcomplex.h)
+	source_group("Source Files\\angelscript\\scriptstdstring" FILES
+													angelscript/sdk/add_on/scriptstdstring/scriptstdstring.cpp
+													angelscript/sdk/add_on/scriptstdstring/scriptstdstring.h
+													angelscript/sdk/add_on/scriptstdstring/scriptstdstring_utils.cpp)
+	source_group("Source Files\\angelscript\\serializer" FILES
+													angelscript/sdk/add_on/serializer/serializer.cpp
+													angelscript/sdk/add_on/serializer/serializer.h)
+	source_group("Source Files\\angelscript\\weakref" FILES
+													angelscript/sdk/add_on/weakref/weakref.cpp
+													angelscript/sdk/add_on/weakref/weakref.h)
 
 else()
 	add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-	target_link_libraries(${PROJECT_NAME} glfw liblzma GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
+	target_link_libraries(${PROJECT_NAME} glfw liblzma angelscript GL GLU X11 Xxf86vm Xrandr pthread Xi GLEW stdc++fs ${CMAKE_DL_LIBS})
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -fno-omit-frame-pointer -std=c++11")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG_MODE -g -O0")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
