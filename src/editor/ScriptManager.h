@@ -7,6 +7,7 @@
 class Entity;
 class Bsp;
 class Renderer;
+class CScriptArray;
 
 // ============================================================================
 // Script Vector3 - A vec3 type for AngelScript
@@ -154,6 +155,14 @@ struct ScriptInfo {
     std::string errorMessage;
 };
 
+// Script folder structure for hierarchical menu
+struct ScriptFolder {
+    std::string name;
+    std::string path;
+    std::vector<ScriptInfo> scripts;
+    std::vector<ScriptFolder> subfolders;
+};
+
 class ScriptManager {
 public:
     ScriptManager();
@@ -166,6 +175,7 @@ public:
     // Script file management
     void refreshScriptList();
     std::vector<ScriptInfo>& getScriptList();
+    ScriptFolder& getScriptRoot();  // Hierarchical folder structure
     std::string getScriptsFolder() const;
     void openScriptsFolder();
     
@@ -205,6 +215,15 @@ public:
     float getCameraAnglesRoll() const;
     ScriptVec3 getCameraPosition() const;
     ScriptVec3 getCameraAnglesVec() const;
+    ScriptVec3 getCameraForward() const;  // Direction the camera is looking
+    
+    // Entity selection (highlight)
+    CScriptArray* getSelectedEntities();  // Returns array of selected Entity@
+    int getSelectedEntityCount() const;
+    void selectEntity(int index);
+    void deselectEntity(int index);
+    void deselectAllEntities();
+    bool isEntitySelected(int index) const;
     
     // Script entity batch operations (for undo grouping)
     void beginEntityBatch();
@@ -221,7 +240,10 @@ private:
     Renderer* app;
     
     std::vector<ScriptInfo> scriptList;
+    ScriptFolder scriptRoot;  // Hierarchical folder structure
     std::string scriptsFolder;
+    
+    void scanScriptsFolder(const std::string& folderPath, ScriptFolder& folder);
     
     // Entity wrappers cache
     std::unordered_map<int, ScriptEntity*> entityCache;

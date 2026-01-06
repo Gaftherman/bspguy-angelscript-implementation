@@ -6,6 +6,7 @@
 #include "Entity.h"
 #include "Command.h"
 #include "util.h"
+#include "vectors.h"
 #include "globals.h"
 
 #include "angelscript.h"
@@ -20,6 +21,7 @@
 #include <cassert>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -536,13 +538,15 @@ void ScriptManager::registerTypes() {
     r = engine->RegisterObjectMethod("Vec3", "Vec3 lerp(const Vec3 &in, float) const", asMETHOD(ScriptVec3, lerp), asCALL_THISCALL); assert(r >= 0);
     r = engine->RegisterObjectMethod("Vec3", "string toString() const", asMETHOD(ScriptVec3, toString), asCALL_THISCALL); assert(r >= 0);
     
-    // Vec3 static factory functions (registered as global functions)
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_fromString(const string &in)", asFUNCTION(ScriptVec3::fromString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_zero()", asFUNCTION(ScriptVec3::zero), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_one()", asFUNCTION(ScriptVec3::one), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_up()", asFUNCTION(ScriptVec3::up), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_forward()", asFUNCTION(ScriptVec3::forward), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 Vec3_right()", asFUNCTION(ScriptVec3::right), asCALL_CDECL); assert(r >= 0);
+    // Vec3 static factory functions (in Vec3 namespace)
+    r = engine->SetDefaultNamespace("Vec3"); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 fromString(const string &in)", asFUNCTION(ScriptVec3::fromString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 zero()", asFUNCTION(ScriptVec3::zero), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 one()", asFUNCTION(ScriptVec3::one), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 up()", asFUNCTION(ScriptVec3::up), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 forward()", asFUNCTION(ScriptVec3::forward), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 right()", asFUNCTION(ScriptVec3::right), asCALL_CDECL); assert(r >= 0);
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
     
     // ====== Register RGB as a value type ======
     r = engine->RegisterObjectType("RGB", sizeof(ScriptRGB), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits<ScriptRGB>()); assert(r >= 0);
@@ -570,16 +574,18 @@ void ScriptManager::registerTypes() {
     r = engine->RegisterObjectMethod("RGB", "string toString() const", asMETHOD(ScriptRGB, toString), asCALL_THISCALL); assert(r >= 0);
     r = engine->RegisterObjectMethod("RGB", "string toLightString() const", asMETHOD(ScriptRGB, toLightString), asCALL_THISCALL); assert(r >= 0);
     
-    // RGB static factory functions
-    r = engine->RegisterGlobalFunction("RGB RGB_fromString(const string &in)", asFUNCTION(ScriptRGB::fromString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_white()", asFUNCTION(ScriptRGB::white), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_black()", asFUNCTION(ScriptRGB::black), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_red()", asFUNCTION(ScriptRGB::red), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_green()", asFUNCTION(ScriptRGB::green), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_blue()", asFUNCTION(ScriptRGB::blue), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_yellow()", asFUNCTION(ScriptRGB::yellow), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_cyan()", asFUNCTION(ScriptRGB::cyan), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB RGB_magenta()", asFUNCTION(ScriptRGB::magenta), asCALL_CDECL); assert(r >= 0);
+    // RGB static factory functions (in RGB namespace)
+    r = engine->SetDefaultNamespace("RGB"); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB fromString(const string &in)", asFUNCTION(ScriptRGB::fromString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB white()", asFUNCTION(ScriptRGB::white), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB black()", asFUNCTION(ScriptRGB::black), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB red()", asFUNCTION(ScriptRGB::red), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB green()", asFUNCTION(ScriptRGB::green), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB blue()", asFUNCTION(ScriptRGB::blue), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB yellow()", asFUNCTION(ScriptRGB::yellow), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB cyan()", asFUNCTION(ScriptRGB::cyan), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB magenta()", asFUNCTION(ScriptRGB::magenta), asCALL_CDECL); assert(r >= 0);
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
     
     // ====== Register ScriptEntity as a reference type ======
     r = engine->RegisterObjectType("Entity", 0, asOBJ_REF); assert(r >= 0);
@@ -761,6 +767,11 @@ static ScriptVec3 Script_getCameraAngles() {
     return ScriptVec3();
 }
 
+static ScriptVec3 Script_getCameraForward() {
+    if (g_scriptManager) return g_scriptManager->getCameraForward();
+    return ScriptVec3(0, 1, 0);  // Default forward in bspguy is +Y
+}
+
 // Batch mode for grouping entity creation into single undo
 static void Script_beginEntityBatch() {
     if (g_scriptManager) g_scriptManager->beginEntityBatch();
@@ -768,6 +779,34 @@ static void Script_beginEntityBatch() {
 
 static void Script_endEntityBatch() {
     if (g_scriptManager) g_scriptManager->endEntityBatch();
+}
+
+// Entity selection functions
+static CScriptArray* Script_getSelectedEntities() {
+    if (g_scriptManager) return g_scriptManager->getSelectedEntities();
+    return nullptr;
+}
+
+static int Script_getSelectedEntityCount() {
+    if (g_scriptManager) return g_scriptManager->getSelectedEntityCount();
+    return 0;
+}
+
+static void Script_selectEntity(int index) {
+    if (g_scriptManager) g_scriptManager->selectEntity(index);
+}
+
+static void Script_deselectEntity(int index) {
+    if (g_scriptManager) g_scriptManager->deselectEntity(index);
+}
+
+static void Script_deselectAllEntities() {
+    if (g_scriptManager) g_scriptManager->deselectAllEntities();
+}
+
+static bool Script_isEntitySelected(int index) {
+    if (g_scriptManager) return g_scriptManager->isEntitySelected(index);
+    return false;
 }
 
 static float Script_degToRad(float degrees) {
@@ -819,6 +858,10 @@ static float Script_stringToFloat(const std::string& str) {
 void ScriptManager::registerGlobalFunctions() {
     int r;
     
+    // ========================================================================
+    // Global functions (no namespace) - Common utilities
+    // ========================================================================
+    
     // Print functions
     r = engine->RegisterGlobalFunction("void print(const string &in)", 
         asFUNCTION(Script_print), asCALL_CDECL); assert(r >= 0);
@@ -827,29 +870,11 @@ void ScriptManager::registerGlobalFunctions() {
     r = engine->RegisterGlobalFunction("void printError(const string &in)", 
         asFUNCTION(Script_printError), asCALL_CDECL); assert(r >= 0);
     
-    // Entity access functions
-    r = engine->RegisterGlobalFunction("int getEntityCount()", 
-        asFUNCTION(Script_getEntityCount), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ getEntity(int)", 
-        asFUNCTION(Script_getEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ getEntityByTargetname(const string &in)", 
-        asFUNCTION(Script_getEntityByTargetname), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ getEntityByClassname(const string &in)", 
-        asFUNCTION(Script_getEntityByClassname), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ createEntity(const string &in)", 
-        asFUNCTION(Script_createEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void deleteEntity(int)", 
-        asFUNCTION(Script_deleteEntity), asCALL_CDECL); assert(r >= 0);
+    // ========================================================================
+    // Math namespace - Mathematical utilities
+    // ========================================================================
+    r = engine->SetDefaultNamespace("Math"); assert(r >= 0);
     
-    // Map functions
-    r = engine->RegisterGlobalFunction("string getMapName()", 
-        asFUNCTION(Script_getMapName), asCALL_CDECL); assert(r >= 0);
-    
-    // Refresh function - IMPORTANT for visual updates
-    r = engine->RegisterGlobalFunction("void refreshEntities()", 
-        asFUNCTION(Script_refreshEntities), asCALL_CDECL); assert(r >= 0);
-    
-    // Math utility functions (sin, cos, tan, sqrt, abs, floor, ceil are already in scriptmath)
     r = engine->RegisterGlobalFunction("float degToRad(float)", 
         asFUNCTION(Script_degToRad), asCALL_CDECL); assert(r >= 0);
     r = engine->RegisterGlobalFunction("float radToDeg(float)", 
@@ -865,52 +890,125 @@ void ScriptManager::registerGlobalFunctions() {
     r = engine->RegisterGlobalFunction("float lerp(float, float, float)", 
         asFUNCTION(Script_lerp), asCALL_CDECL); assert(r >= 0);
     
-    // String conversion functions
-    r = engine->RegisterGlobalFunction("string intToString(int)", 
+    // ========================================================================
+    // Convert namespace - Type conversions
+    // ========================================================================
+    r = engine->SetDefaultNamespace("Convert"); assert(r >= 0);
+    
+    r = engine->RegisterGlobalFunction("string toString(int)", 
         asFUNCTION(Script_intToString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("string floatToString(float)", 
+    r = engine->RegisterGlobalFunction("string toString(float)", 
         asFUNCTION(Script_floatToString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("int stringToInt(const string &in)", 
+    r = engine->RegisterGlobalFunction("int toInt(const string &in)", 
         asFUNCTION(Script_stringToInt), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float stringToFloat(const string &in)", 
+    r = engine->RegisterGlobalFunction("float toFloat(const string &in)", 
         asFUNCTION(Script_stringToFloat), asCALL_CDECL); assert(r >= 0);
     
-    // Camera functions
-    r = engine->RegisterGlobalFunction("float getCameraX()", 
-        asFUNCTION(Script_getCameraX), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getCameraY()", 
-        asFUNCTION(Script_getCameraY), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getCameraZ()", 
-        asFUNCTION(Script_getCameraZ), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getCameraPitch()", 
-        asFUNCTION(Script_getCameraPitch), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getCameraYaw()", 
-        asFUNCTION(Script_getCameraYaw), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getCameraRoll()", 
-        asFUNCTION(Script_getCameraRoll), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 getCameraPos()", 
-        asFUNCTION(Script_getCameraPos), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 getCameraAngles()", 
-        asFUNCTION(Script_getCameraAngles), asCALL_CDECL); assert(r >= 0);
+    // ========================================================================
+    // Camera namespace - Camera access
+    // ========================================================================
+    r = engine->SetDefaultNamespace("Camera"); assert(r >= 0);
     
-    // Entity batch operations (for undo grouping)
-    r = engine->RegisterGlobalFunction("void beginEntityBatch()", 
+    r = engine->RegisterGlobalFunction("float getX()", 
+        asFUNCTION(Script_getCameraX), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getY()", 
+        asFUNCTION(Script_getCameraY), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getZ()", 
+        asFUNCTION(Script_getCameraZ), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getPitch()", 
+        asFUNCTION(Script_getCameraPitch), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getYaw()", 
+        asFUNCTION(Script_getCameraYaw), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getRoll()", 
+        asFUNCTION(Script_getCameraRoll), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 getPos()", 
+        asFUNCTION(Script_getCameraPos), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 getAngles()", 
+        asFUNCTION(Script_getCameraAngles), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 getForward()", 
+        asFUNCTION(Script_getCameraForward), asCALL_CDECL); assert(r >= 0);
+    
+    // ========================================================================
+    // Map namespace - Map and entity access
+    // ========================================================================
+    r = engine->SetDefaultNamespace("Map"); assert(r >= 0);
+    
+    r = engine->RegisterGlobalFunction("string getName()", 
+        asFUNCTION(Script_getMapName), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("int getEntityCount()", 
+        asFUNCTION(Script_getEntityCount), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ getEntity(int)", 
+        asFUNCTION(Script_getEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ findByTargetname(const string &in)", 
+        asFUNCTION(Script_getEntityByTargetname), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ findByClassname(const string &in)", 
+        asFUNCTION(Script_getEntityByClassname), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ createEntity(const string &in)", 
+        asFUNCTION(Script_createEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deleteEntity(int)", 
+        asFUNCTION(Script_deleteEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void refresh()", 
+        asFUNCTION(Script_refreshEntities), asCALL_CDECL); assert(r >= 0);
+    
+    // ========================================================================
+    // Editor namespace - Editor operations (undo, selection, etc.)
+    // ========================================================================
+    r = engine->SetDefaultNamespace("Editor"); assert(r >= 0);
+    
+    // Batch operations for undo grouping
+    r = engine->RegisterGlobalFunction("void beginBatch()", 
         asFUNCTION(Script_beginEntityBatch), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void endEntityBatch()", 
+    r = engine->RegisterGlobalFunction("void endBatch()", 
         asFUNCTION(Script_endEntityBatch), asCALL_CDECL); assert(r >= 0);
+    
+    // Selection functions
+    r = engine->RegisterGlobalFunction("array<Entity@>@ getSelectedEntities()", 
+        asFUNCTION(Script_getSelectedEntities), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("int getSelectedCount()", 
+        asFUNCTION(Script_getSelectedEntityCount), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void selectEntity(int)", 
+        asFUNCTION(Script_selectEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deselectEntity(int)", 
+        asFUNCTION(Script_deselectEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deselectAll()", 
+        asFUNCTION(Script_deselectAllEntities), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("bool isSelected(int)", 
+        asFUNCTION(Script_isEntitySelected), asCALL_CDECL); assert(r >= 0);
+    
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
 }
 
 void ScriptManager::refreshScriptList() {
     scriptList.clear();
+    scriptRoot = ScriptFolder();
+    scriptRoot.name = "Scripts";
+    scriptRoot.path = scriptsFolder;
     
     if (!dirExists(scriptsFolder)) {
         createDir(scriptsFolder);
         return;
     }
     
+    // Scan folder recursively
+    scanScriptsFolder(scriptsFolder, scriptRoot);
+    
+    // Also populate flat list for backward compatibility
+    std::function<void(const ScriptFolder&)> flattenScripts = [&](const ScriptFolder& folder) {
+        for (const auto& script : folder.scripts) {
+            scriptList.push_back(script);
+        }
+        for (const auto& subfolder : folder.subfolders) {
+            flattenScripts(subfolder);
+        }
+    };
+    flattenScripts(scriptRoot);
+}
+
+void ScriptManager::scanScriptsFolder(const std::string& folderPath, ScriptFolder& folder) {
 #ifdef _WIN32
-    // Use Windows API to iterate directory
-    std::string searchPath = scriptsFolder + "\\*.as";
+    // First scan for .as files
+    std::string searchPath = folderPath + "\\*.as";
     WIN32_FIND_DATAA findData;
     HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
     
@@ -919,37 +1017,95 @@ void ScriptManager::refreshScriptList() {
             if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                 ScriptInfo info;
                 info.name = findData.cFileName;
-                info.path = scriptsFolder + "\\" + findData.cFileName;
+                info.path = folderPath + "\\" + findData.cFileName;
                 info.hasError = false;
-                scriptList.push_back(info);
+                folder.scripts.push_back(info);
             }
         } while (FindNextFileA(hFind, &findData));
         FindClose(hFind);
     }
+    
+    // Sort scripts alphabetically
+    std::sort(folder.scripts.begin(), folder.scripts.end(), 
+        [](const ScriptInfo& a, const ScriptInfo& b) { return a.name < b.name; });
+    
+    // Then scan for subdirectories
+    searchPath = folderPath + "\\*";
+    hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+                strcmp(findData.cFileName, ".") != 0 &&
+                strcmp(findData.cFileName, "..") != 0) {
+                
+                ScriptFolder subfolder;
+                subfolder.name = findData.cFileName;
+                subfolder.path = folderPath + "\\" + findData.cFileName;
+                scanScriptsFolder(subfolder.path, subfolder);
+                
+                // Only add non-empty folders
+                if (!subfolder.scripts.empty() || !subfolder.subfolders.empty()) {
+                    folder.subfolders.push_back(subfolder);
+                }
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+    
+    // Sort subfolders alphabetically
+    std::sort(folder.subfolders.begin(), folder.subfolders.end(), 
+        [](const ScriptFolder& a, const ScriptFolder& b) { return a.name < b.name; });
 #else
-    // Use POSIX API for Linux/Mac
-    DIR* dir = opendir(scriptsFolder.c_str());
+    // POSIX implementation
+    DIR* dir = opendir(folderPath.c_str());
     if (dir) {
         struct dirent* entry;
+        std::vector<std::string> subdirs;
+        
         while ((entry = readdir(dir)) != nullptr) {
             std::string filename = entry->d_name;
-            if (filename.size() > 3 && filename.substr(filename.size() - 3) == ".as") {
-                ScriptInfo info;
-                info.name = filename;
-                info.path = scriptsFolder + "/" + filename;
-                info.hasError = false;
-                scriptList.push_back(info);
+            std::string fullPath = folderPath + "/" + filename;
+            
+            struct stat statbuf;
+            if (stat(fullPath.c_str(), &statbuf) == 0) {
+                if (S_ISDIR(statbuf.st_mode)) {
+                    if (filename != "." && filename != "..") {
+                        subdirs.push_back(filename);
+                    }
+                } else if (filename.size() > 3 && filename.substr(filename.size() - 3) == ".as") {
+                    ScriptInfo info;
+                    info.name = filename;
+                    info.path = fullPath;
+                    info.hasError = false;
+                    folder.scripts.push_back(info);
+                }
             }
         }
         closedir(dir);
+        
+        // Sort scripts
+        std::sort(folder.scripts.begin(), folder.scripts.end(), 
+            [](const ScriptInfo& a, const ScriptInfo& b) { return a.name < b.name; });
+        
+        // Process subdirectories
+        std::sort(subdirs.begin(), subdirs.end());
+        for (const auto& subdir : subdirs) {
+            ScriptFolder subfolder;
+            subfolder.name = subdir;
+            subfolder.path = folderPath + "/" + subdir;
+            scanScriptsFolder(subfolder.path, subfolder);
+            
+            if (!subfolder.scripts.empty() || !subfolder.subfolders.empty()) {
+                folder.subfolders.push_back(subfolder);
+            }
+        }
     }
 #endif
-    
-    // Sort alphabetically
-    std::sort(scriptList.begin(), scriptList.end(), 
-        [](const ScriptInfo& a, const ScriptInfo& b) { 
-            return a.name < b.name; 
-        });
+}
+
+ScriptFolder& ScriptManager::getScriptRoot() {
+    return scriptRoot;
 }
 
 std::vector<ScriptInfo>& ScriptManager::getScriptList() {
@@ -1282,6 +1438,19 @@ ScriptVec3 ScriptManager::getCameraAnglesVec() const {
     return ScriptVec3(app->cameraAngles.x, app->cameraAngles.y, app->cameraAngles.z);
 }
 
+ScriptVec3 ScriptManager::getCameraForward() const {
+    if (!app) return ScriptVec3(0, 1, 0);  // Default forward in bspguy is +Y
+    
+    // Use the same method as Renderer::getMoveDir()
+    // bspguy uses: X = pitch, Z = yaw (not Y!)
+    vec3 forward, right, up;
+    vec3 moveAngles = app->cameraAngles;
+    moveAngles.y = 0;  // Y component is not used for camera rotation
+    makeVectors(moveAngles, forward, right, up);
+    
+    return ScriptVec3(forward.x, forward.y, forward.z);
+}
+
 void ScriptManager::beginEntityBatch() {
     if (isBatchMode) {
         logf("[Script WARNING] beginEntityBatch() called while already in batch mode\n");
@@ -1330,4 +1499,79 @@ void ScriptManager::endEntityBatch() {
     
     logf("[Script] Entity batch ended (%d entities, grouped for undo)\n", numBatched);
     batchCreatedEntities.clear();
+}
+
+CScriptArray* ScriptManager::getSelectedEntities() {
+    // Get the array type from the engine
+    asITypeInfo* arrayType = engine->GetTypeInfoByDecl("array<Entity@>");
+    if (!arrayType) {
+        logf("[Script ERROR] Could not find array<Entity@> type\n");
+        return nullptr;
+    }
+    
+    CScriptArray* arr = CScriptArray::Create(arrayType);
+    if (!arr) return nullptr;
+    
+    if (!app || !app->mapRenderer || !app->mapRenderer->map) {
+        return arr; // Return empty array
+    }
+    
+    if (app->pickInfo.ents.empty()) {
+        return arr; // Return empty array
+    }
+    
+    Bsp* map = app->mapRenderer->map;
+    
+    for (int entIdx : app->pickInfo.ents) {
+        if (entIdx >= 0 && entIdx < (int)map->ents.size()) {
+            ScriptEntity* ent = new ScriptEntity(map->ents[entIdx], map, entIdx);
+            arr->InsertLast(&ent);
+        }
+    }
+    
+    return arr;
+}
+
+int ScriptManager::getSelectedEntityCount() const {
+    if (!app) {
+        return 0;
+    }
+    return (int)app->pickInfo.ents.size();
+}
+
+void ScriptManager::selectEntity(int index) {
+    if (!app || !app->mapRenderer || !app->mapRenderer->map) {
+        logf("[Script ERROR] No map loaded\n");
+        return;
+    }
+    
+    Bsp* map = app->mapRenderer->map;
+    if (index < 0 || index >= (int)map->ents.size()) {
+        logf("[Script ERROR] Invalid entity index: %d\n", index);
+        return;
+    }
+    
+    app->pickInfo.selectEnt(index);
+}
+
+void ScriptManager::deselectEntity(int index) {
+    if (!app) {
+        return;
+    }
+    
+    app->pickInfo.deselectEnt(index);
+}
+
+void ScriptManager::deselectAllEntities() {
+    if (!app) return;
+    
+    app->pickInfo.deselect();
+}
+
+bool ScriptManager::isEntitySelected(int index) const {
+    if (!app) {
+        return false;
+    }
+    
+    return app->pickInfo.isEntSelected(index);
 }

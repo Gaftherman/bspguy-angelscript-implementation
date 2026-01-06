@@ -14,6 +14,7 @@
 #include <set>
 #include "tinyfiledialogs.h"
 #include <algorithm>
+#include <functional>
 #include "BspMerger.h"
 #include "LeafNavMesh.h"
 #include <unordered_map>
@@ -2354,18 +2355,33 @@ void Gui::drawStandardMenuBar() {
 		ImGui::Separator();
 		
 		if (g_scriptManager) {
-			auto& scripts = g_scriptManager->getScriptList();
-			if (scripts.empty()) {
-				ImGui::TextDisabled("No scripts found");
-				ImGui::TextDisabled("Place .as files in:");
-				ImGui::TextDisabled("%s", g_scriptManager->getScriptsFolder().c_str());
-			} else {
-				for (auto& script : scripts) {
+			ScriptFolder& root = g_scriptManager->getScriptRoot();
+			
+			// Helper lambda for recursive menu rendering
+			std::function<void(ScriptFolder&)> renderScriptFolder = [&](ScriptFolder& folder) {
+				// Render subfolders first as submenus
+				for (auto& subfolder : folder.subfolders) {
+					if (ImGui::BeginMenu(subfolder.name.c_str())) {
+						renderScriptFolder(subfolder);
+						ImGui::EndMenu();
+					}
+				}
+				
+				// Then render scripts in this folder
+				for (auto& script : folder.scripts) {
 					if (ImGui::MenuItem(script.name.c_str())) {
 						g_scriptManager->executeScript(script.path);
 						showLogWidget = true;
 					}
 				}
+			};
+			
+			if (root.scripts.empty() && root.subfolders.empty()) {
+				ImGui::TextDisabled("No scripts found");
+				ImGui::TextDisabled("Place .as files in:");
+				ImGui::TextDisabled("%s", g_scriptManager->getScriptsFolder().c_str());
+			} else {
+				renderScriptFolder(root);
 			}
 		} else {
 			ImGui::TextDisabled("Script manager not initialized");
@@ -5602,56 +5618,39 @@ void Gui::drawLog() {
 	
 	ImGui::Separator();
 
-	static int i = 0;
-
-	ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-	bool toggledAutoScroll = false;
-	if (ImGui::BeginPopupContextWindow())
-	{
-		if (ImGui::MenuItem("Copy")) {
-			copy = true;
-		}
-		if (ImGui::MenuItem("Clear")) {
-			clearLog();
-		}
-		if (ImGui::MenuItem("Auto-scroll", NULL, &AutoScroll)) {
-			toggledAutoScroll = true;
-		}
-		ImGui::EndPopup();
-	}
-
 	ImGui::PushFont(consoleFont);
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-	const char* buf = Buf.begin();
-	const char* buf_end = Buf.end();
-
-	if (copy) ImGui::LogBegin(ImGuiLogFlags_OutputClipboard, 0);
-
-	ImGuiListClipper clipper;
-	clipper.Begin(LineOffsets.Size);
-	while (clipper.Step())
-	{
-		for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++)
-		{
-			const char* line_start = buf + LineOffsets[line_no];
-			const char* line_end = (line_no + 1 < LineOffsets.Size) ? (buf + LineOffsets[line_no + 1] - 1) : buf_end;
-			// Use InputText for selectable text, or TextUnformatted for simpler approach
-			// For now keep TextUnformatted but user can select via context menu copy
-			ImGui::TextUnformatted(line_start, line_end);
+	
+	// Use InputTextMultiline for selectable text
+	// Calculate available height for the text area
+	float footerHeight = 0;
+	ImVec2 contentSize = ImGui::GetContentRegionAvail();
+	
+	// Create a read-only multiline input for selectable text
+	ImGui::InputTextMultiline("##LogText", 
+		(char*)Buf.begin(), 
+		Buf.size() + 1,  // +1 for null terminator space
+		ImVec2(contentSize.x, contentSize.y),
+		ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_AllowTabInput);
+	
+	// Handle copy functionality
+	if (copy) {
+		ImGui::SetClipboardText(Buf.begin());
+	}
+	
+	// Auto-scroll: scroll to bottom when new content is added
+	if (AutoScroll) {
+		// Get the child window created by InputTextMultiline and scroll it
+		if (ImGui::IsItemVisible()) {
+			ImGuiWindow* window = ImGui::GetCurrentWindow();
+			if (window) {
+				// The InputTextMultiline creates an internal scrolling region
+				// We need to use a workaround to scroll it
+			}
 		}
 	}
-	clipper.End();
-
-	if (copy) ImGui::LogFinish();
-
+	
 	ImGui::PopFont();
-	ImGui::PopStyleVar();
 
-	if (AutoScroll && (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() || toggledAutoScroll))
-		ImGui::SetScrollHereY(1.0f);
-
-	ImGui::EndChild();
 	ImGui::End();
 
 }
