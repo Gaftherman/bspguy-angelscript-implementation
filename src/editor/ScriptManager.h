@@ -8,6 +8,83 @@ class Entity;
 class Bsp;
 class Renderer;
 
+// ============================================================================
+// Script Vector3 - A vec3 type for AngelScript
+// ============================================================================
+struct ScriptVec3 {
+    float x, y, z;
+    
+    ScriptVec3();
+    ScriptVec3(float x, float y, float z);
+    ScriptVec3(const ScriptVec3& other);
+    
+    // Operators
+    ScriptVec3& operator=(const ScriptVec3& other);
+    ScriptVec3 operator+(const ScriptVec3& other) const;
+    ScriptVec3 operator-(const ScriptVec3& other) const;
+    ScriptVec3 operator*(float scalar) const;
+    ScriptVec3 operator/(float scalar) const;
+    ScriptVec3 operator-() const;
+    bool operator==(const ScriptVec3& other) const;
+    bool operator!=(const ScriptVec3& other) const;
+    ScriptVec3& operator+=(const ScriptVec3& other);
+    ScriptVec3& operator-=(const ScriptVec3& other);
+    ScriptVec3& operator*=(float scalar);
+    ScriptVec3& operator/=(float scalar);
+    
+    // Methods
+    float length() const;
+    float lengthSq() const;
+    float dot(const ScriptVec3& other) const;
+    ScriptVec3 cross(const ScriptVec3& other) const;
+    ScriptVec3 normalized() const;
+    void normalize();
+    float distance(const ScriptVec3& other) const;
+    ScriptVec3 lerp(const ScriptVec3& other, float t) const;
+    std::string toString() const;
+    
+    // Static constructors
+    static ScriptVec3 fromString(const std::string& str);
+    static ScriptVec3 zero();
+    static ScriptVec3 one();
+    static ScriptVec3 up();
+    static ScriptVec3 forward();
+    static ScriptVec3 right();
+};
+
+// ============================================================================
+// Script RGB Color - An RGB type for AngelScript  
+// ============================================================================
+struct ScriptRGB {
+    int r, g, b;
+    
+    ScriptRGB();
+    ScriptRGB(int r, int g, int b);
+    ScriptRGB(const ScriptRGB& other);
+    
+    // Operators
+    ScriptRGB& operator=(const ScriptRGB& other);
+    bool operator==(const ScriptRGB& other) const;
+    bool operator!=(const ScriptRGB& other) const;
+    
+    // Methods
+    ScriptRGB lerp(const ScriptRGB& other, float t) const;
+    void clamp();
+    std::string toString() const;
+    std::string toLightString() const; // Format: "r g b brightness"
+    
+    // Static constructors
+    static ScriptRGB fromString(const std::string& str);
+    static ScriptRGB white();
+    static ScriptRGB black();
+    static ScriptRGB red();
+    static ScriptRGB green();
+    static ScriptRGB blue();
+    static ScriptRGB yellow();
+    static ScriptRGB cyan();
+    static ScriptRGB magenta();
+};
+
 // Wrapper class for exposing Entity to AngelScript
 class ScriptEntity {
 public:
@@ -27,7 +104,7 @@ public:
     std::string getClassname() const;
     std::string getTargetname() const;
     
-    // Origin and angles
+    // Origin and angles - component access
     float getOriginX() const;
     float getOriginY() const;
     float getOriginZ() const;
@@ -37,6 +114,12 @@ public:
     float getAnglesYaw() const;
     float getAnglesRoll() const;
     void setAngles(float pitch, float yaw, float roll);
+    
+    // Origin and angles - Vec3 access
+    ScriptVec3 getOrigin() const;
+    void setOriginVec(const ScriptVec3& origin);
+    ScriptVec3 getAngles() const;
+    void setAnglesVec(const ScriptVec3& angles);
     
     // Model
     int getBspModelIdx() const;
@@ -49,6 +132,11 @@ public:
     
     // Index in entity list
     int getIndex() const;
+    
+    // Utility
+    bool isValid() const;
+    float distanceTo(const ScriptEntity& other) const;
+    float distanceToPoint(const ScriptVec3& point) const;
     
     // Reference counting for AngelScript
     void addRef();
@@ -115,6 +203,8 @@ public:
     float getCameraAnglesPitch() const;
     float getCameraAnglesYaw() const;
     float getCameraAnglesRoll() const;
+    ScriptVec3 getCameraPosition() const;
+    ScriptVec3 getCameraAnglesVec() const;
     
     // Script entity batch operations (for undo grouping)
     void beginEntityBatch();
