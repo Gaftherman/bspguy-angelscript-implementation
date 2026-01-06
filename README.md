@@ -48,7 +48,7 @@ void main() {
 }
 ```
 
-📖 **For complete documentation, see the [AngelScript Wiki](https://github.com/Gaftherman/bspguy-angelscript-implementation/Getting‐Started)**
+📖 **For complete documentation, see the [AngelScript Wiki]([https://github.com/Gaftherman/bspguy-angelscript-implementation/Getting‐Started](https://github.com/Gaftherman/bspguy-angelscript-implementation/wiki))**
 
 ## System Requirements
 - OpenGL 2.1
