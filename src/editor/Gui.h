@@ -103,6 +103,7 @@ private:
 	bool showHelpWidget = false;
 	bool showAboutWidget = false;
 	bool showLimitsWidget = true;
+	bool showScriptsMenu = false;
 	bool showTextureWidget = false;
 	bool showLightmapEditorWidget = false;
 	bool showLightmapEditorUpdate = true;
@@ -192,6 +193,7 @@ private:
 	void drawFaceExtentsLimitTab();
 	void drawEntityReport();
 	void drawDebugText();
+	void drawScriptsMenu();
 	StatInfo calcStat(string name, uint val, uint max, bool isMem);
 	ModelInfo calcModelStat(Bsp* map, STRUCTUSAGE* modelInfo, uint val, uint max, bool isMem);
 	void checkValidHulls();

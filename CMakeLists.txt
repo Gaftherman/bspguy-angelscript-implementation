@@ -139,6 +139,7 @@ set(SOURCE_FILES
 	src/editor/SprRenderer.h		src/editor/SprRenderer.cpp
 	src/editor/BaseRenderer.h		src/editor/BaseRenderer.cpp
 	src/editor/TextureAtlas.h		src/editor/TextureAtlas.cpp
+	src/editor/ScriptManager.h		src/editor/ScriptManager.cpp
 	src/editor/studio.h
 	
 	# map compiler code
@@ -312,7 +313,8 @@ if(MSVC)
 												src/editor/MdlRenderer.h
 												src/editor/SprRenderer.h
 												src/editor/BaseRenderer.h
-												src/editor/Clipper.h)
+												src/editor/Clipper.h
+												src/editor/ScriptManager.h)
 											
 	source_group("Source Files\\editor" FILES	src/editor/BspRenderer.cpp
 												src/editor/TextureAtlas.cpp

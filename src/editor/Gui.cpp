@@ -21,6 +21,7 @@
 #include "BaseRenderer.h"
 #include <unordered_set>
 #include "bmp.h"
+#include "ScriptManager.h"
 
 // embedded binary data
 #include "fonts/notosans.h"
@@ -2330,6 +2331,43 @@ void Gui::drawStandardMenuBar() {
 		if (ImGui::MenuItem("About")) {
 			showAboutWidget = true;
 		}
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Scripts"))
+	{
+		if (ImGui::MenuItem("Refresh List")) {
+			if (g_scriptManager) {
+				g_scriptManager->refreshScriptList();
+				logf("Script list refreshed\n");
+			}
+		}
+		if (ImGui::MenuItem("Open Folder")) {
+			if (g_scriptManager) {
+				g_scriptManager->openScriptsFolder();
+			}
+		}
+		
+		ImGui::Separator();
+		
+		if (g_scriptManager) {
+			auto& scripts = g_scriptManager->getScriptList();
+			if (scripts.empty()) {
+				ImGui::TextDisabled("No scripts found");
+				ImGui::TextDisabled("Place .as files in:");
+				ImGui::TextDisabled("%s", g_scriptManager->getScriptsFolder().c_str());
+			} else {
+				for (auto& script : scripts) {
+					if (ImGui::MenuItem(script.name.c_str())) {
+						g_scriptManager->executeScript(script.path);
+						showLogWidget = true;
+					}
+				}
+			}
+		} else {
+			ImGui::TextDisabled("Script manager not initialized");
+		}
+		
 		ImGui::EndMenu();
 	}
 }

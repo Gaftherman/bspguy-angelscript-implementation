@@ -23,6 +23,7 @@
 #include "tinyfiledialogs.h"
 #include <lodepng.h>
 #include "embedded_shaders.h"
+#include "ScriptManager.h"
 
 #include "icons/app.h"
 #include "icons/app2.h"
@@ -225,6 +226,12 @@ Renderer::Renderer() {
 
 	glCheckError("Initializing context");
 
+	// Initialize AngelScript
+	g_scriptManager = new ScriptManager();
+	if (!g_scriptManager->init(this)) {
+		logf("Failed to initialize AngelScript!\n");
+	}
+
 	//cameraOrigin = vec3(0, 0, 0);
 	//cameraAngles = vec3(0, 0, 0);
 }
@@ -415,6 +422,10 @@ void Renderer::compileShaders() {
 }
 
 Renderer::~Renderer() {
+	if (g_scriptManager) {
+		delete g_scriptManager;
+		g_scriptManager = nullptr;
+	}
 	glfwTerminate();
 }
 
