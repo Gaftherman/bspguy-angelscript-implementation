@@ -4,6 +4,7 @@
 #include "Gui.h"
 #include "Bsp.h"
 #include "Entity.h"
+#include "Command.h"
 #include "util.h"
 #include "globals.h"
 
@@ -165,7 +166,7 @@ int ScriptEntity::getIndex() const {
 // ============================================================================
 
 ScriptManager::ScriptManager() 
-    : engine(nullptr), context(nullptr), currentModule(nullptr), app(nullptr) {
+    : engine(nullptr), context(nullptr), currentModule(nullptr), app(nullptr), isBatchMode(false) {
     
     // Get Documents folder path
 #ifdef _WIN32
@@ -389,6 +390,46 @@ static void Script_refreshEntities() {
     if (g_scriptManager) g_scriptManager->refreshEntityDisplay();
 }
 
+// Camera wrapper functions
+static float Script_getCameraX() {
+    if (g_scriptManager) return g_scriptManager->getCameraX();
+    return 0.0f;
+}
+
+static float Script_getCameraY() {
+    if (g_scriptManager) return g_scriptManager->getCameraY();
+    return 0.0f;
+}
+
+static float Script_getCameraZ() {
+    if (g_scriptManager) return g_scriptManager->getCameraZ();
+    return 0.0f;
+}
+
+static float Script_getCameraPitch() {
+    if (g_scriptManager) return g_scriptManager->getCameraAnglesPitch();
+    return 0.0f;
+}
+
+static float Script_getCameraYaw() {
+    if (g_scriptManager) return g_scriptManager->getCameraAnglesYaw();
+    return 0.0f;
+}
+
+static float Script_getCameraRoll() {
+    if (g_scriptManager) return g_scriptManager->getCameraAnglesRoll();
+    return 0.0f;
+}
+
+// Batch mode for grouping entity creation into single undo
+static void Script_beginEntityBatch() {
+    if (g_scriptManager) g_scriptManager->beginEntityBatch();
+}
+
+static void Script_endEntityBatch() {
+    if (g_scriptManager) g_scriptManager->endEntityBatch();
+}
+
 static float Script_degToRad(float degrees) {
     return ScriptManager::degToRad(degrees);
 }
@@ -521,6 +562,26 @@ void ScriptManager::registerGlobalFunctions() {
         asFUNCTION(Script_stringToInt), asCALL_CDECL); assert(r >= 0);
     r = engine->RegisterGlobalFunction("float stringToFloat(const string &in)", 
         asFUNCTION(Script_stringToFloat), asCALL_CDECL); assert(r >= 0);
+    
+    // Camera functions
+    r = engine->RegisterGlobalFunction("float getCameraX()", 
+        asFUNCTION(Script_getCameraX), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getCameraY()", 
+        asFUNCTION(Script_getCameraY), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getCameraZ()", 
+        asFUNCTION(Script_getCameraZ), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getCameraPitch()", 
+        asFUNCTION(Script_getCameraPitch), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getCameraYaw()", 
+        asFUNCTION(Script_getCameraYaw), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getCameraRoll()", 
+        asFUNCTION(Script_getCameraRoll), asCALL_CDECL); assert(r >= 0);
+    
+    // Entity batch operations (for undo grouping)
+    r = engine->RegisterGlobalFunction("void beginEntityBatch()", 
+        asFUNCTION(Script_beginEntityBatch), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void endEntityBatch()", 
+        asFUNCTION(Script_endEntityBatch), asCALL_CDECL); assert(r >= 0);
 }
 
 void ScriptManager::refreshScriptList() {
@@ -762,6 +823,15 @@ ScriptEntity* ScriptManager::createEntity(const std::string& classname) {
     
     Bsp* map = app->mapRenderer->map;
     Entity* ent = new Entity(classname);
+    
+    // In batch mode, track entity for grouped undo but don't add to map yet
+    // Actually we need to add to map immediately for the script to modify it
+    // We'll track it for the undo command
+    if (isBatchMode) {
+        // Store a copy for the undo command
+        batchCreatedEntities.push_back(ent);
+    }
+    
     map->ents.push_back(ent);
     
     int index = (int)map->ents.size() - 1;
@@ -769,7 +839,8 @@ ScriptEntity* ScriptManager::createEntity(const std::string& classname) {
     entityCache[index] = wrapper;
     wrapper->addRef();
     
-    logf("Created entity: %s (index %d)\n", classname.c_str(), index);
+    logf("Created entity: %s (index %d)%s\n", classname.c_str(), index, 
+         isBatchMode ? " [batched]" : "");
     return wrapper;
 }
 
@@ -853,4 +924,84 @@ float ScriptManager::degToRad(float degrees) {
 
 float ScriptManager::radToDeg(float radians) {
     return radians * (float)(180.0 / M_PI);
+}
+
+float ScriptManager::getCameraX() const {
+    if (!app) return 0.0f;
+    return app->cameraOrigin.x;
+}
+
+float ScriptManager::getCameraY() const {
+    if (!app) return 0.0f;
+    return app->cameraOrigin.y;
+}
+
+float ScriptManager::getCameraZ() const {
+    if (!app) return 0.0f;
+    return app->cameraOrigin.z;
+}
+
+float ScriptManager::getCameraAnglesPitch() const {
+    if (!app) return 0.0f;
+    return app->cameraAngles.x;
+}
+
+float ScriptManager::getCameraAnglesYaw() const {
+    if (!app) return 0.0f;
+    return app->cameraAngles.y;
+}
+
+float ScriptManager::getCameraAnglesRoll() const {
+    if (!app) return 0.0f;
+    return app->cameraAngles.z;
+}
+
+void ScriptManager::beginEntityBatch() {
+    if (isBatchMode) {
+        logf("[Script WARNING] beginEntityBatch() called while already in batch mode\n");
+        return;
+    }
+    isBatchMode = true;
+    batchCreatedEntities.clear();
+    logf("[Script] Entity batch started\n");
+}
+
+void ScriptManager::endEntityBatch() {
+    if (!isBatchMode) {
+        logf("[Script WARNING] endEntityBatch() called without beginEntityBatch()\n");
+        return;
+    }
+    
+    isBatchMode = false;
+    
+    if (batchCreatedEntities.empty()) {
+        logf("[Script] Entity batch ended (no entities created)\n");
+        return;
+    }
+    
+    if (!app || !app->mapRenderer || !app->mapRenderer->map) {
+        batchCreatedEntities.clear();
+        return;
+    }
+    
+    int numBatched = (int)batchCreatedEntities.size();
+    
+    // The entities are already in the map and modified by the script.
+    // We need to create an undo command that knows about these entities.
+    // CreateEntitiesCommand stores copies of entities.
+    // When undo is called, it removes the last N entities from the map.
+    // When redo is called (execute), it adds the copies back.
+    
+    // Create the undo command with the entities we created
+    // Note: CreateEntitiesCommand makes copies, so our pointers remain valid
+    CreateEntitiesCommand* cmd = new CreateEntitiesCommand("Script: Create Entities", batchCreatedEntities);
+    
+    // Push to undo stack (this does NOT execute the command)
+    // The entities are already in the map, so we're set up correctly:
+    // - Undo will remove the last N entities (which are ours)
+    // - Redo (execute) will add them back from the stored copies
+    app->pushUndoCommand(cmd);
+    
+    logf("[Script] Entity batch ended (%d entities, grouped for undo)\n", numBatched);
+    batchCreatedEntities.clear();
 }

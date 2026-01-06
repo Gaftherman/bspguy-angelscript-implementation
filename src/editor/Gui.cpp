@@ -2347,6 +2347,9 @@ void Gui::drawStandardMenuBar() {
 				g_scriptManager->openScriptsFolder();
 			}
 		}
+		if (ImGui::MenuItem("Open Log")) {
+			showLogWidget = true;
+		}
 		
 		ImGui::Separator();
 		
@@ -5585,11 +5588,24 @@ void Gui::drawLog() {
 	g_log_buffer.clear();
 	g_log_mutex.unlock();
 
+	// Toolbar with Copy and Clear buttons
+	bool copy = false;
+	if (ImGui::Button("Copy All")) {
+		copy = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear")) {
+		clearLog();
+	}
+	ImGui::SameLine();
+	ImGui::Checkbox("Auto-scroll", &AutoScroll);
+	
+	ImGui::Separator();
+
 	static int i = 0;
 
 	ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
-	bool copy = false;
 	bool toggledAutoScroll = false;
 	if (ImGui::BeginPopupContextWindow())
 	{
@@ -5620,6 +5636,8 @@ void Gui::drawLog() {
 		{
 			const char* line_start = buf + LineOffsets[line_no];
 			const char* line_end = (line_no + 1 < LineOffsets.Size) ? (buf + LineOffsets[line_no + 1] - 1) : buf_end;
+			// Use InputText for selectable text, or TextUnformatted for simpler approach
+			// For now keep TextUnformatted but user can select via context menu copy
 			ImGui::TextUnformatted(line_start, line_end);
 		}
 	}

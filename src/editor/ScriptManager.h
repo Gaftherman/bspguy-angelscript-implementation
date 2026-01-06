@@ -108,6 +108,18 @@ public:
     // Map access
     std::string getMapName() const;
     
+    // Camera access
+    float getCameraX() const;
+    float getCameraY() const;
+    float getCameraZ() const;
+    float getCameraAnglesPitch() const;
+    float getCameraAnglesYaw() const;
+    float getCameraAnglesRoll() const;
+    
+    // Script entity batch operations (for undo grouping)
+    void beginEntityBatch();
+    void endEntityBatch();
+    
     // Math utility functions
     static float degToRad(float degrees);
     static float radToDeg(float radians);
@@ -123,6 +135,10 @@ private:
     
     // Entity wrappers cache
     std::unordered_map<int, ScriptEntity*> entityCache;
+    
+    // Entity batch for undo grouping
+    std::vector<Entity*> batchCreatedEntities;
+    bool isBatchMode;
     
     void clearEntityCache();
     
